@@ -3,11 +3,8 @@ module github.com/capturealpha/terraform-provider-latitude
 go 1.18
 
 require (
-	github.com/capturealpha/latitude-api-client v0.0.1
-	github.com/equinix/terraform-provider-metal v1.1.0
-	github.com/hashicorp/go-retryablehttp v0.7.1
+	github.com/capturealpha/latitude-api-client v0.0.2
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.21.0
-	github.com/packethost/packngo v0.25.0
 )
 
 require (
