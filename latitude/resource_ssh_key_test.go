@@ -9,44 +9,44 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 )
 
-func TestAccProject_Basic(t *testing.T) {
-	var project api.Project
+func TestAccSSHKey_Basic(t *testing.T) {
+	var sshKey api.SSHKeyGetResponse
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
 		Providers:    testAccProviders,
-		CheckDestroy: testAccCheckProjectDestroy,
+		CheckDestroy: testAccCheckSSHKeyDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCheckProjectBasic(),
+				Config: testAccCheckSSHKeyBasic(),
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckProjectExists("latitude_project.test_item", &project),
+					testAccCheckSSHKeyExists("latitude_sh_key.test_item", &sshKey),
 					resource.TestCheckResourceAttr(
-						"latitude_project.test_item", "name", "test"),
+						"latitude_ssh_key.test_item", "name", "test"),
 					resource.TestCheckResourceAttr(
-						"latitude_project.test_item", "description", "hello"),
+						"latitude_ssh_key.test_item", "public_key", "hello"),
 				),
 			},
 		},
 	})
 }
 
-func testAccCheckProjectDestroy(s *terraform.State) error {
+func testAccCheckSSHKeyDestroy(s *terraform.State) error {
 	client := testAccProvider.Meta().(*api.Client)
 
 	for _, rs := range s.RootModule().Resources {
-		if rs.Type != "latitude_project" {
+		if rs.Type != "latitude_ssh_key" {
 			continue
 		}
-		if _, _, err := client.Projects.Get(rs.Primary.ID, nil); err == nil {
-			return fmt.Errorf("Project still exists")
+		if _, _, err := client.SSHKeys.Get(rs.Primary.ID, "nil", nil); err == nil {
+			return fmt.Errorf("SSH key still exists")
 		}
 	}
 
 	return nil
 }
 
-func testAccCheckProjectExists(n string, project *api.Project) resource.TestCheckFunc {
+func testAccCheckSSHKeyExists(n string, sshKey *api.SSHKeyGetResponse) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[n]
 		if !ok {
@@ -58,27 +58,26 @@ func testAccCheckProjectExists(n string, project *api.Project) resource.TestChec
 
 		client := testAccProvider.Meta().(*api.Client)
 
-		foundProject, _, err := client.Projects.Get(rs.Primary.ID, nil)
+		foundSSHKey, _, err := client.SSHKeys.Get(rs.Primary.ID, "nil", nil)
 		if err != nil {
 			return err
 		}
 
-		if foundProject.Data.ID != rs.Primary.ID {
-			return fmt.Errorf("Record not found: %v - %v", rs.Primary.ID, foundProject)
+		if foundSSHKey.Data.ID != rs.Primary.ID {
+			return fmt.Errorf("Record not found: %v - %v", rs.Primary.ID, foundSSHKey)
 		}
 
-		*project = *foundProject
+		*sshKey = *foundSSHKey
 
 		return nil
 	}
 }
 
-func testAccCheckProjectBasic() string {
+func testAccCheckSSHKeyBasic() string {
 	return `
-resource "latitude_project" "test_item" {
+resource "latitude_ssh_key" "test_item" {
   name        = "test"
-  description = "hello"
-	environment = "Development"
+  public_key = "hello"
 }
 `
 }

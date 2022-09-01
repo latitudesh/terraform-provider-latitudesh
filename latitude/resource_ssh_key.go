@@ -104,7 +104,7 @@ func resourceSSHKeyUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 		},
 	}
 
-	_, _, err := c.Servers.Update(keyId, d.Get("project_id").(string), updateRequest)
+	_, _, err := c.SSHKeys.Update(keyID, d.Get("project_id").(string), updateRequest)
 	if err != nil {
 		diag.FromErr(err)
 	}
