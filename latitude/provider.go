@@ -20,6 +20,7 @@ func Provider() *schema.Provider {
 		ResourcesMap: map[string]*schema.Resource{
 			"latitude_project": resourceProject(),
 			"latitude_server":  resourceServer(),
+			"latitude_ssh_key": resourceSSHKey(),
 		},
 		ConfigureContextFunc: providerConfigure,
 	}

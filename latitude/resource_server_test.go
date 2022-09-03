@@ -2,11 +2,19 @@ package latitude
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	api "github.com/capturealpha/latitude-api-client"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
+)
+
+const (
+	testServerHostname        = "test"
+	testServerPlan            = "c2-medium-x86"
+	testServerSite            = "MI2"
+	testServerOperatingSystem = "ubuntu_20_04_x64_lts"
 )
 
 func TestAccServer_Basic(t *testing.T) {
@@ -73,13 +81,19 @@ func testAccCheckServerExists(n string, server *api.ServerGetResponse) resource.
 }
 
 func testAccCheckServerBasic() string {
-	return `
+	return fmt.Sprintf(`
 resource "latitude_server" "test_item" {
-	project_id = "4167"
-  hostname = "test"
-	plan     = "c3-medium-x86"
-	site     = "NY2"
-	operating_system = "ubuntu_20_04_x64_lts"
+	project_id = "%s"
+  hostname = "%s"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
 }
-`
+`,
+		os.Getenv("LATITUDE_TEST_PROJECT_ID"),
+		testServerHostname,
+		testServerPlan,
+		testServerSite,
+		testServerOperatingSystem,
+	)
 }
