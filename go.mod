@@ -3,7 +3,7 @@ module github.com/capturealpha/terraform-provider-latitude
 go 1.18
 
 require (
-	github.com/capturealpha/latitude-api-client v0.0.3
+	github.com/capturealpha/latitude-api-client v0.0.6
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.21.0
 )
 
