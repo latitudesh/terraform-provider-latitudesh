@@ -77,7 +77,7 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 		diag.FromErr(err)
 	}
 
-	d.SetId(server.Data.ID)
+	d.SetId(server.ID)
 
 	resourceServerRead(ctx, d, m)
 
@@ -96,7 +96,7 @@ func resourceServerRead(ctx context.Context, d *schema.ResourceData, m interface
 		return diag.FromErr(err)
 	}
 
-	if err := d.Set("hostname", &server.Data.Attributes.Hostname); err != nil {
+	if err := d.Set("hostname", &server.Hostname); err != nil {
 		return diag.FromErr(err)
 	}
 
