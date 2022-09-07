@@ -13,12 +13,12 @@ import (
 const (
 	testServerHostname        = "test"
 	testServerPlan            = "c2-medium-x86"
-	testServerSite            = "MI2"
+	testServerSite            = "ASH"
 	testServerOperatingSystem = "ubuntu_20_04_x64_lts"
 )
 
 func TestAccServer_Basic(t *testing.T) {
-	var server api.ServerGetResponse
+	var server api.Server
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -53,7 +53,7 @@ func testAccCheckServerDestroy(s *terraform.State) error {
 	return nil
 }
 
-func testAccCheckServerExists(n string, server *api.ServerGetResponse) resource.TestCheckFunc {
+func testAccCheckServerExists(n string, server *api.Server) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[n]
 		if !ok {
@@ -70,7 +70,7 @@ func testAccCheckServerExists(n string, server *api.ServerGetResponse) resource.
 			return err
 		}
 
-		if foundServer.Data.ID != rs.Primary.ID {
+		if foundServer.ID != rs.Primary.ID {
 			return fmt.Errorf("Record not found: %v - %v", rs.Primary.ID, foundServer)
 		}
 
