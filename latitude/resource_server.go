@@ -74,7 +74,7 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 
 	server, _, err := c.Servers.Create(createRequest)
 	if err != nil {
-		diag.FromErr(err)
+		return diag.FromErr(err)
 	}
 
 	d.SetId(server.ID)
@@ -119,7 +119,7 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 
 	_, _, err := c.Servers.Update(serverID, updateRequest)
 	if err != nil {
-		diag.FromErr(err)
+		return diag.FromErr(err)
 	}
 
 	d.Set("updated", time.Now().Format(time.RFC850))

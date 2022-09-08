@@ -15,3 +15,6 @@
 # vendor/
 examples/.terraform.lock.hcl
 examples/terraform.tfvars
+examples/.terraform/
+examples/terraform.tfstate
+examples/terraform.tfstate.backup

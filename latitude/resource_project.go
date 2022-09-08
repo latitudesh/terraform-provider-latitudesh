@@ -62,7 +62,7 @@ func resourceProjectCreate(ctx context.Context, d *schema.ResourceData, m interf
 
 	project, _, err := c.Projects.Create(createRequest)
 	if err != nil {
-		diag.FromErr(err)
+		return diag.FromErr(err)
 	}
 
 	d.SetId(project.Data.ID)
@@ -115,7 +115,7 @@ func resourceProjectUpdate(ctx context.Context, d *schema.ResourceData, m interf
 
 	_, _, err := c.Projects.Update(projectID, updateRequest)
 	if err != nil {
-		diag.FromErr(err)
+		return diag.FromErr(err)
 	}
 
 	d.Set("updated", time.Now().Format(time.RFC850))
