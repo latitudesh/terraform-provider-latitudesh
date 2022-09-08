@@ -8,5 +8,5 @@ terraform {
 }
 
 provider "latitude" {
-  auth_token = "9466f6dcdddaee89d00b6584cf31c0d66976"
+  auth_token = var.auth_token
 }
