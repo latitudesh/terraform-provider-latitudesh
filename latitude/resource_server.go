@@ -134,7 +134,7 @@ func resourceServerDelete(ctx context.Context, d *schema.ResourceData, m interfa
 
 	serverID := d.Id()
 
-	_, err := c.Servers.Delete(serverID, true)
+	_, err := c.Servers.Delete(serverID)
 	if err != nil {
 		return diag.FromErr(err)
 	}
