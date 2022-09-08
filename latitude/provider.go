@@ -23,7 +23,8 @@ func Provider() *schema.Provider {
 			"latitude_ssh_key": resourceSSHKey(),
 		},
 		DataSourcesMap: map[string]*schema.Resource{
-			"latitude_plan": dataSourcePlan(),
+			"latitude_plan":   dataSourcePlan(),
+			"latitude_region": dataSourceRegion(),
 		},
 		ConfigureContextFunc: providerConfigure,
 	}
