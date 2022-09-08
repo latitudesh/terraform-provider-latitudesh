@@ -61,7 +61,7 @@ func resourceSSHKeyCreate(ctx context.Context, d *schema.ResourceData, m interfa
 
 	key, _, err := c.SSHKeys.Create(d.Get("project_id").(string), createRequest)
 	if err != nil {
-		diag.FromErr(err)
+		return diag.FromErr(err)
 	}
 
 	d.SetId(key.Data.ID)
@@ -106,7 +106,7 @@ func resourceSSHKeyUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 
 	_, _, err := c.SSHKeys.Update(keyID, d.Get("project_id").(string), updateRequest)
 	if err != nil {
-		diag.FromErr(err)
+		return diag.FromErr(err)
 	}
 
 	d.Set("updated", time.Now().Format(time.RFC850))
