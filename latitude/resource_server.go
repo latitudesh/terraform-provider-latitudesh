@@ -43,12 +43,12 @@ func resourceServer() *schema.Resource {
 			},
 			"created": {
 				Type:        schema.TypeString,
-				Description: "The timestamp for when the project was created",
+				Description: "The timestamp for when the server was created",
 				Computed:    true,
 			},
 			"updated": {
 				Type:        schema.TypeString,
-				Description: "The timestamp for the last time the project was updated",
+				Description: "The timestamp for the last time the server was updated",
 				Computed:    true,
 			},
 		},

@@ -33,12 +33,12 @@ func resourceSSHKey() *schema.Resource {
 			},
 			"created": {
 				Type:        schema.TypeString,
-				Description: "The timestamp for when the project was created",
+				Description: "The timestamp for when the SSH key was created",
 				Computed:    true,
 			},
 			"updated": {
 				Type:        schema.TypeString,
-				Description: "The timestamp for the last time the project was updated",
+				Description: "The timestamp for the last time the SSH key was updated",
 				Computed:    true,
 			},
 		},
