@@ -43,15 +43,15 @@ func dataSourcePlansRead(ctx context.Context, d *schema.ResourceData, m interfac
 
 	plans, _, err := c.Plans.List(new(api.GetOptions).Filter("name", name))
 	if err != nil {
-		diag.FromErr(err)
+		return diag.FromErr(err)
 	}
 	if len(plans) != 1 {
-		diag.Errorf("No plans found for plan %s", name)
+		return diag.Errorf("No plans found for plan %s", name)
 	}
 
 	p := plans[0]
-	if p.Name == name {
-		diag.Errorf("Incorrect plan returned: expected %s received %s", name, p.Name)
+	if p.Name != name {
+		return diag.Errorf("Incorrect plan returned: expected %s received %s", name, p.Name)
 	}
 
 	// Check availability
@@ -64,7 +64,7 @@ func dataSourcePlansRead(ctx context.Context, d *schema.ResourceData, m interfac
 		}
 	}
 	if !available {
-		diag.Errorf("No available stock found for plan %s", name)
+		return diag.Errorf("No available stock found for plan %s", name)
 	}
 
 	d.SetId(p.ID)
