@@ -46,7 +46,7 @@ func resourceServer() *schema.Resource {
 				Description: "List of server SSH key ids",
 				Optional:    true,
 				Elem: &schema.Schema{
-					Type:         schema.TypeInt,
+					Type: schema.TypeInt,
 				},
 			},
 			"created": {
@@ -67,6 +67,12 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 	var diags diag.Diagnostics
 	c := m.(*api.Client)
 
+	ssh_keys := d.Get("ssh_keys").([]interface{})
+	ssh_keys_slice := make([]int, len(ssh_keys))
+	for i, ssh_key := range ssh_keys {
+		ssh_keys_slice[i] = ssh_key.(int)
+	}
+
 	createRequest := &api.ServerCreateRequest{
 		Data: api.ServerCreateData{
 			Type: "servers",
@@ -76,7 +82,7 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 				Plan:            d.Get("plan").(string),
 				OperatingSystem: d.Get("operating_system").(string),
 				Hostname:        d.Get("hostname").(string),
-				SSHKeys:         d.Get("ssh_keys").([]int),
+				SSHKeys:         ssh_keys_slice,
 			},
 		},
 	}

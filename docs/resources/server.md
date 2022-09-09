@@ -23,10 +23,14 @@ description: |-
 - `project_id` (String) The id of the project
 - `site` (String) The server site
 
+### Optional
+
+- `ssh_keys` (List of Number) List of server SSH key ids
+
 ### Read-Only
 
-- `created` (String) The timestamp for when the project was created
+- `created` (String) The timestamp for when the server was created
 - `id` (String) The ID of this resource.
-- `updated` (String) The timestamp for the last time the project was updated
+- `updated` (String) The timestamp for the last time the server was updated
 
 

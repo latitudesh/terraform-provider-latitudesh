@@ -23,8 +23,8 @@ description: |-
 
 ### Read-Only
 
-- `created` (String) The timestamp for when the project was created
+- `created` (String) The timestamp for when the SSH key was created
 - `id` (String) The ID of this resource.
-- `updated` (String) The timestamp for the last time the project was updated
+- `updated` (String) The timestamp for the last time the SSH key was updated
 
 
