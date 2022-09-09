@@ -41,6 +41,14 @@ func resourceServer() *schema.Resource {
 				Description: "The server hostname",
 				Required:    true,
 			},
+			"ssh_keys": {
+				Type:        schema.TypeList,
+				Description: "List of server SSH key ids",
+				Optional:    true,
+				Elem: &schema.Schema{
+					Type:         schema.TypeInt,
+				},
+			},
 			"created": {
 				Type:        schema.TypeString,
 				Description: "The timestamp for when the server was created",
@@ -68,6 +76,7 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 				Plan:            d.Get("plan").(string),
 				OperatingSystem: d.Get("operating_system").(string),
 				Hostname:        d.Get("hostname").(string),
+				SSHKeys:         d.Get("ssh_keys").([]int),
 			},
 		},
 	}
