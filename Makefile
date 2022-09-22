@@ -1,7 +1,7 @@
 TEST?=$$(go list ./... | grep -v 'vendor')
 HOSTNAME=capturealpha.com
 NAMESPACE=iac
-NAME=hashicups
+NAME=latitude
 BINARY=terraform-provider-${NAME}
 VERSION=0.0.1
 OS_ARCH=darwin_amd64

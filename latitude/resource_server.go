@@ -49,6 +49,11 @@ func resourceServer() *schema.Resource {
 					Type: schema.TypeInt,
 				},
 			},
+			"primary_ip_v4": {
+				Type:        schema.TypeString,
+				Description: "The server IP address",
+				Computed:    true,
+			},
 			"created": {
 				Type:        schema.TypeString,
 				Description: "The timestamp for when the server was created",
@@ -67,6 +72,8 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 	var diags diag.Diagnostics
 	c := m.(*api.Client)
 
+	// Convert ssh_keys from []interace{} to []int
+	// TODO: Is there a better way to do this?
 	ssh_keys := d.Get("ssh_keys").([]interface{})
 	ssh_keys_slice := make([]int, len(ssh_keys))
 	for i, ssh_key := range ssh_keys {
@@ -112,6 +119,10 @@ func resourceServerRead(ctx context.Context, d *schema.ResourceData, m interface
 	}
 
 	if err := d.Set("hostname", &server.Hostname); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if err := d.Set("primary_ip_v4", &server.PrimaryIPv4); err != nil {
 		return diag.FromErr(err)
 	}
 

@@ -18,3 +18,4 @@ examples/terraform.tfvars
 examples/.terraform/
 examples/terraform.tfstate
 examples/terraform.tfstate.backup
+examples/.terraform.tfstate.lock.info
