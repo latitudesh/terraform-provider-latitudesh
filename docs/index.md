@@ -17,7 +17,7 @@ terraform {
   required_providers {
     latitude = {
       version = "0.0.6"
-      source  = "capturealpha.com/iac/latitude"
+      source  = "latitude.sh/iac/latitudesh"
     }
   }
 }
