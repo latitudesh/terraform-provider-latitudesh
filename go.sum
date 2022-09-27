@@ -31,8 +31,6 @@ github.com/armon/go-radix v1.0.0/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgI
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
 github.com/bgentry/speakeasy v0.1.0 h1:ByYyxL9InA1OWqxJqqp2A5pYHUrCiAL6K3J+LKSsQkY=
 github.com/bgentry/speakeasy v0.1.0/go.mod h1:+zsyZBPWlz7T6j88CTgSN5bM796AkVf0kBD4zp0CCIs=
-github.com/capturealpha/latitude-api-client v0.0.13 h1:EaBjItMofHzEUSkncZ2E7HoTpCy7mb75i9CUmI/OQE0=
-github.com/capturealpha/latitude-api-client v0.0.13/go.mod h1:hUYPYqdG/eicoVMgHmFVy1O+hMfmmbm8cq27HsX2M2k=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
 github.com/cespare/xxhash/v2 v2.1.1/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
@@ -187,6 +185,8 @@ github.com/mattn/go-isatty v0.0.12/go.mod h1:cbi8OIDigv2wuxKPP5vlRcQ1OAZbq2CE4Ky
 github.com/mattn/go-isatty v0.0.14/go.mod h1:7GGIvUiUoEMVVmxf/4nioHXj79iQHKdU27kJ6hsGG94=
 github.com/mattn/go-isatty v0.0.16 h1:bq3VjFmv/sOjHtdEhmkEV4x1AJtvUvOJ2PFAZ5+peKQ=
 github.com/mattn/go-isatty v0.0.16/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=
+github.com/maxihost/latitudesh-go v0.0.14 h1:Ul7I1+bMS1Q4KymNoib/8vnu9E75A/uPhSO3AE74jpc=
+github.com/maxihost/latitudesh-go v0.0.14/go.mod h1:U3XTB0EUQ/L2SLU8rraZid46ltjLsVRxuuyZ3NNs9Yo=
 github.com/mitchellh/cli v1.1.4 h1:qj8czE26AU4PbiaPXK5uVmMSM+V5BYsFBiM9HhGRLUA=
 github.com/mitchellh/cli v1.1.4/go.mod h1:vTLESy5mRhKOs9KDp0/RATawxP1UqBmdrpVRMnpcvKQ=
 github.com/mitchellh/copystructure v1.0.0/go.mod h1:SNtv71yrdKgLRyLFxmLdkAbkKEFWgYaq1OVrnRcwhnw=
