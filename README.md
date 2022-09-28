@@ -3,7 +3,7 @@ Latitude Terraform Provider
 
 
 ## Installation
-- Download latest [release](https://github.com/maxihost/terraform-provider-latitudesh/releases) for your architecture
+- Download latest [release](https://github.com/latitudesh/terraform-provider-latitudesh/releases) for your architecture
 - Mac
   - `mkdir -p ~/.terraform.d/plugins/latitude.sh/iac/latitudesh/[VERSION]/darwin_amd64` 
   - `mv terraform-provider-latitude ~/.terraform.d/plugins/latitude.sh/iac/latitudesh/[VERSION]/darwin_amd64`
