@@ -1,8 +1,8 @@
 terraform {
   required_providers {
     latitude = {
-      version = "0.0.6"
-      source  = "latitude.sh/iac/latitudesh"
+      source  = "latitudesh/latitudesh"
+      version = ">=0.1.0"
     }
   }
 }
