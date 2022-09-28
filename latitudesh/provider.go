@@ -3,9 +3,9 @@ package latitude
 import (
 	"context"
 
-	api "github.com/maxihost/latitudesh-go"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	api "github.com/latitudesh/latitudesh-go"
 )
 
 func Provider() *schema.Provider {

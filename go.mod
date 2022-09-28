@@ -1,11 +1,11 @@
-module github.com/maxihost/terraform-provider-latitudesh
+module github.com/latitudesh/terraform-provider-latitudesh
 
 go 1.18
 
 require (
 	github.com/hashicorp/terraform-plugin-docs v0.13.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.21.0
-	github.com/maxihost/latitudesh-go v0.0.14
+	github.com/latitudesh/latitudesh-go v0.0.14
 )
 
 require (

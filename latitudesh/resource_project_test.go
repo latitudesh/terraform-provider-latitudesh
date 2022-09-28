@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	api "github.com/maxihost/latitudesh-go"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
+	api "github.com/latitudesh/latitudesh-go"
 )
 
 func TestAccProject_Basic(t *testing.T) {

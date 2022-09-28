@@ -4,7 +4,7 @@ import (
 	"flag"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/plugin"
-	latitude "github.com/maxihost/terraform-provider-latitudesh/latitudesh"
+	latitude "github.com/latitudesh/terraform-provider-latitudesh/latitudesh"
 )
 
 // Generate the Terraform provider documentation using `tfplugindocs`:
