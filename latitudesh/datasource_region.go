@@ -3,9 +3,9 @@ package latitude
 import (
 	"context"
 
-	api "github.com/capturealpha/latitude-api-client"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	api "github.com/latitudesh/latitudesh-go"
 )
 
 func dataSourceRegion() *schema.Resource {

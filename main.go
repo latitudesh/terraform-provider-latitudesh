@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 
-	"github.com/capturealpha/terraform-provider-latitude/latitude"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/plugin"
+	latitude "github.com/latitudesh/terraform-provider-latitudesh/latitudesh"
 )
 
 // Generate the Terraform provider documentation using `tfplugindocs`:

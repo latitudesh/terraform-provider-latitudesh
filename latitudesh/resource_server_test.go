@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
-	api "github.com/capturealpha/latitude-api-client"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
+	api "github.com/latitudesh/latitudesh-go"
 )
 
 const (

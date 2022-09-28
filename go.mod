@@ -1,11 +1,11 @@
-module github.com/capturealpha/terraform-provider-latitude
+module github.com/latitudesh/terraform-provider-latitudesh
 
 go 1.18
 
 require (
-	github.com/capturealpha/latitude-api-client v0.0.13
 	github.com/hashicorp/terraform-plugin-docs v0.13.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.21.0
+	github.com/latitudesh/latitudesh-go v0.1.0
 )
 
 require (
