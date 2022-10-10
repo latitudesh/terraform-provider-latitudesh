@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Latitude.sh Terraform Provider Discussions
+    url: https://github.com/latitudesh/terraform-provider-latitudesh/discussions
+    about: Please ask and answer questions here.
+  - name: Latitude.sh Customer Support
+    url: https://www.latitude.sh/dashboard/account?contactSupport
+    about: Latitude.sh support channel for issues specific to your account.
+  - name: Latitude.sh Bug report
+    url: https://github.com/latitudesh/terraform-provider-latitudesh/issues
+    about: Please report bugs and feature requests here. 
