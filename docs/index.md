@@ -12,20 +12,47 @@ All resources require authentication. API keys can be obtained from your Latitud
 
 ## Example usage
 
+`main.tf` example
+
 ```terraform
 terraform {
   required_providers {
     latitude = {
       source  = "latitudesh/latitudesh"
-      version = ">=0.1.2"
+      version = "~> 0.1.2"
     }
   }
 }
 
+# Configure the provider
 provider "latitude" {
-  auth_token = var.auth_token
+  auth_token = var.latitude_token
 }
 ```
+
+`variables.tf` example
+
+```terraform
+variable "latitude_token" {
+  description = "Latitude.sh API token"
+}
+
+variable "plan" {
+  description = "Latitude.sh server plan"
+  default = "c2.small.x86"
+}
+
+variable "region" {
+  description = "Latitude.sh server region slug"
+  default = "ASH"
+}
+
+variable "ssh_public_key" {
+  description = "Latitude.sh SSH public key"
+}
+```
+
+`latitude_server.tf` example
 
 ```terraform
 resource "latitude_server" "server" {
