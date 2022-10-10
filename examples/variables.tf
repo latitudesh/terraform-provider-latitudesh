@@ -1,15 +1,17 @@
 variable "auth_token" {
-  description = "Latitude API auth token"
+  description = "Latitude.sh API token"
 }
+
 variable "plan" {
-  description = "Latitude server plan"
+  description = "Latitude.sh server plan"
   default = "c2.small.x86"
 }
+
 variable "region" {
-  description = "Latitude server region slug"
+  description = "Latitude.sh server region slug"
   default = "ASH"
 }
 
 variable "ssh_public_key" {
-  description = "Latitude SSH public key"
+  description = "Latitude.sh SSH public key"
 }
