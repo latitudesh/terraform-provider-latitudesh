@@ -17,23 +17,23 @@ All resources require authentication. API keys can be obtained from your Latitud
 ```terraform
 terraform {
   required_providers {
-    latitude = {
+    latitudesh = {
       source  = "latitudesh/latitudesh"
-      version = "~> 0.1.2"
+      version = "~> 0.1.4"
     }
   }
 }
 
 # Configure the provider
-provider "latitude" {
-  auth_token = var.latitude_token
+provider "latitudesh" {
+  auth_token = var.latitudesh_token
 }
 ```
 
 `variables.tf` example
 
 ```terraform
-variable "latitude_token" {
+variable "latitudesh_token" {
   description = "Latitude.sh API token"
 }
 
@@ -52,15 +52,15 @@ variable "ssh_public_key" {
 }
 ```
 
-`latitude_server.tf` example
+`latitudesh_server.tf` example
 
 ```terraform
-resource "latitude_server" "server" {
-  hostname = "foo"
-  operating_system = "ubuntu_20_04_x64_lts"
-  plan = data.latitude_plan.plan.slug
-  project_id = latitude_project.project.id
-  site = data.latitude_region.region.slug
-  ssh_keys = [latitude_ssh_key.ssh_key.id]
+resource "latitudesh_server" "server" {
+  hostname         = "terraform.latitude.sh"
+  operating_system = "ubuntu_22_04_x64_lts"
+  plan             = data.latitudesh_plan.plan.slug
+  project          = latitudesh_project.project.id # You can use the project id or slug
+  site             = data.latitudesh_region.region.slug # You can use the site id or slug
+  ssh_keys         = [latitudesh_ssh_key.ssh_key.id]
 }
 ```
