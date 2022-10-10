@@ -1,4 +1,4 @@
-package latitude
+package latitudesh
 
 import (
 	"context"
@@ -16,9 +16,9 @@ func resourceSSHKey() *schema.Resource {
 		UpdateContext: resourceSSHKeyUpdate,
 		DeleteContext: resourceSSHKeyDelete,
 		Schema: map[string]*schema.Schema{
-			"project_id": {
+			"project": {
 				Type:        schema.TypeString,
-				Description: "The id of the project",
+				Description: "The id or slug of the project",
 				Required:    true,
 			},
 			"name": {
@@ -59,7 +59,7 @@ func resourceSSHKeyCreate(ctx context.Context, d *schema.ResourceData, m interfa
 		},
 	}
 
-	key, _, err := c.SSHKeys.Create(d.Get("project_id").(string), createRequest)
+	key, _, err := c.SSHKeys.Create(d.Get("project").(string), createRequest)
 	if err != nil {
 		return diag.FromErr(err)
 	}
@@ -78,7 +78,7 @@ func resourceSSHKeyRead(ctx context.Context, d *schema.ResourceData, m interface
 
 	keyID := d.Id()
 
-	key, _, err := c.SSHKeys.Get(keyID, d.Get("project_id").(string), nil)
+	key, _, err := c.SSHKeys.Get(keyID, d.Get("project").(string), nil)
 	if err != nil {
 		return diag.FromErr(err)
 	}
@@ -104,7 +104,7 @@ func resourceSSHKeyUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 		},
 	}
 
-	_, _, err := c.SSHKeys.Update(keyID, d.Get("project_id").(string), updateRequest)
+	_, _, err := c.SSHKeys.Update(keyID, d.Get("project").(string), updateRequest)
 	if err != nil {
 		return diag.FromErr(err)
 	}
@@ -121,7 +121,7 @@ func resourceSSHKeyDelete(ctx context.Context, d *schema.ResourceData, m interfa
 
 	keyID := d.Id()
 
-	_, err := c.SSHKeys.Delete(keyID, d.Get("project_id").(string))
+	_, err := c.SSHKeys.Delete(keyID, d.Get("project").(string))
 	if err != nil {
 		return diag.FromErr(err)
 	}

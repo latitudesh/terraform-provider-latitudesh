@@ -23,7 +23,7 @@ Mac
 
 ```sh
 $ mkdir -p ~/.terraform.d/plugins/latitude.sh/iac/latitudesh/[VERSION]/darwin_amd64
-$ mv terraform-provider-latitude ~/.terraform.d/plugins/latitude.sh/iac/latitudesh/[VERSION]/darwin_amd64
+$ mv terraform-provider-latitudesh ~/.terraform.d/plugins/latitude.sh/iac/latitudesh/[VERSION]/darwin_amd64
 ```
 
 Linux
