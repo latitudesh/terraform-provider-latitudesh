@@ -1,4 +1,4 @@
-package latitude
+package latitudesh
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ func TestAccPlan_Basic(t *testing.T) {
 				Config: testAccCheckPlanBasic(),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(
-						"data.latitude_plan.test", "name", testPlanName),
+						"data.latitudesh_plan.test", "name", testPlanName),
 				),
 			},
 		},
@@ -27,7 +27,7 @@ func TestAccPlan_Basic(t *testing.T) {
 
 func testAccCheckPlanBasic() string {
 	return fmt.Sprintf(`
-data "latitude_plan" "test" {
+data "latitudesh_plan" "test" {
 	name = "%s"
 }
 `,

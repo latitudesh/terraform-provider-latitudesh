@@ -22,8 +22,8 @@ https://github.com/latitudesh/terraform-provider-latitudesh/discussions
 
 ### Affected Resource(s)
 <!-- Please list the resources, for example:
-- latitude_server
-- latitude_region
+- latitudesh_server
+- latitudesh_region
 
 ### Expected Behavior
 <!-- What should have happened? -->

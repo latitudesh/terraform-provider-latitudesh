@@ -1,4 +1,4 @@
-package latitude
+package latitudesh
 
 import (
 	"context"

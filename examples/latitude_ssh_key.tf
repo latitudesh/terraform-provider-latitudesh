@@ -1,5 +1,5 @@
-resource "latitude_ssh_key" "ssh_key" {
-  project_id = latitude_project.project.id
-  name = "bar"
+resource "latitudesh_ssh_key" "ssh_key" {
+  project    = latitudesh_project.project.id
+  name       = "John's Key"
   public_key = var.ssh_public_key
 }

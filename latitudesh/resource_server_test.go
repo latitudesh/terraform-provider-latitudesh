@@ -1,4 +1,4 @@
-package latitude
+package latitudesh
 
 import (
 	"fmt"
@@ -28,9 +28,9 @@ func TestAccServer_Basic(t *testing.T) {
 			{
 				Config: testAccCheckServerBasic(),
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckServerExists("latitude_server.test_item", &server),
+					testAccCheckServerExists("latitudesh_server.test_item", &server),
 					resource.TestCheckResourceAttr(
-						"latitude_server.test_item", "hostname", "test"),
+						"latitudesh_server.test_item", "hostname", "test"),
 				),
 			},
 		},
@@ -42,7 +42,7 @@ func testAccCheckServerDestroy(s *terraform.State) error {
 	client := testAccProvider.Meta().(*api.Client)
 
 	for _, rs := range s.RootModule().Resources {
-		if rs.Type != "latitude_server" {
+		if rs.Type != "latitudesh_server" {
 			continue
 		}
 		if _, _, err := client.Servers.Get(rs.Primary.ID, nil); err == nil {
@@ -82,15 +82,15 @@ func testAccCheckServerExists(n string, server *api.Server) resource.TestCheckFu
 
 func testAccCheckServerBasic() string {
 	return fmt.Sprintf(`
-resource "latitude_server" "test_item" {
-	project_id = "%s"
-  hostname = "%s"
+resource "latitudesh_server" "test_item" {
+	project = "%s"
+  	hostname = "%s"
 	plan     = "%s"
 	site     = "%s"
 	operating_system = "%s"
 }
 `,
-		os.Getenv("LATITUDE_TEST_PROJECT_ID"),
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testServerHostname,
 		testServerPlan,
 		testServerSite,

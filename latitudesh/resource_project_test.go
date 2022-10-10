@@ -1,4 +1,4 @@
-package latitude
+package latitudesh
 
 import (
 	"fmt"
@@ -20,11 +20,11 @@ func TestAccProject_Basic(t *testing.T) {
 			{
 				Config: testAccCheckProjectBasic(),
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckProjectExists("latitude_project.test_item", &project),
+					testAccCheckProjectExists("latitudesh_project.test_item", &project),
 					resource.TestCheckResourceAttr(
-						"latitude_project.test_item", "name", "test"),
+						"latitudesh_project.test_item", "name", "test"),
 					resource.TestCheckResourceAttr(
-						"latitude_project.test_item", "description", "hello"),
+						"latitudesh_project.test_item", "description", "hello"),
 				),
 			},
 		},
@@ -35,7 +35,7 @@ func testAccCheckProjectDestroy(s *terraform.State) error {
 	client := testAccProvider.Meta().(*api.Client)
 
 	for _, rs := range s.RootModule().Resources {
-		if rs.Type != "latitude_project" {
+		if rs.Type != "latitudesh_project" {
 			continue
 		}
 		if _, _, err := client.Projects.Get(rs.Primary.ID, nil); err == nil {
@@ -75,7 +75,7 @@ func testAccCheckProjectExists(n string, project *api.Project) resource.TestChec
 
 func testAccCheckProjectBasic() string {
 	return `
-resource "latitude_project" "test_item" {
+resource "latitudesh_project" "test_item" {
   name        = "test"
   description = "hello"
 	environment = "Development"

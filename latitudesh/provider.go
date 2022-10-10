@@ -1,4 +1,4 @@
-package latitude
+package latitudesh
 
 import (
 	"context"
@@ -14,17 +14,17 @@ func Provider() *schema.Provider {
 			"auth_token": {
 				Type:        schema.TypeString,
 				Optional:    true,
-				DefaultFunc: schema.EnvDefaultFunc("LATITUDE_AUTH_TOKEN", nil),
+				DefaultFunc: schema.EnvDefaultFunc("LATITUDESH_AUTH_TOKEN", nil),
 			},
 		},
 		ResourcesMap: map[string]*schema.Resource{
-			"latitude_project": resourceProject(),
-			"latitude_server":  resourceServer(),
-			"latitude_ssh_key": resourceSSHKey(),
+			"latitudesh_project": resourceProject(),
+			"latitudesh_server":  resourceServer(),
+			"latitudesh_ssh_key": resourceSSHKey(),
 		},
 		DataSourcesMap: map[string]*schema.Resource{
-			"latitude_plan":   dataSourcePlan(),
-			"latitude_region": dataSourceRegion(),
+			"latitudesh_plan":   dataSourcePlan(),
+			"latitudesh_region": dataSourceRegion(),
 		},
 		ConfigureContextFunc: providerConfigure,
 	}
@@ -36,7 +36,7 @@ func providerConfigure(ctx context.Context, d *schema.ResourceData) (interface{}
 	var diags diag.Diagnostics
 
 	if authToken != "" {
-		c := api.NewClientWithAuth("latitude", authToken, nil)
+		c := api.NewClientWithAuth("latitudesh", authToken, nil)
 
 		return c, diags
 	}

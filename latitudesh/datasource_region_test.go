@@ -1,4 +1,4 @@
-package latitude
+package latitudesh
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ func TestAccRegion_Basic(t *testing.T) {
 				Config: testAccCheckRegionBasic(),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(
-						"data.latitude_region.test", "slug", testRegionSlug),
+						"data.latitudesh_region.test", "slug", testRegionSlug),
 				),
 			},
 		},
@@ -27,7 +27,7 @@ func TestAccRegion_Basic(t *testing.T) {
 
 func testAccCheckRegionBasic() string {
 	return fmt.Sprintf(`
-data "latitude_region" "test" {
+data "latitudesh_region" "test" {
 	slug = "%s"
 }
 `,

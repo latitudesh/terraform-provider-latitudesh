@@ -1,4 +1,4 @@
-package latitude
+package latitudesh
 
 import (
 	"os"
@@ -13,7 +13,7 @@ var testAccProvider *schema.Provider
 func init() {
 	testAccProvider = Provider()
 	testAccProviders = map[string]*schema.Provider{
-		"latitude": testAccProvider,
+		"latitudesh": testAccProvider,
 	}
 }
 
@@ -28,13 +28,13 @@ func TestProvider_impl(t *testing.T) {
 }
 
 func testAccPreCheck(t *testing.T) {
-	if v := os.Getenv("LATITUDE_AUTH_TOKEN"); v == "" {
-		t.Fatal("LATITUDE_AUTH_TOKEN must be set for acceptance tests")
+	if v := os.Getenv("LATITUDESH_AUTH_TOKEN"); v == "" {
+		t.Fatal("LATITUDESH_AUTH_TOKEN must be set for acceptance tests")
 	}
-	if v := os.Getenv("LATITUDE_TEST_PROJECT_ID"); v == "" {
-		t.Fatal("LATITUDE_TEST_PROJECT_ID must be set for acceptance tests")
+	if v := os.Getenv("LATITUDESH_TEST_PROJECT"); v == "" {
+		t.Fatal("LATITUDESH_TEST_PROJECT must be set for acceptance tests")
 	}
-	if v := os.Getenv("LATITUDE_TEST_SSH_PUBLIC_KEY"); v == "" {
-		t.Fatal("LATITUDE_TEST_SSH_PUBLIC_KEY must be set for acceptance tests")
+	if v := os.Getenv("LATITUDESH_TEST_SSH_PUBLIC_KEY"); v == "" {
+		t.Fatal("LATITUDESH_TEST_SSH_PUBLIC_KEY must be set for acceptance tests")
 	}
 }

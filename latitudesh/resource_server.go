@@ -1,4 +1,4 @@
-package latitude
+package latitudesh
 
 import (
 	"context"
@@ -16,9 +16,9 @@ func resourceServer() *schema.Resource {
 		UpdateContext: resourceServerUpdate,
 		DeleteContext: resourceServerDelete,
 		Schema: map[string]*schema.Schema{
-			"project_id": {
+			"project": {
 				Type:        schema.TypeString,
-				Description: "The id of the project",
+				Description: "The id or slug of the project",
 				Required:    true,
 			},
 			"site": {
@@ -84,7 +84,7 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 		Data: api.ServerCreateData{
 			Type: "servers",
 			Attributes: api.ServerCreateAttributes{
-				Project:         d.Get("project_id").(string),
+				Project:         d.Get("project").(string),
 				Site:            d.Get("site").(string),
 				Plan:            d.Get("plan").(string),
 				OperatingSystem: d.Get("operating_system").(string),

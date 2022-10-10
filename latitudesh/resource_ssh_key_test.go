@@ -1,4 +1,4 @@
-package latitude
+package latitudesh
 
 import (
 	"fmt"
@@ -25,11 +25,11 @@ func TestAccSSHKey_Basic(t *testing.T) {
 			{
 				Config: testAccCheckSSHKeyBasic(),
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckSSHKeyExists("latitude_ssh_key.test_item", &sshKey),
+					testAccCheckSSHKeyExists("latitudesh_ssh_key.test_item", &sshKey),
 					resource.TestCheckResourceAttr(
-						"latitude_ssh_key.test_item", "name", testSSHKeyName),
+						"latitudesh_ssh_key.test_item", "name", testSSHKeyName),
 					resource.TestCheckResourceAttr(
-						"latitude_ssh_key.test_item", "public_key", os.Getenv("LATITUDE_TEST_SSH_PUBLIC_KEY")),
+						"latitudesh_ssh_key.test_item", "public_key", os.Getenv("LATITUDESH_TEST_SSH_PUBLIC_KEY")),
 				),
 			},
 		},
@@ -40,10 +40,10 @@ func testAccCheckSSHKeyDestroy(s *terraform.State) error {
 	client := testAccProvider.Meta().(*api.Client)
 
 	for _, rs := range s.RootModule().Resources {
-		if rs.Type != "latitude_ssh_key" {
+		if rs.Type != "latitudesh_ssh_key" {
 			continue
 		}
-		if _, _, err := client.SSHKeys.Get(rs.Primary.ID, rs.Primary.Attributes["project_id"], nil); err == nil {
+		if _, _, err := client.SSHKeys.Get(rs.Primary.ID, rs.Primary.Attributes["project"], nil); err == nil {
 			return fmt.Errorf("SSH key still exists")
 		}
 	}
@@ -63,7 +63,7 @@ func testAccCheckSSHKeyExists(n string, sshKey *api.SSHKeyGetResponse) resource.
 
 		client := testAccProvider.Meta().(*api.Client)
 
-		foundSSHKey, _, err := client.SSHKeys.Get(rs.Primary.ID, rs.Primary.Attributes["project_id"], nil)
+		foundSSHKey, _, err := client.SSHKeys.Get(rs.Primary.ID, rs.Primary.Attributes["project"], nil)
 		if err != nil {
 			return err
 		}
@@ -80,14 +80,14 @@ func testAccCheckSSHKeyExists(n string, sshKey *api.SSHKeyGetResponse) resource.
 
 func testAccCheckSSHKeyBasic() string {
 	return fmt.Sprintf(`
-resource "latitude_ssh_key" "test_item" {
-	project_id  = "%s"
-  name        = "%s"
-  public_key  = "%s"
+resource "latitudesh_ssh_key" "test_item" {
+	project  	= "%s"
+  	name        = "%s"
+  	public_key  = "%s"
 }
 `,
-		os.Getenv("LATITUDE_TEST_PROJECT_ID"),
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testSSHKeyName,
-		os.Getenv("LATITUDE_TEST_SSH_PUBLIC_KEY"),
+		os.Getenv("LATITUDESH_TEST_SSH_PUBLIC_KEY"),
 	)
 }

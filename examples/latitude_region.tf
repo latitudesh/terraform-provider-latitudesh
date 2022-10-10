@@ -1,3 +1,3 @@
-data "latitude_region" "region" {
+data "latitudesh_region" "region" {
   slug = var.region
 }
