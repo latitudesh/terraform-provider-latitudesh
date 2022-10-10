@@ -2,11 +2,12 @@ terraform {
   required_providers {
     latitude = {
       source  = "latitudesh/latitudesh"
-      version = ">=0.1.2"
+      version = "~> 0.1.2"
     }
   }
 }
 
+# Configure the provider
 provider "latitude" {
-  auth_token = var.auth_token
+  auth_token = var.latitude_token
 }
