@@ -1,21 +1,21 @@
 ---
-page_title: "latitude_project Resource - terraform-provider-latitudesh"
+page_title: "latitudesh_project Resource - terraform-provider-latitudesh"
 subcategory: ""
 description: |-
   
 ---
 
-# latitude_project (Resource)
+# latitudesh_project (Resource)
 
 
 
 ## Example usage
 
 ```terraform
-resource "latitude_project" "project" {
-  name = "foo"
-  description = "bar"
-  environment = "Development"
+resource "latitudesh_project" "project" {
+  name = "Project name"
+  description = "Description of project"
+  environment = "Development" # Development, Production or Staging
 }
 ```
 

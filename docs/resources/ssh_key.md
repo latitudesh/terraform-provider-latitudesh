@@ -1,20 +1,20 @@
 ---
-page_title: "latitude_ssh_key Resource - terraform-provider-latitudesh"
+page_title: "latitudesh_ssh_key Resource - terraform-provider-latitudesh"
 subcategory: ""
 description: |-
   
 ---
 
-# latitude_ssh_key (Resource)
+# latitudesh_ssh_key (Resource)
 
 
 
 ## Example usage
 
 ```terraform
-resource "latitude_ssh_key" "ssh_key" {
-  project_id = latitude_project.project.id
-  name = "bar"
+resource "latitudesh_ssh_key" "ssh_key" {
+  project    = latitudesh_project.project.id
+  name       = "John's Key"
   public_key = var.ssh_public_key
 }
 ```
@@ -25,7 +25,7 @@ resource "latitude_ssh_key" "ssh_key" {
 ### Required
 
 - `name` (String) The SSH key name
-- `project_id` (String) The id of the project
+- `project` (String) The id or slug of the project
 - `public_key` (String) The SSH public key
 
 ### Read-Only

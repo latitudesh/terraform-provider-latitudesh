@@ -1,24 +1,24 @@
 ---
-page_title: "latitude_server Resource - terraform-provider-latitudesh"
+page_title: "latitudesh_server Resource - terraform-provider-latitudesh"
 subcategory: ""
 description: |-
   
 ---
 
-# latitude_server (Resource)
+# latitudesh_server (Resource)
 
 
 
 ## Example usage
 
 ```terraform
-resource "latitude_server" "server" {
-  hostname = "foo"
-  operating_system = "ubuntu_20_04_x64_lts"
-  plan = data.latitude_plan.plan.slug
-  project_id = latitude_project.project.id
-  site = data.latitude_region.region.slug
-  ssh_keys = [latitude_ssh_key.ssh_key.id]
+resource "latitudesh_server" "server" {
+  hostname         = "terraform.latitude.sh"
+  operating_system = "ubuntu_22_04_x64_lts"
+  plan             = data.latitudesh_plan.plan.slug
+  project          = latitudesh_project.project.id # You can use the project id or slug
+  site             = data.latitudesh_region.region.slug # You can use the site id or slug
+  ssh_keys         = [latitudesh_ssh_key.ssh_key.id]
 }
 ```
 
@@ -30,7 +30,7 @@ resource "latitude_server" "server" {
 - `hostname` (String) The server hostname
 - `operating_system` (String) The server OS
 - `plan` (String) The server plan
-- `project_id` (String) The id of the project
+- `project` (String) The id or slug of the project
 - `site` (String) The server site
 
 ### Optional
