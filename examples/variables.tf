@@ -1,4 +1,4 @@
-variable "auth_token" {
+variable "latitude_token" {
   description = "Latitude.sh API token"
 }
 
