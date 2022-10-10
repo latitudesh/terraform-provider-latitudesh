@@ -1,4 +1,4 @@
-# Latitude.sh Terraform Provider
+Latitude.sh Terraform Provider
 ==================
 
 - Documentation: https://registry.terraform.io/providers/latitudesh/latitudesh/latest/docs 
