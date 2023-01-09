@@ -105,6 +105,7 @@ func resourceProjectUpdate(ctx context.Context, d *schema.ResourceData, m interf
 	updateRequest := &api.ProjectUpdateRequest{
 		Data: api.ProjectUpdateData{
 			Type: "projects",
+			ID:   projectID,
 			Attributes: api.ProjectCreateAttributes{
 				Name:        d.Get("name").(string),
 				Description: d.Get("description").(string),
