@@ -64,7 +64,7 @@ func resourceSSHKeyCreate(ctx context.Context, d *schema.ResourceData, m interfa
 		return diag.FromErr(err)
 	}
 
-	d.SetId(key.Data.ID)
+	d.SetId(key.ID)
 
 	resourceSSHKeyRead(ctx, d, m)
 
@@ -83,7 +83,7 @@ func resourceSSHKeyRead(ctx context.Context, d *schema.ResourceData, m interface
 		return diag.FromErr(err)
 	}
 
-	if err := d.Set("name", &key.Data.Attributes.Name); err != nil {
+	if err := d.Set("name", &key.Name); err != nil {
 		return diag.FromErr(err)
 	}
 

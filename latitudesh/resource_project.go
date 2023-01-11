@@ -65,7 +65,7 @@ func resourceProjectCreate(ctx context.Context, d *schema.ResourceData, m interf
 		return diag.FromErr(err)
 	}
 
-	d.SetId(project.Data.ID)
+	d.SetId(project.ID)
 
 	resourceProjectRead(ctx, d, m)
 
@@ -84,13 +84,13 @@ func resourceProjectRead(ctx context.Context, d *schema.ResourceData, m interfac
 		return diag.FromErr(err)
 	}
 
-	if err := d.Set("name", &project.Data.Attributes.Name); err != nil {
+	if err := d.Set("name", &project.Name); err != nil {
 		return diag.FromErr(err)
 	}
-	if err := d.Set("description", &project.Data.Attributes.Description); err != nil {
+	if err := d.Set("description", &project.Description); err != nil {
 		return diag.FromErr(err)
 	}
-	if err := d.Set("environment", &project.Data.Attributes.Environment); err != nil {
+	if err := d.Set("environment", &project.Environment); err != nil {
 		return diag.FromErr(err)
 	}
 
