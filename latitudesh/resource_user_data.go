@@ -99,6 +99,7 @@ func resourceUserDataUpdate(ctx context.Context, d *schema.ResourceData, m inter
 	updateRequest := &api.UserDataUpdateRequest{
 		Data: api.UserDataUpdateData{
 			Type: "user_data",
+			ID:   userDataID,
 			Attributes: api.UserDataUpdateAttributes{
 				Description: d.Get("description").(string),
 				Content:     d.Get("content").(string),
@@ -113,7 +114,7 @@ func resourceUserDataUpdate(ctx context.Context, d *schema.ResourceData, m inter
 
 	d.Set("updated", time.Now().Format(time.RFC850))
 
-	return resourceProjectRead(ctx, d, m)
+	return resourceUserDataRead(ctx, d, m)
 }
 
 func resourceUserDataDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
