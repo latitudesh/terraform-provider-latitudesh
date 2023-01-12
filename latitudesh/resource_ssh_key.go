@@ -98,6 +98,7 @@ func resourceSSHKeyUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 	updateRequest := &api.SSHKeyUpdateRequest{
 		Data: api.SSHKeyUpdateData{
 			Type: "ssh_keys",
+			ID:   keyID,
 			Attributes: api.SSHKeyUpdateAttributes{
 				Name: d.Get("name").(string),
 			},
@@ -111,7 +112,7 @@ func resourceSSHKeyUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 
 	d.Set("updated", time.Now().Format(time.RFC850))
 
-	return resourceProjectRead(ctx, d, m)
+	return resourceSSHKeyRead(ctx, d, m)
 }
 
 func resourceSSHKeyDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
