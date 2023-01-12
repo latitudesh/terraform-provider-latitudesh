@@ -80,12 +80,12 @@ func testAccCheckUserDataExists(n string, userData *api.UserData) resource.TestC
 
 func testAccCheckUserDataBasic() string {
 	return fmt.Sprintf(`
-resource "latitudesh_user_data" "test_item" {
-	project  	= "%s"
-	description = "%s"
-	content     = "%s"
-}
-`,
+		resource "latitudesh_user_data" "test_item" {
+			project     = "%s"
+			description = "%s"
+			content     = "%s"
+		}
+	`,
 		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testUserDataDescription,
 		os.Getenv("LATITUDESH_TEST_USER_DATA_CONTENT"),
