@@ -143,6 +143,7 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 	updateRequest := &api.ServerUpdateRequest{
 		Data: api.ServerUpdateData{
 			Type: "servers",
+			ID:   serverID,
 			Attributes: api.ServerCreateAttributes{
 				Hostname: d.Get("hostname").(string),
 			},
@@ -156,7 +157,7 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 
 	d.Set("updated", time.Now().Format(time.RFC850))
 
-	return resourceProjectRead(ctx, d, m)
+	return resourceServerRead(ctx, d, m)
 }
 
 func resourceServerDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
