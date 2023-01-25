@@ -37,4 +37,7 @@ func testAccPreCheck(t *testing.T) {
 	if v := os.Getenv("LATITUDESH_TEST_SSH_PUBLIC_KEY"); v == "" {
 		t.Fatal("LATITUDESH_TEST_SSH_PUBLIC_KEY must be set for acceptance tests")
 	}
+	if v := os.Getenv("LATITUDESH_TEST_USER_DATA_CONTENT"); v == "" {
+		t.Fatal("LATITUDESH_TEST_USER_DATA_CONTENT must be set for acceptance tests")
+	}
 }

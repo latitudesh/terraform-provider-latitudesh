@@ -63,7 +63,7 @@ func testAccCheckProjectExists(n string, project *api.Project) resource.TestChec
 			return err
 		}
 
-		if foundProject.Data.ID != rs.Primary.ID {
+		if foundProject.ID != rs.Primary.ID {
 			return fmt.Errorf("Record not found: %v - %v", rs.Primary.ID, foundProject)
 		}
 

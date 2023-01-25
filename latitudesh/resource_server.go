@@ -49,6 +49,11 @@ func resourceServer() *schema.Resource {
 					Type: schema.TypeInt,
 				},
 			},
+			"user_data": {
+				Type:        schema.TypeInt,
+				Description: "The id of user data to set on the server",
+				Optional:    true,
+			},
 			"primary_ip_v4": {
 				Type:        schema.TypeString,
 				Description: "The server IP address",
@@ -90,6 +95,7 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 				OperatingSystem: d.Get("operating_system").(string),
 				Hostname:        d.Get("hostname").(string),
 				SSHKeys:         ssh_keys_slice,
+				UserData:        d.Get("user_data").(int),
 			},
 		},
 	}
@@ -137,6 +143,7 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 	updateRequest := &api.ServerUpdateRequest{
 		Data: api.ServerUpdateData{
 			Type: "servers",
+			ID:   serverID,
 			Attributes: api.ServerCreateAttributes{
 				Hostname: d.Get("hostname").(string),
 			},
@@ -150,7 +157,7 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 
 	d.Set("updated", time.Now().Format(time.RFC850))
 
-	return resourceProjectRead(ctx, d, m)
+	return resourceServerRead(ctx, d, m)
 }
 
 func resourceServerDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {

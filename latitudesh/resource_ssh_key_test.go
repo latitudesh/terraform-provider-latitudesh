@@ -15,7 +15,7 @@ const (
 )
 
 func TestAccSSHKey_Basic(t *testing.T) {
-	var sshKey api.SSHKeyGetResponse
+	var sshKey api.SSHKey
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -51,7 +51,7 @@ func testAccCheckSSHKeyDestroy(s *terraform.State) error {
 	return nil
 }
 
-func testAccCheckSSHKeyExists(n string, sshKey *api.SSHKeyGetResponse) resource.TestCheckFunc {
+func testAccCheckSSHKeyExists(n string, sshKey *api.SSHKey) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[n]
 		if !ok {
@@ -68,7 +68,7 @@ func testAccCheckSSHKeyExists(n string, sshKey *api.SSHKeyGetResponse) resource.
 			return err
 		}
 
-		if foundSSHKey.Data.ID != rs.Primary.ID {
+		if foundSSHKey.ID != rs.Primary.ID {
 			return fmt.Errorf("Record not found: %v - %v", rs.Primary.ID, foundSSHKey)
 		}
 
