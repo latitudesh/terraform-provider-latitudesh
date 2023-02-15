@@ -39,12 +39,12 @@ variable "latitudesh_token" {
 
 variable "plan" {
   description = "Latitude.sh server plan"
-  default = "c2.small.x86"
+  default     = "c2.small.x86"
 }
 
 variable "region" {
   description = "Latitude.sh server region slug"
-  default = "ASH"
+  default     = "ASH"
 }
 
 variable "ssh_public_key" {
@@ -59,8 +59,9 @@ resource "latitudesh_server" "server" {
   hostname         = "terraform.latitude.sh"
   operating_system = "ubuntu_22_04_x64_lts"
   plan             = data.latitudesh_plan.plan.slug
-  project          = latitudesh_project.project.id # You can use the project id or slug
+  project          = latitudesh_project.project.id      # You can use the project id or slug
   site             = data.latitudesh_region.region.slug # You can use the site id or slug
   ssh_keys         = [latitudesh_ssh_key.ssh_key.id]
+  user_data        = latitudesh_user_data.user_data.id
 }
 ```
