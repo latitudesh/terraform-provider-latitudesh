@@ -54,6 +54,11 @@ func resourceServer() *schema.Resource {
 				Description: "The id of user data to set on the server",
 				Optional:    true,
 			},
+			"ipxe_url": {
+				Type:        schema.TypeString,
+				Description: "Url for the iPXE script that will be used",
+				Optional:    true,
+			},
 			"primary_ip_v4": {
 				Type:        schema.TypeString,
 				Description: "The server IP address",
@@ -96,6 +101,7 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 				Hostname:        d.Get("hostname").(string),
 				SSHKeys:         ssh_keys_slice,
 				UserData:        d.Get("user_data").(int),
+				IpxeUrl:         d.Get("ipxe_url").(string),
 			},
 		},
 	}
