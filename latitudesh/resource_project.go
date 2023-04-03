@@ -2,6 +2,8 @@ package latitudesh
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -41,6 +43,9 @@ func resourceProject() *schema.Resource {
 				Description: "The timestamp for the last time the project was updated",
 				Computed:    true,
 			},
+		},
+		Importer: &schema.ResourceImporter{
+			StateContext: schema.ImportStatePassthroughContext,
 		},
 	}
 }
@@ -139,4 +144,22 @@ func resourceProjectDelete(ctx context.Context, d *schema.ResourceData, m interf
 	d.SetId("")
 
 	return diags
+}
+
+func NestedResourceRestAPIImport(ctx context.Context, d *schema.ResourceData, m interface{}) ([]*schema.ResourceData, error) {
+	var err error
+	userDataProjectID := d.Id()
+
+	//extract projectID and userDataID
+	splitIDs := strings.Split(userDataProjectID, ":")
+
+	if len(splitIDs) == 2 {
+		// Set the projectID and requested userDataID
+		d.Set("project", splitIDs[0])
+		d.SetId(splitIDs[1])
+	} else {
+		err = errors.New("projectID and userDataID not passed correctly. Please pass as projectID:userDataID")
+	}
+
+	return []*schema.ResourceData{d}, err
 }

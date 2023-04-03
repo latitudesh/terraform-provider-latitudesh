@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -75,6 +76,9 @@ func resourceServer() *schema.Resource {
 				Computed:    true,
 			},
 		},
+		Importer: &schema.ResourceImporter{
+			StateContext: schema.ImportStatePassthroughContext,
+		},
 	}
 }
 
@@ -130,11 +134,27 @@ func resourceServerRead(ctx context.Context, d *schema.ResourceData, m interface
 		return diag.FromErr(err)
 	}
 
+	if err := d.Set("project", strconv.FormatInt(server.Project.ID, 10)); err != nil {
+		return diag.FromErr(err)
+	}
+
 	if err := d.Set("hostname", &server.Hostname); err != nil {
 		return diag.FromErr(err)
 	}
 
 	if err := d.Set("primary_ip_v4", &server.PrimaryIPv4); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if err := d.Set("operating_system", &server.OperatingSystem.Slug); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if err := d.Set("site", &server.Region.Site.Slug); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if err := d.Set("plan", &server.Plan.Name); err != nil {
 		return diag.FromErr(err)
 	}
 

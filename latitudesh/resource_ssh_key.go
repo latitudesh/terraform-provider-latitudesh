@@ -42,6 +42,9 @@ func resourceSSHKey() *schema.Resource {
 				Computed:    true,
 			},
 		},
+		Importer: &schema.ResourceImporter{
+			StateContext: NestedResourceRestAPIImport,
+		},
 	}
 }
 
@@ -84,6 +87,10 @@ func resourceSSHKeyRead(ctx context.Context, d *schema.ResourceData, m interface
 	}
 
 	if err := d.Set("name", &key.Name); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if err := d.Set("public_key", &key.PublicKey); err != nil {
 		return diag.FromErr(err)
 	}
 

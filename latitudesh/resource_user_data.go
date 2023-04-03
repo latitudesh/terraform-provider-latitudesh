@@ -43,6 +43,9 @@ func resourceUserData() *schema.Resource {
 				Computed:    true,
 			},
 		},
+		Importer: &schema.ResourceImporter{
+			StateContext: NestedResourceRestAPIImport,
+		},
 	}
 }
 
@@ -85,6 +88,10 @@ func resourceUserDataRead(ctx context.Context, d *schema.ResourceData, m interfa
 	}
 
 	if err := d.Set("description", &userData.Description); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if err := d.Set("content", &userData.Content); err != nil {
 		return diag.FromErr(err)
 	}
 
