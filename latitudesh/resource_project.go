@@ -148,17 +148,17 @@ func resourceProjectDelete(ctx context.Context, d *schema.ResourceData, m interf
 
 func NestedResourceRestAPIImport(ctx context.Context, d *schema.ResourceData, m interface{}) ([]*schema.ResourceData, error) {
 	var err error
-	userDataProjectID := d.Id()
+	nestedResourceID := d.Id()
 
-	//extract projectID and userDataID
-	splitIDs := strings.Split(userDataProjectID, ":")
+	//extract projectID and nestedResourceID
+	splitIDs := strings.Split(nestedResourceID, ":")
 
 	if len(splitIDs) == 2 {
-		// Set the projectID and requested userDataID
+		// Set the projectID and requested nestedResourceID
 		d.Set("project", splitIDs[0])
 		d.SetId(splitIDs[1])
 	} else {
-		err = errors.New("projectID and userDataID not passed correctly. Please pass as projectID:userDataID")
+		err = errors.New("projectID and nestedResourceID not passed correctly. Please pass as projectID:nestedResourceID")
 	}
 
 	return []*schema.ResourceData{d}, err
