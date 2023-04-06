@@ -98,6 +98,12 @@ func resourceProjectRead(ctx context.Context, d *schema.ResourceData, m interfac
 	if err := d.Set("environment", &project.Environment); err != nil {
 		return diag.FromErr(err)
 	}
+	if err := d.Set("created", &project.CreatedAt); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("updated", &project.UpdatedAt); err != nil {
+		return diag.FromErr(err)
+	}
 
 	return diags
 }

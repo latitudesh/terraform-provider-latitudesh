@@ -158,6 +158,10 @@ func resourceServerRead(ctx context.Context, d *schema.ResourceData, m interface
 		return diag.FromErr(err)
 	}
 
+	if err := d.Set("created", &server.CreatedAt); err != nil {
+		return diag.FromErr(err)
+	}
+
 	return diags
 }
 
