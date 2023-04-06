@@ -60,7 +60,7 @@ func resourceServer() *schema.Resource {
 				Description: "Url for the iPXE script that will be used",
 				Optional:    true,
 			},
-			"primary_ip_v4": {
+			"primary_ipv4": {
 				Type:        schema.TypeString,
 				Description: "The server IP address",
 				Computed:    true,
@@ -142,7 +142,7 @@ func resourceServerRead(ctx context.Context, d *schema.ResourceData, m interface
 		return diag.FromErr(err)
 	}
 
-	if err := d.Set("primary_ip_v4", &server.PrimaryIPv4); err != nil {
+	if err := d.Set("primary_ipv4", &server.PrimaryIPv4); err != nil {
 		return diag.FromErr(err)
 	}
 
