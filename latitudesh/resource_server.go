@@ -154,7 +154,7 @@ func resourceServerRead(ctx context.Context, d *schema.ResourceData, m interface
 		return diag.FromErr(err)
 	}
 
-	if err := d.Set("plan", &server.Plan.Name); err != nil {
+	if err := d.Set("plan", &server.Plan.Slug); err != nil {
 		return diag.FromErr(err)
 	}
 
