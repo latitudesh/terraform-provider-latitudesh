@@ -2,6 +2,8 @@ package latitudesh
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -41,6 +43,9 @@ func resourceProject() *schema.Resource {
 				Description: "The timestamp for the last time the project was updated",
 				Computed:    true,
 			},
+		},
+		Importer: &schema.ResourceImporter{
+			StateContext: schema.ImportStatePassthroughContext,
 		},
 	}
 }
@@ -93,6 +98,12 @@ func resourceProjectRead(ctx context.Context, d *schema.ResourceData, m interfac
 	if err := d.Set("environment", &project.Environment); err != nil {
 		return diag.FromErr(err)
 	}
+	if err := d.Set("created", &project.CreatedAt); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("updated", &project.UpdatedAt); err != nil {
+		return diag.FromErr(err)
+	}
 
 	return diags
 }
@@ -139,4 +150,22 @@ func resourceProjectDelete(ctx context.Context, d *schema.ResourceData, m interf
 	d.SetId("")
 
 	return diags
+}
+
+func NestedResourceRestAPIImport(ctx context.Context, d *schema.ResourceData, m interface{}) ([]*schema.ResourceData, error) {
+	var err error
+	nestedResourceID := d.Id()
+
+	//extract projectID and nestedResourceID
+	splitIDs := strings.Split(nestedResourceID, ":")
+
+	if len(splitIDs) == 2 {
+		// Set the projectID and requested nestedResourceID
+		d.Set("project", splitIDs[0])
+		d.SetId(splitIDs[1])
+	} else {
+		err = errors.New("projectID and nestedResourceID not passed correctly. Please pass as projectID:nestedResourceID")
+	}
+
+	return []*schema.ResourceData{d}, err
 }

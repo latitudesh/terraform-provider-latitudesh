@@ -33,3 +33,10 @@ resource "latitudesh_project" "project" {
 - `created` (String) The timestamp for when the project was created
 - `id` (String) The ID of this resource.
 - `updated` (String) The timestamp for the last time the project was updated
+
+## Import
+Project can be imported using the projectID, e.g.,
+
+```sh
+$ terraform import latitudesh_project.project projectID
+```

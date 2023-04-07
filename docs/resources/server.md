@@ -43,5 +43,12 @@ resource "latitudesh_server" "server" {
 
 - `created` (String) The timestamp for when the server was created
 - `id` (String) The ID of this resource.
-- `primary_ip_v4` (String) The server IP address
+- `primary_ipv4` (String) The server IP address
 - `updated` (String) The timestamp for the last time the server was updated
+
+## Import
+Server can be imported using the serverID, e.g.,
+
+```sh
+$ terraform import latitudesh_server.server serverID
+```
