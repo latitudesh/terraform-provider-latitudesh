@@ -33,3 +33,10 @@ resource "latitudesh_user_data" "user_data" {
 - `created` (String) The timestamp for when the User Data was created
 - `id` (String) The ID of this resource.
 - `updated` (String) The timestamp for the last time the User Data was updated
+
+## Import
+UserData can be imported using the userDataID along with the projectID that contains the userData, e.g.,
+
+```sh
+$ terraform import latitudesh_user_data.user_data projectID:userDataID
+```

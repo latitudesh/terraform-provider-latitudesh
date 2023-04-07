@@ -33,3 +33,10 @@ resource "latitudesh_ssh_key" "ssh_key" {
 - `created` (String) The timestamp for when the SSH key was created
 - `id` (String) The ID of this resource.
 - `updated` (String) The timestamp for the last time the SSH key was updated
+
+## Import
+SshKey can be imported using the sshKeyID along with the projectID that contains the sshKey, e.g.,
+
+```sh
+$ terraform import latitudesh_ssh_key.ssh_key projectID:sshKeyID
+```
