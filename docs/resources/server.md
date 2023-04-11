@@ -20,7 +20,7 @@ resource "latitudesh_server" "server" {
   site             = data.latitudesh_region.region.slug # You can use the site id or slug
   ssh_keys         = [latitudesh_ssh_key.ssh_key.id]
   user_data        = latitudesh_user_data.user_data.id
-  ipxe_url         = "http://some-host.com/some-script.ipxe"
+  ipxe_url         = "" # URL to a boot.ipxe file. e.g. https://boot.netboot.xyz
 }
 ```
 
@@ -39,7 +39,7 @@ resource "latitudesh_server" "server" {
 
 - `ssh_keys` (List of Number) List of server SSH key ids
 - `user_data` (Number) The id of user data to set on the server
-- `ipxe_url` (String) URL where iPXE script is stored on, necessary for custom image deployments. This attribute is required when operating system iPXE is selected.
+- `ipxe_url` (String) Public URL for the iPXE script. Required for custom image deployments. Learn more: https://docs.latitude.sh/docs/custom-image-ipxe
 
 ### Read-Only
 
