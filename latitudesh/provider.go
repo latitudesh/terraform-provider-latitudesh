@@ -8,6 +8,10 @@ import (
 	api "github.com/latitudesh/latitudesh-go"
 )
 
+const (
+	userAgentProvider = "Latitude-Terraform-Provider"
+)
+
 func Provider() *schema.Provider {
 	return &schema.Provider{
 		Schema: map[string]*schema.Schema{
@@ -38,6 +42,7 @@ func providerConfigure(ctx context.Context, d *schema.ResourceData) (interface{}
 
 	if authToken != "" {
 		c := api.NewClientWithAuth("latitudesh", authToken, nil)
+		c.UserAgent = userAgentProvider
 
 		return c, diags
 	}
