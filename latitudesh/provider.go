@@ -2,11 +2,18 @@ package latitudesh
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	api "github.com/latitudesh/latitudesh-go"
 )
+
+const (
+	userAgentForProvider = "Latitude-Terraform-Provider"
+)
+
+var currentVersion = "0.2.5" // update varible when version updated
 
 func Provider() *schema.Provider {
 	return &schema.Provider{
@@ -38,6 +45,7 @@ func providerConfigure(ctx context.Context, d *schema.ResourceData) (interface{}
 
 	if authToken != "" {
 		c := api.NewClientWithAuth("latitudesh", authToken, nil)
+		c.UserAgent = fmt.Sprintf("%s/%s", userAgentForProvider, currentVersion)
 
 		return c, diags
 	}
