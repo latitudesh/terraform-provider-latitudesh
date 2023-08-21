@@ -19,7 +19,7 @@ terraform {
   required_providers {
     latitudesh = {
       source  = "latitudesh/latitudesh"
-      version = "~> 0.2.5"
+      version = "~> 0.2.6"
     }
   }
 }
@@ -62,6 +62,5 @@ resource "latitudesh_server" "server" {
   project          = latitudesh_project.project.id      # You can use the project id or slug
   site             = data.latitudesh_region.region.slug # You can use the site id or slug
   ssh_keys         = [latitudesh_ssh_key.ssh_key.id]
-  user_data        = latitudesh_user_data.user_data.id
 }
 ```

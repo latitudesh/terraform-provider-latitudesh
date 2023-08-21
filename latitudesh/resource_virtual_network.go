@@ -2,7 +2,6 @@ package latitudesh
 
 import (
 	"context"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -40,16 +39,6 @@ func resourceVirtualNetwork() *schema.Resource {
 			"assignments_count": {
 				Type:        schema.TypeInt,
 				Description: "Amount of devices assigned to the virtual network",
-				Computed:    true,
-			},
-			"created": {
-				Type:        schema.TypeString,
-				Description: "The timestamp for when the Virtual Network was created",
-				Computed:    true,
-			},
-			"updated": {
-				Type:        schema.TypeString,
-				Description: "The timestamp for the last time the Virtual Network was updated",
 				Computed:    true,
 			},
 		},
@@ -136,8 +125,6 @@ func resourceVirtualNetworkUpdate(ctx context.Context, d *schema.ResourceData, m
 	if err != nil {
 		return diag.FromErr(err)
 	}
-
-	d.Set("updated", time.Now().Format(time.RFC850))
 
 	return resourceVirtualNetworkRead(ctx, d, m)
 }

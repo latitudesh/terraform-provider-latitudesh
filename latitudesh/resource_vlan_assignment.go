@@ -49,11 +49,6 @@ func resourceVlanAssignment() *schema.Resource {
 				Description: "The Assigned server label",
 				Computed:    true,
 			},
-			"created": {
-				Type:        schema.TypeString,
-				Description: "The timestamp for when the Virtual Network was assigned to a server",
-				Computed:    true,
-			},
 		},
 		Importer: &schema.ResourceImporter{
 			StateContext: NestedResourceRestAPIImport,
