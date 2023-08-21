@@ -29,6 +29,8 @@ func TestAccVirtualNetwork_Basic(t *testing.T) {
 					testAccCheckVirtualNetworkExists("latitudesh_virtual_network.test_item", &VirtualNetwork),
 					resource.TestCheckResourceAttr(
 						"latitudesh_virtual_network.test_item", "description", testVirtualNetworkDescription),
+					resource.TestCheckResourceAttr(
+						"latitudesh_virtual_network.test_item", "site", testVirtualNetworkSite),
 				),
 			},
 		},
