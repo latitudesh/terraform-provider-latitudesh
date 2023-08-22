@@ -12,12 +12,14 @@ import (
 func resourceVlanAssignment() *schema.Resource {
 	return &schema.Resource{
 		CreateContext: resourceVlanAssignmentCreate,
+		ReadContext:   resourceVlanAssignmentRead,
 		DeleteContext: resourceVlanAssignmentDelete,
 		Schema: map[string]*schema.Schema{
 			"virtual_network_id": {
 				Type:        schema.TypeString,
 				Description: "The virtual network ID",
 				Required:    true,
+				ForceNew:    true,
 			},
 			"vid": {
 				Type:        schema.TypeString,
@@ -38,6 +40,7 @@ func resourceVlanAssignment() *schema.Resource {
 				Type:        schema.TypeString,
 				Description: "The Assigned server ID",
 				Required:    true,
+				ForceNew:    true,
 			},
 			"server_hostname": {
 				Type:        schema.TypeString,
