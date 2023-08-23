@@ -32,7 +32,7 @@ func resourceVirtualNetwork() *schema.Resource {
 				Required:    true,
 			},
 			"vid": {
-				Type:        schema.TypeString,
+				Type:        schema.TypeInt,
 				Description: "The vlan ID of the virtual network",
 				Computed:    true,
 			},
@@ -87,7 +87,7 @@ func resourceVirtualNetworkRead(ctx context.Context, d *schema.ResourceData, m i
 		return diag.FromErr(err)
 	}
 
-	if err := d.Set("vid", &virtualNetwork.Description); err != nil {
+	if err := d.Set("vid", &virtualNetwork.Vid); err != nil {
 		return diag.FromErr(err)
 	}
 
@@ -113,7 +113,7 @@ func resourceVirtualNetworkUpdate(ctx context.Context, d *schema.ResourceData, m
 
 	updateRequest := &api.VirtualNetworkUpdateRequest{
 		Data: api.VirtualNetworkUpdateData{
-			Type: "virtual_network",
+			Type: "virtual_networks",
 			ID:   virtualNetworkID,
 			Attributes: api.VirtualNetworkUpdateAttributes{
 				Description: d.Get("description").(string),

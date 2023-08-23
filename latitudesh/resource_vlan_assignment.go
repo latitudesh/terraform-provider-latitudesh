@@ -16,13 +16,13 @@ func resourceVlanAssignment() *schema.Resource {
 		DeleteContext: resourceVlanAssignmentDelete,
 		Schema: map[string]*schema.Schema{
 			"virtual_network_id": {
-				Type:        schema.TypeString,
+				Type:        schema.TypeInt,
 				Description: "The virtual network ID",
 				Required:    true,
 				ForceNew:    true,
 			},
 			"vid": {
-				Type:        schema.TypeString,
+				Type:        schema.TypeInt,
 				Description: "The vlan ID of the virtual network",
 				Computed:    true,
 			},
@@ -37,7 +37,7 @@ func resourceVlanAssignment() *schema.Resource {
 				Computed:    true,
 			},
 			"server_id": {
-				Type:        schema.TypeString,
+				Type:        schema.TypeInt,
 				Description: "The Assigned server ID",
 				Required:    true,
 				ForceNew:    true,
