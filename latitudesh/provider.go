@@ -13,7 +13,7 @@ const (
 	userAgentForProvider = "Latitude-Terraform-Provider"
 )
 
-var currentVersion = "0.2.5" // update varible when version updated
+var currentVersion = "0.2.7" // update varible when version updated
 
 func Provider() *schema.Provider {
 	return &schema.Provider{
@@ -25,10 +25,12 @@ func Provider() *schema.Provider {
 			},
 		},
 		ResourcesMap: map[string]*schema.Resource{
-			"latitudesh_project":   resourceProject(),
-			"latitudesh_server":    resourceServer(),
-			"latitudesh_ssh_key":   resourceSSHKey(),
-			"latitudesh_user_data": resourceUserData(),
+			"latitudesh_project":         resourceProject(),
+			"latitudesh_server":          resourceServer(),
+			"latitudesh_ssh_key":         resourceSSHKey(),
+			"latitudesh_user_data":       resourceUserData(),
+			"latitudesh_virtual_network": resourceVirtualNetwork(),
+			"latitudesh_vlan_assignment": resourceVlanAssignment(),
 		},
 		DataSourcesMap: map[string]*schema.Resource{
 			"latitudesh_plan":   dataSourcePlan(),
