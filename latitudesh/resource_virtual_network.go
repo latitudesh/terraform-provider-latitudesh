@@ -18,17 +18,17 @@ func resourceVirtualNetwork() *schema.Resource {
 		Schema: map[string]*schema.Schema{
 			"project": {
 				Type:        schema.TypeString,
-				Description: "The slug of the project",
+				Description: "The project id or slug",
 				Required:    true,
 			},
 			"site": {
 				Type:        schema.TypeString,
-				Description: "The site slug",
+				Description: "The site id or slug",
 				Required:    true,
 			},
 			"description": {
 				Type:        schema.TypeString,
-				Description: "The Virtual Network description",
+				Description: "The virtual network description",
 				Required:    true,
 			},
 			"vid": {

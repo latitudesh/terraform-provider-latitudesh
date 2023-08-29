@@ -33,23 +33,23 @@ func resourceVlanAssignment() *schema.Resource {
 			},
 			"status": {
 				Type:        schema.TypeString,
-				Description: "The Assignment status",
+				Description: "The assignment status",
 				Computed:    true,
 			},
 			"server_id": {
 				Type:        schema.TypeInt,
-				Description: "The Assigned server ID",
+				Description: "The assignment server ID",
 				Required:    true,
 				ForceNew:    true,
 			},
 			"server_hostname": {
 				Type:        schema.TypeString,
-				Description: "The Assigned server hostname",
+				Description: "The assignment server hostname",
 				Computed:    true,
 			},
 			"server_label": {
 				Type:        schema.TypeString,
-				Description: "The Assigned server label",
+				Description: "The assignment server label",
 				Computed:    true,
 			},
 		},
