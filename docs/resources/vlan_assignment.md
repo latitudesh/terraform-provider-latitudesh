@@ -23,14 +23,14 @@ resource "latitudesh_vlan_assignment" "vlan_assignment" {
 
 ### Required
 
-- `server_id` (String) The Assigned server ID
-- `virtual_network_id` (String) The virtual network ID
+- `server_id` (Number) The assignment server ID
+- `virtual_network_id` (Number) The virtual network ID
 
 ### Read-Only
 
 - `description` (String) The Virtual Network description
 - `id` (String) The ID of this resource.
-- `server_hostname` (String) The Assigned server hostname
-- `server_label` (String) The Assigned server label
-- `status` (String) The Assignment status
-- `vid` (String) The vlan ID of the virtual network
+- `server_hostname` (String) The assignment server hostname
+- `server_label` (String) The assignment server label
+- `status` (String) The assignment status
+- `vid` (Number) The vlan ID of the virtual network

@@ -19,7 +19,7 @@ terraform {
   required_providers {
     latitudesh = {
       source  = "latitudesh/latitudesh"
-      version = "~> 0.2.6"
+      version = "~> 0.2.8"
     }
   }
 }
@@ -39,7 +39,7 @@ variable "latitudesh_token" {
 
 variable "plan" {
   description = "Latitude.sh server plan"
-  default     = "c2.small.x86"
+  default     = "c2-small-x86"
 }
 
 variable "region" {
