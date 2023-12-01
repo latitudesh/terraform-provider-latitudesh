@@ -24,12 +24,12 @@ resource "latitudesh_virtual_network" "virtual_network" {
 
 ### Required
 
-- `description` (String) The Virtual Network description
-- `project` (String) The slug of the project
-- `site` (String) The site slug
+- `description` (String) The virtual network description
+- `project` (String) The project id or slug
+- `site` (String) The site id or slug
 
 ### Read-Only
 
 - `assignments_count` (Number) Amount of devices assigned to the virtual network
 - `id` (String) The ID of this resource.
-- `vid` (String) The vlan ID of the virtual network
+- `vid` (Number) The vlan ID of the virtual network
