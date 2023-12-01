@@ -39,7 +39,7 @@ variable "latitudesh_token" {
 
 variable "plan" {
   description = "Latitude.sh server plan"
-  default     = "c2-small-x86"
+  default     = "s3-large-x86"
 }
 
 variable "region" {
