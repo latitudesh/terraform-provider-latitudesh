@@ -47,7 +47,7 @@ func resourceServer() *schema.Resource {
 				Description: "List of server SSH key ids",
 				Optional:    true,
 				Elem: &schema.Schema{
-					Type: schema.TypeInt,
+					Type: schema.TypeString,
 				},
 			},
 			"user_data": {
@@ -94,9 +94,9 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 	// Convert ssh_keys from []interace{} to []int
 	// TODO: Is there a better way to do this?
 	ssh_keys := d.Get("ssh_keys").([]interface{})
-	ssh_keys_slice := make([]int, len(ssh_keys))
+	ssh_keys_slice := make([]string, len(ssh_keys))
 	for i, ssh_key := range ssh_keys {
-		ssh_keys_slice[i] = ssh_key.(int)
+		ssh_keys_slice[i] = ssh_key.(string)
 	}
 
 	createRequest := &api.ServerCreateRequest{
@@ -140,7 +140,7 @@ func resourceServerRead(ctx context.Context, d *schema.ResourceData, m interface
 		return diag.FromErr(err)
 	}
 
-	if err := d.Set("project", strconv.FormatInt(server.Project.ID, 10)); err != nil {
+	if err := d.Set("project", strconv.FormatFloat(server.Project.ID.(float64), 'b', 2, 64)); err != nil {
 		return diag.FromErr(err)
 	}
 
@@ -180,7 +180,7 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 		Data: api.ServerUpdateData{
 			Type: "servers",
 			ID:   serverID,
-			Attributes: api.ServerCreateAttributes{
+			Attributes: api.ServerUpdateAttributes{
 				Hostname: d.Get("hostname").(string),
 			},
 		},
