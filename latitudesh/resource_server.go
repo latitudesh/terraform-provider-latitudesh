@@ -91,7 +91,7 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 	var diags diag.Diagnostics
 	c := m.(*api.Client)
 
-	// Convert ssh_keys from []interace{} to []int
+	// Convert ssh_keys from []interace{} to []string
 	// TODO: Is there a better way to do this?
 	ssh_keys := d.Get("ssh_keys").([]interface{})
 	ssh_keys_slice := make([]string, len(ssh_keys))
