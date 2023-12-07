@@ -140,7 +140,16 @@ func resourceServerRead(ctx context.Context, d *schema.ResourceData, m interface
 		return diag.FromErr(err)
 	}
 
-	if err := d.Set("project", strconv.FormatFloat(server.Project.ID.(float64), 'b', 2, 64)); err != nil {
+	// server.Project.ID is an interface{} type so we should verify before using
+	var serverProjectId string
+	switch server.Project.ID.(type) {
+	case string:
+		serverProjectId = server.Project.ID.(string)
+	case float64:
+		serverProjectId = strconv.FormatFloat(server.Project.ID.(float64), 'b', 2, 64)
+	}
+
+	if err := d.Set("project", serverProjectId); err != nil {
 		return diag.FromErr(err)
 	}
 
