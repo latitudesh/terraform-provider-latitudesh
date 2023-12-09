@@ -67,8 +67,8 @@ func resourceVlanAssignmentCreate(ctx context.Context, d *schema.ResourceData, m
 		Data: api.VlanAssignData{
 			Type: "virtual_network_assignment",
 			Attributes: api.VlanAssignAttributes{
-				ServerID:         d.Get("server_id").(int),
-				VirtualNetworkID: d.Get("virtual_network_id").(int),
+				ServerID:         d.Get("server_id").(string),
+				VirtualNetworkID: d.Get("virtual_network_id").(string),
 			},
 		},
 	}
