@@ -24,9 +24,12 @@ resource "latitudesh_project" "project" {
 
 ### Required
 
-- `description` (String) The description of the project
 - `environment` (String) The name of the project
 - `name` (String) The name of the project
+
+### Optional
+
+- `description` (String) The description of the project
 
 ### Read-Only
 

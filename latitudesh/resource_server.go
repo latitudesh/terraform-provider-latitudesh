@@ -51,7 +51,7 @@ func resourceServer() *schema.Resource {
 				},
 			},
 			"user_data": {
-				Type:        schema.TypeInt,
+				Type:        schema.TypeString,
 				Description: "The id of user data to set on the server",
 				Optional:    true,
 			},
@@ -109,7 +109,7 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 				OperatingSystem: d.Get("operating_system").(string),
 				Hostname:        d.Get("hostname").(string),
 				SSHKeys:         ssh_keys_slice,
-				UserData:        d.Get("user_data").(int),
+				UserData:        d.Get("user_data").(string),
 				Raid:            d.Get("raid").(string),
 				IpxeUrl:         d.Get("ipxe_url").(string),
 			},

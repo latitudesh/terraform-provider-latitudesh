@@ -26,7 +26,7 @@ func resourceProject() *schema.Resource {
 			"description": {
 				Type:        schema.TypeString,
 				Description: "The description of the project",
-				Required:    true,
+				Optional:    true,
 			},
 			"environment": {
 				Type:        schema.TypeString,

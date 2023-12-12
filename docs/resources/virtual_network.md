@@ -33,3 +33,10 @@ resource "latitudesh_virtual_network" "virtual_network" {
 - `assignments_count` (Number) Amount of devices assigned to the virtual network
 - `id` (String) The ID of this resource.
 - `vid` (Number) The vlan ID of the virtual network
+
+## Import
+VirtualNetwork can be imported using the VirtualNetworkID along with the projectID that contains the VirtualNetwork, e.g.,
+
+```sh
+$ terraform import latitudesh_virtual_network.virtual_network projectID:VirtualNetworkID
+```

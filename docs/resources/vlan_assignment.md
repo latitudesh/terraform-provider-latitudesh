@@ -23,8 +23,8 @@ resource "latitudesh_vlan_assignment" "vlan_assignment" {
 
 ### Required
 
-- `server_id` (Number) The assignment server ID
-- `virtual_network_id` (Number) The virtual network ID
+- `server_id` (String) The assignment server ID
+- `virtual_network_id` (String) The virtual network ID
 
 ### Read-Only
 
@@ -34,3 +34,10 @@ resource "latitudesh_vlan_assignment" "vlan_assignment" {
 - `server_label` (String) The assignment server label
 - `status` (String) The assignment status
 - `vid` (Number) The vlan ID of the virtual network
+
+## Import
+VlanAssignment can be imported using the VlanAssignmentID along with the projectID that contains the VirtualNetwork, e.g.,
+
+```sh
+$ terraform import latitudesh_vlan_assignment.vlan_assignment projectID:VlanAssignmentID
+```
