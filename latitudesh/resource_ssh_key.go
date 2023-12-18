@@ -20,6 +20,7 @@ func resourceSSHKey() *schema.Resource {
 				Type:        schema.TypeString,
 				Description: "The id or slug of the project",
 				Required:    true,
+				ForceNew:    true,
 			},
 			"name": {
 				Type:        schema.TypeString,
@@ -30,6 +31,7 @@ func resourceSSHKey() *schema.Resource {
 				Type:        schema.TypeString,
 				Description: "The SSH public key",
 				Required:    true,
+				ForceNew:    true,
 			},
 			"created": {
 				Type:        schema.TypeString,

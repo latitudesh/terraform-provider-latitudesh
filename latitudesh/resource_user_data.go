@@ -21,6 +21,7 @@ func resourceUserData() *schema.Resource {
 				Type:        schema.TypeString,
 				Description: "The id or slug of the project",
 				Required:    true,
+				ForceNew:    true,
 			},
 			"description": {
 				Type:        schema.TypeString,
