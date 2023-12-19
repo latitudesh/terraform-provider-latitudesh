@@ -20,11 +20,13 @@ func resourceVirtualNetwork() *schema.Resource {
 				Type:        schema.TypeString,
 				Description: "The project id or slug",
 				Required:    true,
+				ForceNew:    true,
 			},
 			"site": {
 				Type:        schema.TypeString,
 				Description: "The site id or slug",
 				Required:    true,
+				ForceNew:    true,
 			},
 			"description": {
 				Type:        schema.TypeString,

@@ -21,21 +21,25 @@ func resourceServer() *schema.Resource {
 				Type:        schema.TypeString,
 				Description: "The id or slug of the project",
 				Required:    true,
+				ForceNew:    true,
 			},
 			"site": {
 				Type:        schema.TypeString,
 				Description: "The server site",
 				Required:    true,
+				ForceNew:    true,
 			},
 			"plan": {
 				Type:        schema.TypeString,
 				Description: "The server plan",
 				Required:    true,
+				ForceNew:    true,
 			},
 			"operating_system": {
 				Type:        schema.TypeString,
 				Description: "The server OS",
 				Required:    true,
+				ForceNew:    true,
 			},
 			"hostname": {
 				Type:        schema.TypeString,
@@ -43,27 +47,31 @@ func resourceServer() *schema.Resource {
 				Required:    true,
 			},
 			"ssh_keys": {
-				Type:        schema.TypeList,
-				Description: "List of server SSH key ids",
-				Optional:    true,
+				Type: schema.TypeList,
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
+				Description: "List of server SSH key ids",
+				Optional:    true,
+				ForceNew:    true,
 			},
 			"user_data": {
 				Type:        schema.TypeString,
 				Description: "The id of user data to set on the server",
 				Optional:    true,
+				ForceNew:    true,
 			},
 			"raid": {
 				Type:        schema.TypeString,
 				Description: "RAID mode for the server",
 				Optional:    true,
+				ForceNew:    true,
 			},
 			"ipxe_url": {
 				Type:        schema.TypeString,
 				Description: "Url for the iPXE script that will be used",
 				Optional:    true,
+				ForceNew:    true,
 			},
 			"primary_ipv4": {
 				Type:        schema.TypeString,
