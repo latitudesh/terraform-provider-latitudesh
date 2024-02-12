@@ -39,7 +39,6 @@ func resourceServer() *schema.Resource {
 				Type:        schema.TypeString,
 				Description: "The server OS",
 				Required:    true,
-				ForceNew:    true,
 			},
 			"hostname": {
 				Type:        schema.TypeString,
@@ -53,25 +52,21 @@ func resourceServer() *schema.Resource {
 				},
 				Description: "List of server SSH key ids",
 				Optional:    true,
-				ForceNew:    true,
 			},
 			"user_data": {
 				Type:        schema.TypeString,
 				Description: "The id of user data to set on the server",
 				Optional:    true,
-				ForceNew:    true,
 			},
 			"raid": {
 				Type:        schema.TypeString,
 				Description: "RAID mode for the server",
 				Optional:    true,
-				ForceNew:    true,
 			},
 			"ipxe_url": {
 				Type:        schema.TypeString,
 				Description: "Url for the iPXE script that will be used",
 				Optional:    true,
-				ForceNew:    true,
 			},
 			"primary_ipv4": {
 				Type:        schema.TypeString,
@@ -193,19 +188,40 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 
 	serverID := d.Id()
 
-	updateRequest := &api.ServerUpdateRequest{
-		Data: api.ServerUpdateData{
-			Type: "servers",
-			ID:   serverID,
-			Attributes: api.ServerUpdateAttributes{
-				Hostname: d.Get("hostname").(string),
+	// Any server changes, except "hostname" required a server re-install and not just an update
+	if d.HasChangesExcept("hostname") {
+		_, err := c.Servers.Reinstall(serverID, &api.ServerReinstallRequest{
+			Data: api.ServerReinstallData{
+				Type: "reinstalls",
+				Attributes: api.ServerReinstallAttributes{
+					OperatingSystem: d.Get("operating_system").(string),
+					Hostname:        d.Get("hostname").(string),
+					SSHKeys:         d.Get("ssh_keys").([]string),
+					UserData:        d.Get("user_data").(string),
+					Raid:            d.Get("raid").(string),
+					IpxeUrl:         d.Get("ipxe_url").(string),
+				},
 			},
-		},
-	}
+		})
 
-	_, _, err := c.Servers.Update(serverID, updateRequest)
-	if err != nil {
-		return diag.FromErr(err)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+	} else {
+		updateRequest := &api.ServerUpdateRequest{
+			Data: api.ServerUpdateData{
+				Type: "servers",
+				ID:   serverID,
+				Attributes: api.ServerUpdateAttributes{
+					Hostname: d.Get("hostname").(string),
+				},
+			},
+		}
+
+		_, _, err := c.Servers.Update(serverID, updateRequest)
+		if err != nil {
+			return diag.FromErr(err)
+		}
 	}
 
 	d.Set("updated", time.Now().Format(time.RFC850))
