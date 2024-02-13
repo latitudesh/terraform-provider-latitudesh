@@ -188,7 +188,9 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 
 	serverID := d.Id()
 
-	// Any server changes, except "hostname" required a server re-install and not just an update
+	// The 'hostname' key is currently the only key that's able to update with the Latitude 'ServerUpdateRequest'.
+	// For all other keys that don't set ForceNew: true, we must re-install the server to update them.
+	// Resources with ForceNew: true, won't hit this code-path and will instead run delete & create.
 	if d.HasChangesExcept("hostname") {
 		_, err := c.Servers.Reinstall(serverID, &api.ServerReinstallRequest{
 			Data: api.ServerReinstallData{
@@ -224,7 +226,10 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 		}
 	}
 
-	d.Set("updated", time.Now().Format(time.RFC850))
+	err := d.Set("updated", time.Now().Format(time.RFC850))
+	if err != nil {
+		return diag.FromErr(err)
+	}
 
 	return resourceServerRead(ctx, d, m)
 }
