@@ -94,14 +94,7 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 	var diags diag.Diagnostics
 	c := m.(*api.Client)
 
-	// Convert ssh_keys from []interace{} to []string
-	// TODO: Is there a better way to do this?
-	ssh_keys := d.Get("ssh_keys").([]interface{})
-	ssh_keys_slice := make([]string, len(ssh_keys))
-	for i, ssh_key := range ssh_keys {
-		ssh_keys_slice[i] = ssh_key.(string)
-	}
-
+	ssh_keys := parseSSHKeys(d)
 	createRequest := &api.ServerCreateRequest{
 		Data: api.ServerCreateData{
 			Type: "servers",
@@ -111,7 +104,7 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 				Plan:            d.Get("plan").(string),
 				OperatingSystem: d.Get("operating_system").(string),
 				Hostname:        d.Get("hostname").(string),
-				SSHKeys:         ssh_keys_slice,
+				SSHKeys:         ssh_keys,
 				UserData:        d.Get("user_data").(string),
 				Raid:            d.Get("raid").(string),
 				IpxeUrl:         d.Get("ipxe_url").(string),
@@ -192,23 +185,11 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 	// For all other keys that don't set ForceNew: true, we must re-install the server to update them.
 	// Resources with ForceNew: true, won't hit this code-path and will instead run delete & create.
 	if d.HasChangesExcept("hostname") {
-		_, err := c.Servers.Reinstall(serverID, &api.ServerReinstallRequest{
-			Data: api.ServerReinstallData{
-				Type: "reinstalls",
-				Attributes: api.ServerReinstallAttributes{
-					OperatingSystem: d.Get("operating_system").(string),
-					Hostname:        d.Get("hostname").(string),
-					SSHKeys:         d.Get("ssh_keys").([]string),
-					UserData:        d.Get("user_data").(string),
-					Raid:            d.Get("raid").(string),
-					IpxeUrl:         d.Get("ipxe_url").(string),
-				},
-			},
-		})
-
+		err := serverReinstall(c, serverID, ctx, d)
 		if err != nil {
 			return diag.FromErr(err)
 		}
+
 	} else {
 		updateRequest := &api.ServerUpdateRequest{
 			Data: api.ServerUpdateData{
@@ -249,4 +230,36 @@ func resourceServerDelete(ctx context.Context, d *schema.ResourceData, m interfa
 	d.SetId("")
 
 	return diags
+}
+
+func serverReinstall(c *api.Client, serverID string, ctx context.Context, d *schema.ResourceData) error {
+	ssh_keys := parseSSHKeys(d)
+
+	_, err := c.Servers.Reinstall(serverID, &api.ServerReinstallRequest{
+		Data: api.ServerReinstallData{
+			Type: "reinstalls",
+			Attributes: api.ServerReinstallAttributes{
+				OperatingSystem: d.Get("operating_system").(string),
+				Hostname:        d.Get("hostname").(string),
+				SSHKeys:         ssh_keys,
+				UserData:        d.Get("user_data").(string),
+				Raid:            d.Get("raid").(string),
+				IpxeUrl:         d.Get("ipxe_url").(string),
+			},
+		},
+	})
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func parseSSHKeys(d *schema.ResourceData) []string {
+	ssh_keys := d.Get("ssh_keys").([]interface{})
+	ssh_keys_slice := make([]string, len(ssh_keys))
+	for i, ssh_key := range ssh_keys {
+		ssh_keys_slice[i] = ssh_key.(string)
+	}
+	return ssh_keys_slice
 }
