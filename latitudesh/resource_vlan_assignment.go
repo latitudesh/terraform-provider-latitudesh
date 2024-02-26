@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -92,8 +93,13 @@ func resourceVlanAssignmentRead(ctx context.Context, d *schema.ResourceData, m i
 
 	vlanAssignmentID := d.Id()
 
-	vlanAssignment, _, err := c.VlanAssignments.Get(vlanAssignmentID)
+	vlanAssignment, resp, err := c.VlanAssignments.Get(vlanAssignmentID)
 	if err != nil {
+		if resp.StatusCode == http.StatusNotFound {
+			d.SetId("")
+			return diags
+		}
+
 		return diag.FromErr(err)
 	}
 

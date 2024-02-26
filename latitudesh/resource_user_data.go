@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -83,8 +84,13 @@ func resourceUserDataRead(ctx context.Context, d *schema.ResourceData, m interfa
 
 	userDataID := d.Id()
 
-	userData, _, err := c.UserData.Get(userDataID, d.Get("project").(string), nil)
+	userData, resp, err := c.UserData.Get(userDataID, d.Get("project").(string), nil)
 	if err != nil {
+		if resp.StatusCode == http.StatusNotFound {
+			d.SetId("")
+			return diags
+		}
+
 		return diag.FromErr(err)
 	}
 

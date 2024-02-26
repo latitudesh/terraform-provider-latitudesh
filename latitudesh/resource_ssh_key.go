@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -83,8 +84,13 @@ func resourceSSHKeyRead(ctx context.Context, d *schema.ResourceData, m interface
 
 	keyID := d.Id()
 
-	key, _, err := c.SSHKeys.Get(keyID, d.Get("project").(string), nil)
+	key, resp, err := c.SSHKeys.Get(keyID, d.Get("project").(string), nil)
 	if err != nil {
+		if resp.StatusCode == http.StatusNotFound {
+			d.SetId("")
+			return diags
+		}
+
 		return diag.FromErr(err)
 	}
 

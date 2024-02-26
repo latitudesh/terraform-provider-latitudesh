@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -84,8 +85,13 @@ func resourceVirtualNetworkRead(ctx context.Context, d *schema.ResourceData, m i
 
 	virtualNetworkID := d.Id()
 
-	virtualNetwork, _, err := c.VirtualNetworks.Get(virtualNetworkID, nil)
+	virtualNetwork, resp, err := c.VirtualNetworks.Get(virtualNetworkID, nil)
 	if err != nil {
+		if resp.StatusCode == http.StatusNotFound {
+			d.SetId("")
+			return diags
+		}
+
 		return diag.FromErr(err)
 	}
 

@@ -3,6 +3,7 @@ package latitudesh
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
 	"time"
 
@@ -84,8 +85,13 @@ func resourceProjectRead(ctx context.Context, d *schema.ResourceData, m interfac
 
 	projectID := d.Id()
 
-	project, _, err := c.Projects.Get(projectID, nil)
+	project, resp, err := c.Projects.Get(projectID, nil)
 	if err != nil {
+		if resp.StatusCode == http.StatusNotFound {
+			d.SetId("")
+			return diags
+		}
+
 		return diag.FromErr(err)
 	}
 
