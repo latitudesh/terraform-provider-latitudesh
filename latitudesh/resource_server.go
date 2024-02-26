@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -131,8 +132,13 @@ func resourceServerRead(ctx context.Context, d *schema.ResourceData, m interface
 
 	serverID := d.Id()
 
-	server, _, err := c.Servers.Get(serverID, nil)
+	server, resp, err := c.Servers.Get(serverID, nil)
 	if err != nil {
+		if resp.StatusCode == http.StatusNotFound {
+			d.SetId("")
+			return diags
+		}
+
 		return diag.FromErr(err)
 	}
 
