@@ -64,19 +64,6 @@ func dataSourceRegionsRead(ctx context.Context, d *schema.ResourceData, m interf
 		return diag.Errorf("Incorrect region returned: expected %s received %s", slug, r.Slug)
 	}
 
-	// Check availability
-	/* available := false
-	for _, a := range p.Availibility {
-		for _, s := range a.Sites {
-			if s.InStock {
-				available = true
-			}
-		}
-	}
-	if !available {
-		diag.Errorf("No available stock found for plan %s", name)
-	} */
-
 	d.SetId(r.ID)
 	regionMap := map[string]interface{}{
 		"id":           r.ID,
