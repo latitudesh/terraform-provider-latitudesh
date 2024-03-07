@@ -12,9 +12,9 @@ import (
 
 const (
 	testServerHostname        = "test"
-	testServerPlan            = "c2-medium-x86"
-	testServerSite            = "ASH"
-	testServerOperatingSystem = "ubuntu_20_04_x64_lts"
+	testServerPlan            = "c2-small-x86"
+	testServerSite            = "SAO"
+	testServerOperatingSystem = "ubuntu_22_04_x64_lts"
 )
 
 func TestAccServer_Basic(t *testing.T) {

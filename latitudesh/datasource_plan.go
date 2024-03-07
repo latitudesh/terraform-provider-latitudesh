@@ -27,9 +27,12 @@ func dataSourcePlan() *schema.Resource {
 				Description: "The slug of this Plan.",
 				Computed:    true,
 			},
-			"line": {
-				Type:        schema.TypeString,
-				Description: "The line of this Plan.",
+			"in_stock": {
+				Type: schema.TypeList,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Description: "List of the Sites where plan is in stock",
 				Computed:    true,
 			},
 		},
@@ -55,24 +58,17 @@ func dataSourcePlansRead(ctx context.Context, d *schema.ResourceData, m interfac
 	}
 
 	// Check availability
-	available := false
-	for _, a := range p.Availibility {
-		for _, s := range a.Sites {
-			if s.InStock {
-				available = true
-			}
-		}
-	}
-	if !available {
+	if len(p.InStock) == 0 {
 		return diag.Errorf("No available stock found for plan %s", name)
 	}
 
 	d.SetId(p.ID)
+
 	planMap := map[string]interface{}{
-		"id":   p.ID,
-		"name": p.Name,
-		"slug": p.Slug,
-		"line": p.Line,
+		"id":       p.ID,
+		"name":     p.Name,
+		"slug":     p.Slug,
+		"in_stock": p.InStock,
 	}
 	for key, v := range planMap {
 		err = d.Set(key, v)
@@ -83,3 +79,4 @@ func dataSourcePlansRead(ctx context.Context, d *schema.ResourceData, m interfac
 
 	return diags
 }
+
