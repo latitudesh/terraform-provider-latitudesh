@@ -26,5 +26,3 @@ description: |-
 - `facility` (String) The facility of this Region.
 - `id` (String) The ID of this Region.
 - `name` (String) The name of the Region
-
-

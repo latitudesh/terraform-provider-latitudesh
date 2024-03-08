@@ -22,7 +22,5 @@ description: |-
 ### Read-Only
 
 - `id` (String) The ID of this Plan.
-- `line` (String) The line of this Plan.
+- `in_stock` (List of String) List of the sites where this Plan is in stock.
 - `slug` (String) The slug of this Plan.
-
-

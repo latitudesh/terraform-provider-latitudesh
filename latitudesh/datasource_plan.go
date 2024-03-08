@@ -32,7 +32,7 @@ func dataSourcePlan() *schema.Resource {
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
-				Description: "List of the Sites where plan is in stock",
+				Description: "List of the sites where this Plan is in stock.",
 				Computed:    true,
 			},
 		},
@@ -79,4 +79,3 @@ func dataSourcePlansRead(ctx context.Context, d *schema.ResourceData, m interfac
 
 	return diags
 }
-
