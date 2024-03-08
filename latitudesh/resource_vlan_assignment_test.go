@@ -20,8 +20,9 @@ func TestAccVlanAssignment_Basic(t *testing.T) {
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
-			testAccPreCheck(t)
-			testAccVlanPreCheck(t)
+			testAccTokenCheck(t)
+			testAccServerCheck(t)
+			testAccVirtualNetworkCheck(t)
 		},
 		Providers:    testAccProviders,
 		CheckDestroy: testAccCheckVlanAssignmentDestroy,
@@ -92,13 +93,4 @@ resource "latitudesh_vlan_assignment" "test_item" {
 		os.Getenv("LATITUDESH_TEST_SERVER_ID"),
 		os.Getenv("LATITUDESH_TEST_VIRTUAL_NETWORK_ID"),
 	)
-}
-
-func testAccVlanPreCheck(t *testing.T) {
-	if v := os.Getenv("LATITUDESH_TEST_SERVER_ID"); v == "" {
-		t.Fatal("LATITUDESH_TEST_SERVER_ID must be set for acceptance tests")
-	}
-	if v := os.Getenv("LATITUDESH_TEST_VIRTUAL_NETWORK_ID"); v == "" {
-		t.Fatal("LATITUDESH_TEST_VIRTUAL_NETWORK_ID must be set for acceptance tests")
-	}
 }

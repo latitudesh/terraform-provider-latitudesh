@@ -18,7 +18,11 @@ func TestAccUserDataBasic(t *testing.T) {
 	var userData api.UserData
 
 	resource.Test(t, resource.TestCase{
-		PreCheck:     func() { testAccPreCheck(t) },
+		PreCheck: func() {
+			testAccTokenCheck(t)
+			testAccProjectCheck(t)
+			testAccUserDataCheck(t)
+		},
 		Providers:    testAccProviders,
 		CheckDestroy: testAccCheckUserDataDestroy,
 		Steps: []resource.TestStep{

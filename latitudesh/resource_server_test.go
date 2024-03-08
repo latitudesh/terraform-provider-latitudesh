@@ -21,7 +21,10 @@ func TestAccServer_Basic(t *testing.T) {
 	var server api.Server
 
 	resource.Test(t, resource.TestCase{
-		PreCheck:     func() { testAccPreCheck(t) },
+		PreCheck: func() {
+			testAccTokenCheck(t)
+			testAccProjectCheck(t)
+		},
 		Providers:    testAccProviders,
 		CheckDestroy: testAccCheckServerDestroy,
 		Steps: []resource.TestStep{

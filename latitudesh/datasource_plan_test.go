@@ -11,7 +11,7 @@ const testPlanName = "c2.small.x86"
 
 func TestAccPlan_Basic(t *testing.T) {
 	resource.Test(t, resource.TestCase{
-		PreCheck:  func() { testAccPreCheck(t) },
+		PreCheck:  func() { testAccTokenCheck(t) },
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			{

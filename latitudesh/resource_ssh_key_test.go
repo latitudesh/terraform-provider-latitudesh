@@ -18,7 +18,11 @@ func TestAccSSHKey_Basic(t *testing.T) {
 	var sshKey api.SSHKey
 
 	resource.Test(t, resource.TestCase{
-		PreCheck:     func() { testAccPreCheck(t) },
+		PreCheck: func() {
+			testAccTokenCheck(t)
+			testAccProjectCheck(t)
+			testAccSSHKeyCheck(t)
+		},
 		Providers:    testAccProviders,
 		CheckDestroy: testAccCheckSSHKeyDestroy,
 		Steps: []resource.TestStep{
