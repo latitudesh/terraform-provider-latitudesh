@@ -7,11 +7,11 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 )
 
-const testPlanName = "c2.large.x86"
+const testPlanName = "c2.small.x86"
 
 func TestAccPlan_Basic(t *testing.T) {
 	resource.Test(t, resource.TestCase{
-		PreCheck:  func() { testAccPreCheck(t) },
+		PreCheck:  func() { testAccTokenCheck(t) },
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			{

@@ -19,7 +19,11 @@ func TestAccVlanAssignment_Basic(t *testing.T) {
 	var VlanAssignment api.VlanAssignment
 
 	resource.Test(t, resource.TestCase{
-		PreCheck:     func() { testAccPreCheck(t) },
+		PreCheck: func() {
+			testAccTokenCheck(t)
+			testAccServerCheck(t)
+			testAccVirtualNetworkCheck(t)
+		},
 		Providers:    testAccProviders,
 		CheckDestroy: testAccCheckVlanAssignmentDestroy,
 		Steps: []resource.TestStep{

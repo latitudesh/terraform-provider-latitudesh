@@ -19,7 +19,10 @@ func TestAccVirtualNetwork_Basic(t *testing.T) {
 	var VirtualNetwork api.VirtualNetwork
 
 	resource.Test(t, resource.TestCase{
-		PreCheck:     func() { testAccPreCheck(t) },
+		PreCheck: func() {
+			testAccTokenCheck(t)
+			testAccProjectCheck(t)
+		},
 		Providers:    testAccProviders,
 		CheckDestroy: testAccCheckVirtualNetworkDestroy,
 		Steps: []resource.TestStep{

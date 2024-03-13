@@ -13,7 +13,7 @@ func TestAccProject_Basic(t *testing.T) {
 	var project api.Project
 
 	resource.Test(t, resource.TestCase{
-		PreCheck:     func() { testAccPreCheck(t) },
+		PreCheck:     func() { testAccTokenCheck(t) },
 		Providers:    testAccProviders,
 		CheckDestroy: testAccCheckProjectDestroy,
 		Steps: []resource.TestStep{

@@ -11,7 +11,7 @@ const testRegionSlug = "ASH"
 
 func TestAccRegion_Basic(t *testing.T) {
 	resource.Test(t, resource.TestCase{
-		PreCheck:  func() { testAccPreCheck(t) },
+		PreCheck:  func() { testAccTokenCheck(t) },
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			{
