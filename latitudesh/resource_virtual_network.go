@@ -44,6 +44,14 @@ func resourceVirtualNetwork() *schema.Resource {
 				Description: "Amount of devices assigned to the virtual network",
 				Computed:    true,
 			},
+			"tags": {
+				Type: schema.TypeList,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Description: "List of SSH key tags",
+				Optional:    true,
+			},
 		},
 		Importer: &schema.ResourceImporter{
 			StateContext: NestedResourceRestAPIImport,
@@ -72,6 +80,10 @@ func resourceVirtualNetworkCreate(ctx context.Context, d *schema.ResourceData, m
 	}
 
 	d.SetId(virtualNetwork.ID)
+
+	if d.Get("tags") != nil {
+		resourceVirtualNetworkUpdate(ctx, d, m)
+	}
 
 	resourceVirtualNetworkRead(ctx, d, m)
 
@@ -111,6 +123,10 @@ func resourceVirtualNetworkRead(ctx context.Context, d *schema.ResourceData, m i
 		return diag.FromErr(err)
 	}
 
+	if err := d.Set("tags", tagIDs(virtualNetwork.Tags)); err != nil {
+		return diag.FromErr(err)
+	}
+
 	return diags
 }
 
@@ -118,6 +134,7 @@ func resourceVirtualNetworkUpdate(ctx context.Context, d *schema.ResourceData, m
 	c := m.(*api.Client)
 
 	virtualNetworkID := d.Id()
+	tags := parseTags(d)
 
 	updateRequest := &api.VirtualNetworkUpdateRequest{
 		Data: api.VirtualNetworkUpdateData{
@@ -125,6 +142,7 @@ func resourceVirtualNetworkUpdate(ctx context.Context, d *schema.ResourceData, m
 			ID:   virtualNetworkID,
 			Attributes: api.VirtualNetworkUpdateAttributes{
 				Description: d.Get("description").(string),
+				Tags:        tags,
 			},
 		},
 	}
