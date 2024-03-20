@@ -30,7 +30,7 @@ resource "latitudesh_project" "project" {
 ### Optional
 
 - `description` (String) The description of the project
-- `tags` (List of String) List of SSH key tags
+- `tags` (List of String) List of project tags
 
 ### Read-Only
 

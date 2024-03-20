@@ -30,7 +30,7 @@ resource "latitudesh_virtual_network" "virtual_network" {
 
 ### Optional
 
-- `tags` (List of String) List of SSH key tags
+- `tags` (List of String) List of virtual network tags
 
 ### Read-Only
 

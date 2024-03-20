@@ -39,7 +39,7 @@ func resourceProject() *schema.Resource {
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
-				Description: "List of SSH key tags",
+				Description: "List of project tags",
 				Optional:    true,
 			},
 			"created": {

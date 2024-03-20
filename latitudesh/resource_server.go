@@ -79,7 +79,7 @@ func resourceServer() *schema.Resource {
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
-				Description: "List of SSH key tags",
+				Description: "List of server tags",
 				Optional:    true,
 			},
 			"created": {
