@@ -31,6 +31,7 @@ func Provider() *schema.Provider {
 			"latitudesh_user_data":       resourceUserData(),
 			"latitudesh_virtual_network": resourceVirtualNetwork(),
 			"latitudesh_vlan_assignment": resourceVlanAssignment(),
+			"latitudesh_tag":             resourceTag(),
 		},
 		DataSourcesMap: map[string]*schema.Resource{
 			"latitudesh_plan":   dataSourcePlan(),

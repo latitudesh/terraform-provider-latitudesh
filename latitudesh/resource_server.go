@@ -74,6 +74,14 @@ func resourceServer() *schema.Resource {
 				Description: "The server IP address",
 				Computed:    true,
 			},
+			"tags": {
+				Type: schema.TypeList,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Description: "List of SSH key tags",
+				Optional:    true,
+			},
 			"created": {
 				Type:        schema.TypeString,
 				Description: "The timestamp for when the server was created",
@@ -119,6 +127,10 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 	}
 
 	d.SetId(server.ID)
+
+	if d.Get("tags") != nil {
+		resourceServerUpdate(ctx, d, m)
+	}
 
 	resourceServerRead(ctx, d, m)
 
@@ -179,6 +191,10 @@ func resourceServerRead(ctx context.Context, d *schema.ResourceData, m interface
 		return diag.FromErr(err)
 	}
 
+	if err := d.Set("tags", tagIDs(server.Tags)); err != nil {
+		return diag.FromErr(err)
+	}
+
 	return diags
 }
 
@@ -186,34 +202,35 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 	c := m.(*api.Client)
 
 	serverID := d.Id()
+	tags := parseTags(d)
+
+	updateRequest := &api.ServerUpdateRequest{
+		Data: api.ServerUpdateData{
+			Type: "servers",
+			ID:   serverID,
+			Attributes: api.ServerUpdateAttributes{
+				Hostname: d.Get("hostname").(string),
+				Tags:     tags,
+			},
+		},
+	}
+
+	_, _, err := c.Servers.Update(serverID, updateRequest)
+	if err != nil {
+		return diag.FromErr(err)
+	}
 
 	// The 'hostname' key is currently the only key that's able to update with the Latitude 'ServerUpdateRequest'.
 	// For all other keys that don't set ForceNew: true, we must re-install the server to update them.
 	// Resources with ForceNew: true, won't hit this code-path and will instead run delete & create.
-	if d.HasChangesExcept("hostname") {
+	if d.HasChangesExcept("hostname", "tags") {
 		err := serverReinstall(c, serverID, ctx, d)
-		if err != nil {
-			return diag.FromErr(err)
-		}
-
-	} else {
-		updateRequest := &api.ServerUpdateRequest{
-			Data: api.ServerUpdateData{
-				Type: "servers",
-				ID:   serverID,
-				Attributes: api.ServerUpdateAttributes{
-					Hostname: d.Get("hostname").(string),
-				},
-			},
-		}
-
-		_, _, err := c.Servers.Update(serverID, updateRequest)
 		if err != nil {
 			return diag.FromErr(err)
 		}
 	}
 
-	err := d.Set("updated", time.Now().Format(time.RFC850))
+	err = d.Set("updated", time.Now().Format(time.RFC850))
 	if err != nil {
 		return diag.FromErr(err)
 	}

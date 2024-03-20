@@ -34,6 +34,14 @@ func resourceProject() *schema.Resource {
 				Description: "The name of the project",
 				Required:    true,
 			},
+			"tags": {
+				Type: schema.TypeList,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Description: "List of SSH key tags",
+				Optional:    true,
+			},
 			"created": {
 				Type:        schema.TypeString,
 				Description: "The timestamp for when the project was created",
@@ -73,6 +81,10 @@ func resourceProjectCreate(ctx context.Context, d *schema.ResourceData, m interf
 
 	d.SetId(project.ID)
 
+	if d.Get("tags") != nil {
+		resourceProjectUpdate(ctx, d, m)
+	}
+
 	resourceProjectRead(ctx, d, m)
 
 	return diags
@@ -111,6 +123,10 @@ func resourceProjectRead(ctx context.Context, d *schema.ResourceData, m interfac
 		return diag.FromErr(err)
 	}
 
+	if err := d.Set("tags", tagIDs(project.Tags)); err != nil {
+		return diag.FromErr(err)
+	}
+
 	return diags
 }
 
@@ -118,15 +134,17 @@ func resourceProjectUpdate(ctx context.Context, d *schema.ResourceData, m interf
 	c := m.(*api.Client)
 
 	projectID := d.Id()
+	tags := parseTags(d)
 
 	updateRequest := &api.ProjectUpdateRequest{
 		Data: api.ProjectUpdateData{
 			Type: "projects",
 			ID:   projectID,
-			Attributes: api.ProjectCreateAttributes{
+			Attributes: api.ProjectUpdateAttributes{
 				Name:        d.Get("name").(string),
 				Description: d.Get("description").(string),
 				Environment: d.Get("environment").(string),
+				Tags:        tags,
 			},
 		},
 	}

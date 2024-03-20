@@ -34,6 +34,14 @@ func resourceSSHKey() *schema.Resource {
 				Required:    true,
 				ForceNew:    true,
 			},
+			"tags": {
+				Type: schema.TypeList,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Description: "List of SSH key tags",
+				Optional:    true,
+			},
 			"created": {
 				Type:        schema.TypeString,
 				Description: "The timestamp for when the SSH key was created",
@@ -72,6 +80,10 @@ func resourceSSHKeyCreate(ctx context.Context, d *schema.ResourceData, m interfa
 
 	d.SetId(key.ID)
 
+	if d.Get("tags") != nil {
+		resourceSSHKeyUpdate(ctx, d, m)
+	}
+
 	resourceSSHKeyRead(ctx, d, m)
 
 	return diags
@@ -102,6 +114,10 @@ func resourceSSHKeyRead(ctx context.Context, d *schema.ResourceData, m interface
 		return diag.FromErr(err)
 	}
 
+	if err := d.Set("tags", tagIDs(key.Tags)); err != nil {
+		return diag.FromErr(err)
+	}
+
 	return diags
 }
 
@@ -109,6 +125,7 @@ func resourceSSHKeyUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 	c := m.(*api.Client)
 
 	keyID := d.Id()
+	tags := parseTags(d)
 
 	updateRequest := &api.SSHKeyUpdateRequest{
 		Data: api.SSHKeyUpdateData{
@@ -116,6 +133,7 @@ func resourceSSHKeyUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 			ID:   keyID,
 			Attributes: api.SSHKeyUpdateAttributes{
 				Name: d.Get("name").(string),
+				Tags: tags,
 			},
 		},
 	}
