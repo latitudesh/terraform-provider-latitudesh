@@ -40,6 +40,7 @@ resource "latitudesh_server" "server" {
 - `ipxe_url` (String) Public URL for the iPXE script. Required for custom image deployments. Learn more: https://docs.latitude.sh/docs/custom-image-ipxe
 - `raid` (String) RAID mode for the server
 - `ssh_keys` (List of String) List of server SSH key ids
+- `tags` (List of String) List of server tags
 - `user_data` (String) The id of user data to set on the server
 
 ### Read-Only

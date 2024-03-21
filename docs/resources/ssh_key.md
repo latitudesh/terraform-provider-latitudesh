@@ -28,6 +28,10 @@ resource "latitudesh_ssh_key" "ssh_key" {
 - `project` (String) The id or slug of the project
 - `public_key` (String) The SSH public key
 
+### Optional
+
+- `tags` (List of String) List of SSH key tags
+
 ### Read-Only
 
 - `created` (String) The timestamp for when the SSH key was created

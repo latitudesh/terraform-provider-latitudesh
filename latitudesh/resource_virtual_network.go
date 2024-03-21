@@ -49,7 +49,7 @@ func resourceVirtualNetwork() *schema.Resource {
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
-				Description: "List of SSH key tags",
+				Description: "List of virtual network tags",
 				Optional:    true,
 			},
 		},

@@ -28,6 +28,10 @@ resource "latitudesh_virtual_network" "virtual_network" {
 - `project` (String) The project id or slug
 - `site` (String) The site id or slug
 
+### Optional
+
+- `tags` (List of String) List of virtual network tags
+
 ### Read-Only
 
 - `assignments_count` (Number) Amount of devices assigned to the virtual network
