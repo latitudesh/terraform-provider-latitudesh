@@ -36,6 +36,7 @@ func Provider() *schema.Provider {
 		DataSourcesMap: map[string]*schema.Resource{
 			"latitudesh_plan":   dataSourcePlan(),
 			"latitudesh_region": dataSourceRegion(),
+			"latitudesh_role":   dataSourceRole(),
 		},
 		ConfigureContextFunc: providerConfigure,
 	}
