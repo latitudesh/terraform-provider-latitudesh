@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"log"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -10,7 +11,7 @@ import (
 
 func dataSourceRole() *schema.Resource {
 	return &schema.Resource{
-		ReadContext: dataSourceRegionsRead,
+		ReadContext: dataSourceRoleRead,
 		Schema: map[string]*schema.Schema{
 			"id": {
 				Type:        schema.TypeString,
@@ -20,13 +21,14 @@ func dataSourceRole() *schema.Resource {
 			"name": {
 				Type:        schema.TypeString,
 				Description: "The name of the Role",
-				Computed:    true,
+				Required:    true,
 			},
 		},
 	}
 }
 
 func dataSourceRoleRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+	log.Println("HERE")
 	var diags diag.Diagnostics
 	c := m.(*api.Client)
 	name := d.Get("name").(string)
@@ -45,11 +47,11 @@ func dataSourceRoleRead(ctx context.Context, d *schema.ResourceData, m interface
 	}
 
 	d.SetId(r.ID)
-	regionMap := map[string]interface{}{
+	roleMap := map[string]interface{}{
 		"id":   r.ID,
 		"name": r.Name,
 	}
-	for key, v := range regionMap {
+	for key, v := range roleMap {
 		err = d.Set(key, v)
 		if err != nil {
 			return diag.FromErr(err)
