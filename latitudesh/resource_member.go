@@ -18,37 +18,37 @@ func resourceMember() *schema.Resource {
 		Schema: map[string]*schema.Schema{
 			"first_name": {
 				Type:        schema.TypeString,
-				Description: "The member name",
+				Description: "The member first name",
 				Optional:    true,
 				ForceNew:    true,
 			},
 			"last_name": {
 				Type:        schema.TypeString,
-				Description: "The member name",
+				Description: "The member last name",
 				Optional:    true,
 				ForceNew:    true,
 			},
 			"email": {
 				Type:        schema.TypeString,
-				Description: "The member description",
+				Description: "The member email",
 				Required:    true,
 				ForceNew:    true,
 			},
 			"mfa_enabled": {
 				Type:        schema.TypeString,
-				Description: "The member color",
+				Description: "The member mfa status",
 				Computed:    true,
 				ForceNew:    true,
 			},
 			"role": {
 				Type:        schema.TypeString,
-				Description: "The member color",
+				Description: "The member role",
 				Required:    true,
 				ForceNew:    true,
 			},
 		},
 		Importer: &schema.ResourceImporter{
-			StateContext: NestedResourceRestAPIImport,
+			StateContext: schema.ImportStatePassthroughContext,
 		},
 	}
 }
