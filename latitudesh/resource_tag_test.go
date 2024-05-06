@@ -49,7 +49,7 @@ func testAccCheckTagDestroy(s *terraform.State) error {
 			continue
 		}
 		if _, _, err := GetTag(client, rs.Primary.ID); err == nil {
-			return fmt.Errorf("Virtual network still exists")
+			return fmt.Errorf("Tag still exists")
 		}
 	}
 

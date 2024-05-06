@@ -13,7 +13,7 @@ const (
 	userAgentForProvider = "Latitude-Terraform-Provider"
 )
 
-var currentVersion = "1.0.0" // update variable when version updated
+var currentVersion = "1.1.0" // update variable when version updated
 
 func Provider() *schema.Provider {
 	return &schema.Provider{
@@ -32,10 +32,12 @@ func Provider() *schema.Provider {
 			"latitudesh_virtual_network": resourceVirtualNetwork(),
 			"latitudesh_vlan_assignment": resourceVlanAssignment(),
 			"latitudesh_tag":             resourceTag(),
+			"latitudesh_member":          resourceMember(),
 		},
 		DataSourcesMap: map[string]*schema.Resource{
 			"latitudesh_plan":   dataSourcePlan(),
 			"latitudesh_region": dataSourceRegion(),
+			"latitudesh_role":   dataSourceRole(),
 		},
 		ConfigureContextFunc: providerConfigure,
 	}
