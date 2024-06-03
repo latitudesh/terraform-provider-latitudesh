@@ -69,14 +69,25 @@ func resourceMemberCreate(ctx context.Context, d *schema.ResourceData, m interfa
 		},
 	}
 
-	Member, _, err := c.Members.Create(createRequest)
+	member, _, err := c.Members.Create(createRequest)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
-	d.SetId(Member.ID)
+	d.SetId(member.ID)
 
-	resourceMemberRead(ctx, d, m)
+	if err := d.Set("first_name", &member.FirstName); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("last_name", &member.LastName); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("email", &member.Email); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("role", &member.RoleName); err != nil {
+		return diag.FromErr(err)
+	}
 
 	return diags
 }
