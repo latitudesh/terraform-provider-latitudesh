@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -75,13 +76,32 @@ func resourceVlanAssignmentCreate(ctx context.Context, d *schema.ResourceData, m
 	}
 
 	vlanAssignment, _, err := c.VlanAssignments.Assign(assignRequest)
+	fmt.Printf("HEY:\n %#v\n", vlanAssignment)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
 	d.SetId(vlanAssignment.ID)
 
-	resourceVlanAssignmentRead(ctx, d, m)
+	if err := d.Set("vid", &vlanAssignment.Vid); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if err := d.Set("description", &vlanAssignment.Description); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if err := d.Set("status", &vlanAssignment.Status); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if err := d.Set("server_hostname", &vlanAssignment.ServerHostname); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if err := d.Set("server_label", &vlanAssignment.ServerLabel); err != nil {
+		return diag.FromErr(err)
+	}
 
 	return diags
 }
@@ -112,6 +132,10 @@ func resourceVlanAssignmentRead(ctx context.Context, d *schema.ResourceData, m i
 	}
 
 	if err := d.Set("status", &vlanAssignment.Status); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if err := d.Set("description", &vlanAssignment.Description); err != nil {
 		return diag.FromErr(err)
 	}
 

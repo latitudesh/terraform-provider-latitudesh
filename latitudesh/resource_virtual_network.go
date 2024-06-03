@@ -81,11 +81,25 @@ func resourceVirtualNetworkCreate(ctx context.Context, d *schema.ResourceData, m
 
 	d.SetId(virtualNetwork.ID)
 
+	if err := d.Set("vid", &virtualNetwork.Vid); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if err := d.Set("site", &virtualNetwork.SiteSlug); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if err := d.Set("assignments_count", &virtualNetwork.AssignmentsCount); err != nil {
+		return diag.FromErr(err)
+	}
+
 	if d.Get("tags") != nil {
 		resourceVirtualNetworkUpdate(ctx, d, m)
 	}
 
-	resourceVirtualNetworkRead(ctx, d, m)
+	if err := d.Set("tags", tagIDs(virtualNetwork.Tags)); err != nil {
+		return diag.FromErr(err)
+	}
 
 	return diags
 }
@@ -133,6 +147,7 @@ func resourceVirtualNetworkRead(ctx context.Context, d *schema.ResourceData, m i
 func resourceVirtualNetworkUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	c := m.(*api.Client)
 
+	var diags diag.Diagnostics
 	virtualNetworkID := d.Id()
 	tags := parseTags(d)
 
@@ -147,12 +162,20 @@ func resourceVirtualNetworkUpdate(ctx context.Context, d *schema.ResourceData, m
 		},
 	}
 
-	_, _, err := c.VirtualNetworks.Update(virtualNetworkID, updateRequest)
+	virtualNetwork, _, err := c.VirtualNetworks.Update(virtualNetworkID, updateRequest)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
-	return resourceVirtualNetworkRead(ctx, d, m)
+	if err := d.Set("description", &virtualNetwork.Description); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if err := d.Set("tags", tagIDs(virtualNetwork.Tags)); err != nil {
+		return diag.FromErr(err)
+	}
+
+	return diags
 }
 
 func resourceVirtualNetworkDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
