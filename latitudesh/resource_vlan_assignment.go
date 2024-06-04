@@ -2,7 +2,6 @@ package latitudesh
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -76,7 +75,6 @@ func resourceVlanAssignmentCreate(ctx context.Context, d *schema.ResourceData, m
 	}
 
 	vlanAssignment, _, err := c.VlanAssignments.Assign(assignRequest)
-	fmt.Printf("HEY:\n %#v\n", vlanAssignment)
 	if err != nil {
 		return diag.FromErr(err)
 	}
