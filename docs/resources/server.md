@@ -30,18 +30,19 @@ resource "latitudesh_server" "server" {
 ### Required
 
 - `hostname` (String) The server hostname
-- `operating_system` (String) The server OS
+- `operating_system` (String) The server OS. Update will trigger a reinstall only if allow_reinstall is set to true.
 - `plan` (String) The server plan
 - `project` (String) The id or slug of the project
 - `site` (String) The server site
 
 ### Optional
 
-- `ipxe_url` (String) Public URL for the iPXE script. Required for custom image deployments. Learn more: https://docs.latitude.sh/docs/custom-image-ipxe
-- `raid` (String) RAID mode for the server
-- `ssh_keys` (List of String) List of server SSH key ids
+- `allow_reinstall` (Boolean) Allow server reinstallation when operating_system, ssh_keys, user_data,raid, or ipxe_url changes.
+- `ipxe_url` (String) Url for the iPXE script that will be used. Required for custom image deployments. Learn more: https://docs.latitude.sh/docs/custom-image-ipxe. Update will trigger a reinstall only if allow_reinstall is set to true.
+- `raid` (String) RAID mode for the server. Update will trigger a reinstall only if allow_reinstall is set to true.
+- `ssh_keys` (List of String) List of server SSH key ids. Update will trigger a reinstall only if allow_reinstall is set to true.
 - `tags` (List of String) List of server tags
-- `user_data` (String) The id of user data to set on the server
+- `user_data` (String) The id of user data to set on the server. Update will trigger a reinstall only if allow_reinstall is set to true.
 
 ### Read-Only
 
