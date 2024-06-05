@@ -38,7 +38,7 @@ func resourceServer() *schema.Resource {
 			},
 			"operating_system": {
 				Type:        schema.TypeString,
-				Description: "The server OS",
+				Description: "The server OS. Update will trigger a reinstall only if allow_reinstall is set to true.",
 				Required:    true,
 			},
 			"hostname": {
@@ -51,22 +51,22 @@ func resourceServer() *schema.Resource {
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
-				Description: "List of server SSH key ids",
+				Description: "List of server SSH key ids. Update will trigger a reinstall only if allow_reinstall is set to true.",
 				Optional:    true,
 			},
 			"user_data": {
 				Type:        schema.TypeString,
-				Description: "The id of user data to set on the server",
+				Description: "The id of user data to set on the server. Update will trigger a reinstall only if allow_reinstall is set to true.",
 				Optional:    true,
 			},
 			"raid": {
 				Type:        schema.TypeString,
-				Description: "RAID mode for the server",
+				Description: "RAID mode for the server. Update will trigger a reinstall only if allow_reinstall is set to true.",
 				Optional:    true,
 			},
 			"ipxe_url": {
 				Type:        schema.TypeString,
-				Description: "Url for the iPXE script that will be used",
+				Description: "Url for the iPXE script that will be used. Update will trigger a reinstall only if allow_reinstall is set to true.",
 				Optional:    true,
 			},
 			"primary_ipv4": {
@@ -91,6 +91,12 @@ func resourceServer() *schema.Resource {
 				Type:        schema.TypeString,
 				Description: "The timestamp for the last time the server was updated",
 				Computed:    true,
+			},
+			"allow_reinstall": {
+				Type:        schema.TypeBool,
+				Description: "Allow server reinstallation when operating_system, ssh_keys, user_data,raid, or ipxe_url changes.",
+				Optional:    true,
+				Default:     false,
 			},
 		},
 		Importer: &schema.ResourceImporter{
@@ -139,7 +145,6 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 
 func resourceServerRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	c := m.(*api.Client)
-
 	var diags diag.Diagnostics
 
 	serverID := d.Id()
@@ -200,6 +205,7 @@ func resourceServerRead(ctx context.Context, d *schema.ResourceData, m interface
 
 func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	c := m.(*api.Client)
+	var diags diag.Diagnostics
 
 	serverID := d.Id()
 	tags := parseTags(d)
@@ -224,9 +230,17 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 	// For all other keys that don't set ForceNew: true, we must re-install the server to update them.
 	// Resources with ForceNew: true, won't hit this code-path and will instead run delete & create.
 	if d.HasChangesExcept("hostname", "tags") {
-		err := serverReinstall(c, serverID, ctx, d)
-		if err != nil {
-			return diag.FromErr(err)
+		if d.Get("allow_reinstall").(bool) {
+			err := serverReinstall(c, serverID, ctx, d)
+			if err != nil {
+				return diag.FromErr(err)
+			}
+			diags = append(diags, diag.Diagnostic{
+				Severity: diag.Warning,
+				Summary:  "Your Server is being reinstalled",
+				Detail: "[WARN] The changes made to your server resource require a reinstallation. " +
+					"Please note that this process may take some time to complete.",
+			})
 		}
 	}
 
@@ -235,7 +249,7 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 		return diag.FromErr(err)
 	}
 
-	return resourceServerRead(ctx, d, m)
+	return append(diags, resourceServerRead(ctx, d, m)...)
 }
 
 func resourceServerDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
