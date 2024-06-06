@@ -11,6 +11,14 @@ import (
 	api "github.com/latitudesh/latitudesh-go"
 )
 
+var triggerReinstall = []string{
+	"operating_system",
+	"ssh_keys",
+	"user_data",
+	"raid",
+	"ipxe_url",
+}
+
 func resourceServer() *schema.Resource {
 	return &schema.Resource{
 		CreateContext: resourceServerCreate,
@@ -134,11 +142,48 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 
 	d.SetId(server.ID)
 
-	if d.Get("tags") != nil {
+	if err := d.Set("hostname", &server.Hostname); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("primary_ipv4", &server.PrimaryIPv4); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("plan", &server.Plan.Slug); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if _, defined := d.GetOk("tags"); defined {
+		ctx := context.WithValue(ctx, "justCreated", true)
 		resourceServerUpdate(ctx, d, m)
 	}
 
-	resourceServerRead(ctx, d, m)
+	// Get server to fill information that isn't returned by create
+	server, _, err = c.Servers.Get(server.ID, nil)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	// server.Project.ID is an interface{} type so we should verify before using
+	var serverProjectId string
+	switch server.Project.ID.(type) {
+	case string:
+		serverProjectId = server.Project.ID.(string)
+	case float64:
+		serverProjectId = strconv.FormatFloat(server.Project.ID.(float64), 'b', 2, 64)
+	}
+
+	if err := d.Set("project", serverProjectId); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("operating_system", &server.OperatingSystem.Slug); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("site", &server.Region.Site.Slug); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("created", &server.CreatedAt); err != nil {
+		return diag.FromErr(err)
+	}
 
 	return diags
 }
@@ -221,26 +266,15 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 		},
 	}
 
-	_, _, err := c.Servers.Update(serverID, updateRequest)
+	server, _, err := c.Servers.Update(serverID, updateRequest)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
-	// The 'hostname' key is currently the only key that's able to update with the Latitude 'ServerUpdateRequest'.
-	// For all other keys that don't set ForceNew: true, we must re-install the server to update them.
-	// Resources with ForceNew: true, won't hit this code-path and will instead run delete & create.
-	if d.HasChangesExcept("hostname", "tags") {
+	justCreated, _ := ctx.Value("justCreated").(bool)
+	if d.HasChanges(triggerReinstall...) && !justCreated {
 		if d.Get("allow_reinstall").(bool) {
-			err := serverReinstall(c, serverID, ctx, d)
-			if err != nil {
-				return diag.FromErr(err)
-			}
-			diags = append(diags, diag.Diagnostic{
-				Severity: diag.Warning,
-				Summary:  "Your Server is being reinstalled",
-				Detail: "[WARN] The changes made to your server resource require a reinstallation. " +
-					"Please note that this process may take some time to complete.",
-			})
+			diags = append(diags, serverReinstall(c, serverID, ctx, d)...)
 		}
 	}
 
@@ -249,7 +283,14 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 		return diag.FromErr(err)
 	}
 
-	return append(diags, resourceServerRead(ctx, d, m)...)
+	if err := d.Set("hostname", &server.Hostname); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("tags", tagIDs(server.Tags)); err != nil {
+		return diag.FromErr(err)
+	}
+
+	return diags
 }
 
 func resourceServerDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
@@ -269,8 +310,9 @@ func resourceServerDelete(ctx context.Context, d *schema.ResourceData, m interfa
 	return diags
 }
 
-func serverReinstall(c *api.Client, serverID string, ctx context.Context, d *schema.ResourceData) error {
+func serverReinstall(c *api.Client, serverID string, ctx context.Context, d *schema.ResourceData) diag.Diagnostics {
 	ssh_keys := parseSSHKeys(d)
+	var diags diag.Diagnostics
 
 	_, err := c.Servers.Reinstall(serverID, &api.ServerReinstallRequest{
 		Data: api.ServerReinstallData{
@@ -287,9 +329,17 @@ func serverReinstall(c *api.Client, serverID string, ctx context.Context, d *sch
 	})
 
 	if err != nil {
-		return err
+		return diag.FromErr(err)
 	}
-	return nil
+
+	diags = append(diags, diag.Diagnostic{
+		Severity: diag.Warning,
+		Summary:  "Your Server is being reinstalled",
+		Detail: "[WARN] The changes made to your server resource require a reinstallation. " +
+			"Please note that this process may take some time to complete.",
+	})
+
+	return diags
 }
 
 func parseSSHKeys(d *schema.ResourceData) []string {

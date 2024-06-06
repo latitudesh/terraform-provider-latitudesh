@@ -72,7 +72,12 @@ func resourceUserDataCreate(ctx context.Context, d *schema.ResourceData, m inter
 
 	d.SetId(userData.ID)
 
-	resourceUserDataRead(ctx, d, m)
+	if err := d.Set("description", &userData.Description); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("content", &userData.Content); err != nil {
+		return diag.FromErr(err)
+	}
 
 	return diags
 }
@@ -97,7 +102,6 @@ func resourceUserDataRead(ctx context.Context, d *schema.ResourceData, m interfa
 	if err := d.Set("description", &userData.Description); err != nil {
 		return diag.FromErr(err)
 	}
-
 	if err := d.Set("content", &userData.Content); err != nil {
 		return diag.FromErr(err)
 	}
@@ -107,6 +111,7 @@ func resourceUserDataRead(ctx context.Context, d *schema.ResourceData, m interfa
 
 func resourceUserDataUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	c := m.(*api.Client)
+	var diags diag.Diagnostics
 
 	userDataID := d.Id()
 
@@ -121,14 +126,21 @@ func resourceUserDataUpdate(ctx context.Context, d *schema.ResourceData, m inter
 		},
 	}
 
-	_, _, err := c.UserData.Update(userDataID, d.Get("project").(string), updateRequest)
+	userData, _, err := c.UserData.Update(userDataID, d.Get("project").(string), updateRequest)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
 	d.Set("updated", time.Now().Format(time.RFC850))
 
-	return resourceUserDataRead(ctx, d, m)
+	if err := d.Set("description", &userData.Description); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("content", &userData.Content); err != nil {
+		return diag.FromErr(err)
+	}
+
+	return diags
 }
 
 func resourceUserDataDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
