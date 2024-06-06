@@ -11,6 +11,14 @@ import (
 	api "github.com/latitudesh/latitudesh-go"
 )
 
+var triggerReinstall = []string{
+	"operating_system",
+	"ssh_keys",
+	"user_data",
+	"raid",
+	"ipxe_url",
+}
+
 func resourceServer() *schema.Resource {
 	return &schema.Resource{
 		CreateContext: resourceServerCreate,
@@ -37,9 +45,10 @@ func resourceServer() *schema.Resource {
 				ForceNew:    true,
 			},
 			"operating_system": {
-				Type:        schema.TypeString,
-				Description: "The server OS",
-				Required:    true,
+				Type: schema.TypeString,
+				Description: `The server OS. 
+				Updating operating_system will trigger a reinstall if allow_reinstall is set to true.`,
+				Required: true,
 			},
 			"hostname": {
 				Type:        schema.TypeString,
@@ -51,23 +60,27 @@ func resourceServer() *schema.Resource {
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
-				Description: "List of server SSH key ids",
-				Optional:    true,
+				Description: `List of server SSH key ids. 
+				Updating ssh_keys will trigger a reinstall if allow_reinstall is set to true.`,
+				Optional: true,
 			},
 			"user_data": {
-				Type:        schema.TypeString,
-				Description: "The id of user data to set on the server",
-				Optional:    true,
+				Type: schema.TypeString,
+				Description: `The id of user data to set on the server. 
+				Updating user_data will trigger a reinstall if allow_reinstall is set to true.`,
+				Optional: true,
 			},
 			"raid": {
-				Type:        schema.TypeString,
-				Description: "RAID mode for the server",
-				Optional:    true,
+				Type: schema.TypeString,
+				Description: `RAID mode for the server. 
+				Updating raid will trigger a reinstall if allow_reinstall is set to true.`,
+				Optional: true,
 			},
 			"ipxe_url": {
-				Type:        schema.TypeString,
-				Description: "Url for the iPXE script that will be used",
-				Optional:    true,
+				Type: schema.TypeString,
+				Description: `Url for the iPXE script that will be used.	
+				Updating ipxe_url will trigger a reinstall if allow_reinstall is set to true.`,
+				Optional: true,
 			},
 			"primary_ipv4": {
 				Type:        schema.TypeString,
@@ -91,6 +104,13 @@ func resourceServer() *schema.Resource {
 				Type:        schema.TypeString,
 				Description: "The timestamp for the last time the server was updated",
 				Computed:    true,
+			},
+			"allow_reinstall": {
+				Type: schema.TypeBool,
+				Description: `Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe_url changes.
+				WARNING: The reinstall will be triggered even if Terraform reports an in-place update.`,
+				Optional: true,
+				Default:  false,
 			},
 		},
 		Importer: &schema.ResourceImporter{
@@ -257,15 +277,10 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 		return diag.FromErr(err)
 	}
 
-	// The 'hostname' and 'tags' keys are currently the only keys that are able to update
-	// with the Latitude 'ServerUpdateRequest'. For all other keys that don't set ForceNew: true,
-	// we must re-install the server to update them. Resources with ForceNew: true, won't hit this
-	// code-path and will instead run delete & create.
-
-	if d.HasChangesExcept("hostname", "tags") && ctx.Value("justCreated") != true {
-		err := serverReinstall(c, serverID, ctx, d)
-		if err != nil {
-			return diag.FromErr(err)
+	justCreated, _ := ctx.Value("justCreated").(bool)
+	if d.HasChanges(triggerReinstall...) && !justCreated {
+		if d.Get("allow_reinstall").(bool) {
+			diags = append(diags, serverReinstall(c, serverID, ctx, d)...)
 		}
 	}
 
@@ -301,8 +316,9 @@ func resourceServerDelete(ctx context.Context, d *schema.ResourceData, m interfa
 	return diags
 }
 
-func serverReinstall(c *api.Client, serverID string, ctx context.Context, d *schema.ResourceData) error {
+func serverReinstall(c *api.Client, serverID string, ctx context.Context, d *schema.ResourceData) diag.Diagnostics {
 	ssh_keys := parseSSHKeys(d)
+	var diags diag.Diagnostics
 
 	_, err := c.Servers.Reinstall(serverID, &api.ServerReinstallRequest{
 		Data: api.ServerReinstallData{
@@ -319,9 +335,17 @@ func serverReinstall(c *api.Client, serverID string, ctx context.Context, d *sch
 	})
 
 	if err != nil {
-		return err
+		return diag.FromErr(err)
 	}
-	return nil
+
+	diags = append(diags, diag.Diagnostic{
+		Severity: diag.Warning,
+		Summary:  "Your server is being reinstalled",
+		Detail: "[WARN] The changes made to the server resource will trigger a reinstallation. All disks will be erased." +
+			"Please note that this process may take some time to complete.",
+	})
+
+	return diags
 }
 
 func parseSSHKeys(d *schema.ResourceData) []string {
