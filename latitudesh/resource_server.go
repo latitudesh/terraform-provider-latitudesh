@@ -340,8 +340,8 @@ func serverReinstall(c *api.Client, serverID string, ctx context.Context, d *sch
 
 	diags = append(diags, diag.Diagnostic{
 		Severity: diag.Warning,
-		Summary:  "Your Server is being reinstalled",
-		Detail: "[WARN] The changes made to your server resource require a reinstallation. " +
+		Summary:  "Your server is being reinstalled",
+		Detail: "[WARN] The changes made to the server resource will trigger a reinstallation. All disks will be erased." +
 			"Please note that this process may take some time to complete.",
 	})
 
