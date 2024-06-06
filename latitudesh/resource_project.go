@@ -85,7 +85,25 @@ func resourceProjectCreate(ctx context.Context, d *schema.ResourceData, m interf
 		resourceProjectUpdate(ctx, d, m)
 	}
 
-	resourceProjectRead(ctx, d, m)
+	if err := d.Set("name", &project.Name); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("description", &project.Description); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("environment", &project.Environment); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("created", &project.CreatedAt); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("updated", &project.UpdatedAt); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if d.Get("tags") != nil {
+		resourceProjectUpdate(ctx, d, m)
+	}
 
 	return diags
 }
@@ -122,7 +140,6 @@ func resourceProjectRead(ctx context.Context, d *schema.ResourceData, m interfac
 	if err := d.Set("updated", &project.UpdatedAt); err != nil {
 		return diag.FromErr(err)
 	}
-
 	if err := d.Set("tags", tagIDs(project.Tags)); err != nil {
 		return diag.FromErr(err)
 	}
@@ -132,6 +149,7 @@ func resourceProjectRead(ctx context.Context, d *schema.ResourceData, m interfac
 
 func resourceProjectUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	c := m.(*api.Client)
+	var diags diag.Diagnostics
 
 	projectID := d.Id()
 	tags := parseTags(d)
@@ -149,14 +167,33 @@ func resourceProjectUpdate(ctx context.Context, d *schema.ResourceData, m interf
 		},
 	}
 
-	_, _, err := c.Projects.Update(projectID, updateRequest)
+	project, _, err := c.Projects.Update(projectID, updateRequest)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
 	d.Set("updated", time.Now().Format(time.RFC850))
 
-	return resourceProjectRead(ctx, d, m)
+	if err := d.Set("name", &project.Name); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("description", &project.Description); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("environment", &project.Environment); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("created", &project.CreatedAt); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("updated", &project.UpdatedAt); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("tags", tagIDs(project.Tags)); err != nil {
+		return diag.FromErr(err)
+	}
+
+	return diags
 }
 
 func resourceProjectDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {

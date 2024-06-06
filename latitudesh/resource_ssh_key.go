@@ -83,8 +83,15 @@ func resourceSSHKeyCreate(ctx context.Context, d *schema.ResourceData, m interfa
 	if d.Get("tags") != nil {
 		resourceSSHKeyUpdate(ctx, d, m)
 	}
-
-	resourceSSHKeyRead(ctx, d, m)
+	if err := d.Set("name", &key.Name); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("public_key", &key.PublicKey); err != nil {
+		return diag.FromErr(err)
+	}
+	if d.Get("tags") != nil {
+		resourceSSHKeyUpdate(ctx, d, m)
+	}
 
 	return diags
 }
@@ -109,11 +116,9 @@ func resourceSSHKeyRead(ctx context.Context, d *schema.ResourceData, m interface
 	if err := d.Set("name", &key.Name); err != nil {
 		return diag.FromErr(err)
 	}
-
 	if err := d.Set("public_key", &key.PublicKey); err != nil {
 		return diag.FromErr(err)
 	}
-
 	if err := d.Set("tags", tagIDs(key.Tags)); err != nil {
 		return diag.FromErr(err)
 	}
@@ -123,6 +128,7 @@ func resourceSSHKeyRead(ctx context.Context, d *schema.ResourceData, m interface
 
 func resourceSSHKeyUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	c := m.(*api.Client)
+	var diags diag.Diagnostics
 
 	keyID := d.Id()
 	tags := parseTags(d)
@@ -138,14 +144,21 @@ func resourceSSHKeyUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 		},
 	}
 
-	_, _, err := c.SSHKeys.Update(keyID, d.Get("project").(string), updateRequest)
+	key, _, err := c.SSHKeys.Update(keyID, d.Get("project").(string), updateRequest)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
 	d.Set("updated", time.Now().Format(time.RFC850))
 
-	return resourceSSHKeyRead(ctx, d, m)
+	if err := d.Set("name", &key.Name); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("tags", tagIDs(key.Tags)); err != nil {
+		return diag.FromErr(err)
+	}
+
+	return diags
 }
 
 func resourceSSHKeyDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {

@@ -40,8 +40,8 @@ func resourceTag() *schema.Resource {
 }
 
 func resourceTagCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	var diags diag.Diagnostics
 	c := m.(*api.Client)
+	var diags diag.Diagnostics
 
 	createRequest := &api.TagCreateRequest{
 		Data: api.TagCreateData{
@@ -61,18 +61,21 @@ func resourceTagCreate(ctx context.Context, d *schema.ResourceData, m interface{
 
 	d.SetId(Tag.ID)
 
-	if d.Get("tags") != nil {
-		resourceTagUpdate(ctx, d, m)
+	if err := d.Set("name", &Tag.Name); err != nil {
+		return diag.FromErr(err)
 	}
-
-	resourceTagRead(ctx, d, m)
+	if err := d.Set("description", &Tag.Description); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("color", &Tag.Color); err != nil {
+		return diag.FromErr(err)
+	}
 
 	return diags
 }
 
 func resourceTagRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	c := m.(*api.Client)
-
 	var diags diag.Diagnostics
 
 	TagID := d.Id()
@@ -91,11 +94,9 @@ func resourceTagRead(ctx context.Context, d *schema.ResourceData, m interface{})
 	if err := d.Set("name", &Tag.Name); err != nil {
 		return diag.FromErr(err)
 	}
-
 	if err := d.Set("description", &Tag.Description); err != nil {
 		return diag.FromErr(err)
 	}
-
 	if err := d.Set("color", &Tag.Color); err != nil {
 		return diag.FromErr(err)
 	}
@@ -105,6 +106,7 @@ func resourceTagRead(ctx context.Context, d *schema.ResourceData, m interface{})
 
 func resourceTagUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	c := m.(*api.Client)
+	var diags diag.Diagnostics
 
 	TagID := d.Id()
 
@@ -120,17 +122,26 @@ func resourceTagUpdate(ctx context.Context, d *schema.ResourceData, m interface{
 		},
 	}
 
-	_, _, err := c.Tags.Update(TagID, updateRequest)
+	Tag, _, err := c.Tags.Update(TagID, updateRequest)
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
-	return resourceTagRead(ctx, d, m)
+	if err := d.Set("name", &Tag.Name); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("description", &Tag.Description); err != nil {
+		return diag.FromErr(err)
+	}
+	if err := d.Set("color", &Tag.Color); err != nil {
+		return diag.FromErr(err)
+	}
+
+	return diags
 }
 
 func resourceTagDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	c := m.(*api.Client)
-
 	var diags diag.Diagnostics
 
 	TagID := d.Id()
