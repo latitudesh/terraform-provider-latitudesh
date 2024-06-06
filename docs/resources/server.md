@@ -30,19 +30,25 @@ resource "latitudesh_server" "server" {
 ### Required
 
 - `hostname` (String) The server hostname
-- `operating_system` (String) The server OS. Update will trigger a reinstall only if allow_reinstall is set to true.
+- `operating_system` (String) The server OS. 
+				Updating operating_system will trigger a reinstall if allow_reinstall is set to true.
 - `plan` (String) The server plan
 - `project` (String) The id or slug of the project
 - `site` (String) The server site
 
 ### Optional
 
-- `allow_reinstall` (Boolean) Allow server reinstallation when operating_system, ssh_keys, user_data,raid, or ipxe_url changes.
-- `ipxe_url` (String) Url for the iPXE script that will be used. Required for custom image deployments. Learn more: https://docs.latitude.sh/docs/custom-image-ipxe. Update will trigger a reinstall only if allow_reinstall is set to true.
-- `raid` (String) RAID mode for the server. Update will trigger a reinstall only if allow_reinstall is set to true.
-- `ssh_keys` (List of String) List of server SSH key ids. Update will trigger a reinstall only if allow_reinstall is set to true.
+- `allow_reinstall` (Boolean) Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe_url changes.
+				WARNING: The reinstall will be triggered even if Terraform reports an in-place update.
+- `ipxe_url` (String) Url for the iPXE script that will be used.	
+				Updating ipxe_url will trigger a reinstall if allow_reinstall is set to true.
+- `raid` (String) RAID mode for the server. 
+				Updating raid will trigger a reinstall if allow_reinstall is set to true.
+- `ssh_keys` (List of String) List of server SSH key ids. 
+				Updating ssh_keys will trigger a reinstall if allow_reinstall is set to true.
 - `tags` (List of String) List of server tags
-- `user_data` (String) The id of user data to set on the server. Update will trigger a reinstall only if allow_reinstall is set to true.
+- `user_data` (String) The id of user data to set on the server. 
+				Updating user_data will trigger a reinstall if allow_reinstall is set to true.
 
 ### Read-Only
 
@@ -50,10 +56,3 @@ resource "latitudesh_server" "server" {
 - `id` (String) The ID of this resource.
 - `primary_ipv4` (String) The server IP address
 - `updated` (String) The timestamp for the last time the server was updated
-
-## Import
-Server can be imported using the serverID, e.g.,
-
-```sh
-$ terraform import latitudesh_server.server serverID
-```

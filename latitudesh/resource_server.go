@@ -45,9 +45,10 @@ func resourceServer() *schema.Resource {
 				ForceNew:    true,
 			},
 			"operating_system": {
-				Type:        schema.TypeString,
-				Description: "The server OS. Update will trigger a reinstall only if allow_reinstall is set to true.",
-				Required:    true,
+				Type: schema.TypeString,
+				Description: `The server OS. 
+				Updating operating_system will trigger a reinstall if allow_reinstall is set to true.`,
+				Required: true,
 			},
 			"hostname": {
 				Type:        schema.TypeString,
@@ -59,23 +60,27 @@ func resourceServer() *schema.Resource {
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
-				Description: "List of server SSH key ids. Update will trigger a reinstall only if allow_reinstall is set to true.",
-				Optional:    true,
+				Description: `List of server SSH key ids. 
+				Updating ssh_keys will trigger a reinstall if allow_reinstall is set to true.`,
+				Optional: true,
 			},
 			"user_data": {
-				Type:        schema.TypeString,
-				Description: "The id of user data to set on the server. Update will trigger a reinstall only if allow_reinstall is set to true.",
-				Optional:    true,
+				Type: schema.TypeString,
+				Description: `The id of user data to set on the server. 
+				Updating user_data will trigger a reinstall if allow_reinstall is set to true.`,
+				Optional: true,
 			},
 			"raid": {
-				Type:        schema.TypeString,
-				Description: "RAID mode for the server. Update will trigger a reinstall only if allow_reinstall is set to true.",
-				Optional:    true,
+				Type: schema.TypeString,
+				Description: `RAID mode for the server. 
+				Updating raid will trigger a reinstall if allow_reinstall is set to true.`,
+				Optional: true,
 			},
 			"ipxe_url": {
-				Type:        schema.TypeString,
-				Description: "Url for the iPXE script that will be used. Update will trigger a reinstall only if allow_reinstall is set to true.",
-				Optional:    true,
+				Type: schema.TypeString,
+				Description: `Url for the iPXE script that will be used.	
+				Updating ipxe_url will trigger a reinstall if allow_reinstall is set to true.`,
+				Optional: true,
 			},
 			"primary_ipv4": {
 				Type:        schema.TypeString,
@@ -101,10 +106,11 @@ func resourceServer() *schema.Resource {
 				Computed:    true,
 			},
 			"allow_reinstall": {
-				Type:        schema.TypeBool,
-				Description: "Allow server reinstallation when operating_system, ssh_keys, user_data,raid, or ipxe_url changes.",
-				Optional:    true,
-				Default:     false,
+				Type: schema.TypeBool,
+				Description: `Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe_url changes.
+				WARNING: The reinstall will be triggered even if Terraform reports an in-place update.`,
+				Optional: true,
+				Default:  false,
 			},
 		},
 		Importer: &schema.ResourceImporter{
