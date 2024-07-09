@@ -25,8 +25,11 @@ resource "latitudesh_tag" "tag" {
 ### Required
 
 - `color` (String) The tag color
-- `description` (String) The tag description
 - `name` (String) The tag name
+
+### Optional
+
+- `description` (String) The tag description
 
 ### Read-Only
 
@@ -36,4 +39,5 @@ resource "latitudesh_tag" "tag" {
 Tag can be imported using the TagID along with the projectID that contains the Tag, e.g.,
 
 ```sh
-$ terraform import latitudesh_tag.tag projectID:TagID
+$ terraform import latitudesh_tag.tag TagID
+```
