@@ -13,7 +13,7 @@ const (
 	userAgentForProvider = "Latitude-Terraform-Provider"
 )
 
-var currentVersion = "1.1.1" // update variable when version updated
+var currentVersion = "1.1.2" // update variable when version updated
 
 func Provider() *schema.Provider {
 	return &schema.Provider{
