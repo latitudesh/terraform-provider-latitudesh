@@ -25,7 +25,7 @@ func resourceTag() *schema.Resource {
 			"description": {
 				Type:        schema.TypeString,
 				Description: "The tag description",
-				Required:    true,
+				Optional:    true,
 			},
 			"color": {
 				Type:        schema.TypeString,
@@ -34,7 +34,7 @@ func resourceTag() *schema.Resource {
 			},
 		},
 		Importer: &schema.ResourceImporter{
-			StateContext: NestedResourceRestAPIImport,
+			StateContext: schema.ImportStatePassthroughContext,
 		},
 	}
 }
