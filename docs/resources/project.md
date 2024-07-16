@@ -26,6 +26,7 @@ resource "latitudesh_project" "project" {
 
 - `environment` (String) The name of the project
 - `name` (String) The name of the project
+- `provisioning_type` (String) The provisioning type of the project
 
 ### Optional
 
