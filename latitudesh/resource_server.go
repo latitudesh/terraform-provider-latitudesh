@@ -82,6 +82,12 @@ func resourceServer() *schema.Resource {
 				Updating ipxe_url will trigger a reinstall if allow_reinstall is set to true.`,
 				Optional: true,
 			},
+			"billing": {
+				Type: schema.TypeString,
+				Description: `The server billing type. 
+				Accepts hourly and monthly for on demand projects and yearly for reserved projects.`,
+				Optional: true,
+			},
 			"primary_ipv4": {
 				Type:        schema.TypeString,
 				Description: "The server IP address",
@@ -137,6 +143,7 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 				UserData:        d.Get("user_data").(string),
 				Raid:            d.Get("raid").(string),
 				IpxeUrl:         d.Get("ipxe_url").(string),
+				Billing:         d.Get("billing").(string),
 			},
 		},
 	}
@@ -267,6 +274,7 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 			ID:   serverID,
 			Attributes: api.ServerUpdateAttributes{
 				Hostname: d.Get("hostname").(string),
+				Billing:  d.Get("billing").(string),
 				Tags:     tags,
 			},
 		},
