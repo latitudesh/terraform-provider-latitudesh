@@ -7,7 +7,7 @@ toolchain go1.22.5
 require (
 	github.com/hashicorp/terraform-plugin-docs v0.13.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.21.0
-	github.com/latitudesh/latitudesh-go v0.4.2
+	github.com/latitudesh/latitudesh-go v0.4.3
 )
 
 require (
