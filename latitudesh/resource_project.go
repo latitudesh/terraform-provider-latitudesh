@@ -24,6 +24,11 @@ func resourceProject() *schema.Resource {
 				Description: "The name of the project",
 				Required:    true,
 			},
+			"provisioning_type": {
+				Type:        schema.TypeString,
+				Description: "The provisioning type of the project",
+				Required:    true,
+			},
 			"description": {
 				Type:        schema.TypeString,
 				Description: "The description of the project",
@@ -67,9 +72,10 @@ func resourceProjectCreate(ctx context.Context, d *schema.ResourceData, m interf
 		Data: api.ProjectCreateData{
 			Type: "projects",
 			Attributes: api.ProjectCreateAttributes{
-				Name:        d.Get("name").(string),
-				Description: d.Get("description").(string),
-				Environment: d.Get("environment").(string),
+				Name:             d.Get("name").(string),
+				ProvisioningType: d.Get("provisioning_type").(string),
+				Description:      d.Get("description").(string),
+				Environment:      d.Get("environment").(string),
 			},
 		},
 	}
