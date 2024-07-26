@@ -19,8 +19,6 @@ resource "latitudesh_server" "server" {
   project          = latitudesh_project.project.id      # You can use the project id or slug
   site             = data.latitudesh_region.region.slug # You can use the site id or slug
   ssh_keys         = [latitudesh_ssh_key.ssh_key.id]
-  user_data        = latitudesh_user_data.user_data.id
-  ipxe_url         = "" # URL to a boot.ipxe file. e.g. https://boot.netboot.xyz
 }
 ```
 
@@ -38,12 +36,13 @@ resource "latitudesh_server" "server" {
 
 ### Optional
 
-- `allow_reinstall` (Boolean) Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe_url changes.
+- `allow_reinstall` (Boolean, Deprecated) Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe_url changes.
 				WARNING: The reinstall will be triggered even if Terraform reports an in-place update.
 - `billing` (String) The server billing type. 
 				Accepts hourly and monthly for on demand projects and yearly for reserved projects.
 - `ipxe_url` (String) Url for the iPXE script that will be used.	
 				Updating ipxe_url will trigger a reinstall if allow_reinstall is set to true.
+- `locked` (Boolean) Server lock, a locked server cannot be deleted or updated.
 - `raid` (String) RAID mode for the server. 
 				Updating raid will trigger a reinstall if allow_reinstall is set to true.
 - `ssh_keys` (List of String) List of server SSH key ids. 
@@ -58,10 +57,3 @@ resource "latitudesh_server" "server" {
 - `id` (String) The ID of this resource.
 - `primary_ipv4` (String) The server IP address
 - `updated` (String) The timestamp for the last time the server was updated
-
-## Import
-Server can be imported using the serverID, e.g.,
-
-```sh
-$ terraform import latitudesh_server.server serverID
-```
