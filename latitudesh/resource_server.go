@@ -101,6 +101,12 @@ func resourceServer() *schema.Resource {
 				Description: "List of server tags",
 				Optional:    true,
 			},
+			"locked": {
+				Type:        schema.TypeBool,
+				Description: "Lock/unlock the server. A locked server cannot be deleted or updated.",
+				Optional:    true,
+				Default:     false,
+			},
 			"created": {
 				Type:        schema.TypeString,
 				Description: "The timestamp for when the server was created",
@@ -117,6 +123,8 @@ func resourceServer() *schema.Resource {
 				WARNING: The reinstall will be triggered even if Terraform reports an in-place update.`,
 				Optional: true,
 				Default:  false,
+				Deprecated: "This attribute is deprecated and will be removed in a future release. You should use the locked attribute. " +
+					"Learn more: https://www.latitude.sh/changelog/block-destructive-actions-with-server-locking",
 			},
 		},
 		Importer: &schema.ResourceImporter{
@@ -198,6 +206,15 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 		return diag.FromErr(err)
 	}
 
+	isLocked := d.Get("locked").(bool)
+	if isLocked {
+		server, _, err := c.Servers.Lock(server.ID)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+		d.Set("locked", &server.Locked)
+	}
+
 	return diags
 }
 
@@ -254,6 +271,10 @@ func resourceServerRead(ctx context.Context, d *schema.ResourceData, m interface
 		return diag.FromErr(err)
 	}
 
+	if err := d.Set("locked", &server.Locked); err != nil {
+		return diag.FromErr(err)
+	}
+
 	if err := d.Set("tags", tagIDs(server.Tags)); err != nil {
 		return diag.FromErr(err)
 	}
@@ -267,6 +288,15 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 
 	serverID := d.Id()
 	tags := parseTags(d)
+
+	// Unlocking server takes place before the update.
+	if d.HasChange("locked") && !d.Get("locked").(bool) {
+		server, _, err := c.Servers.Unlock(serverID)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+		d.Set("locked", &server.Locked)
+	}
 
 	updateRequest := &api.ServerUpdateRequest{
 		Data: api.ServerUpdateData{
@@ -302,6 +332,15 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 	}
 	if err := d.Set("tags", tagIDs(server.Tags)); err != nil {
 		return diag.FromErr(err)
+	}
+
+	// Locking the server takes place after the update.
+	if d.HasChange("locked") && d.Get("locked").(bool) {
+		server, _, err := c.Servers.Lock(serverID)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+		d.Set("locked", &server.Locked)
 	}
 
 	return diags

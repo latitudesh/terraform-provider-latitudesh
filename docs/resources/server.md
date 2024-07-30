@@ -38,12 +38,13 @@ resource "latitudesh_server" "server" {
 
 ### Optional
 
-- `allow_reinstall` (Boolean) Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe_url changes.
+- `allow_reinstall` (Boolean, Deprecated) Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe_url changes.
 				WARNING: The reinstall will be triggered even if Terraform reports an in-place update.
 - `billing` (String) The server billing type. 
 				Accepts hourly and monthly for on demand projects and yearly for reserved projects.
 - `ipxe_url` (String) Url for the iPXE script that will be used.	
 				Updating ipxe_url will trigger a reinstall if allow_reinstall is set to true.
+- `locked` (Boolean) Lock/unlock the server. A locked server cannot be deleted or updated.
 - `raid` (String) RAID mode for the server. 
 				Updating raid will trigger a reinstall if allow_reinstall is set to true.
 - `ssh_keys` (List of String) List of server SSH key ids. 
