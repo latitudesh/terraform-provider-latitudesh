@@ -44,7 +44,7 @@ resource "latitudesh_server" "server" {
 				Accepts hourly and monthly for on demand projects and yearly for reserved projects.
 - `ipxe_url` (String) Url for the iPXE script that will be used.	
 				Updating ipxe_url will trigger a reinstall if allow_reinstall is set to true.
-- `locked` (Boolean) Server lock, a locked server cannot be deleted or updated.
+- `locked` (Boolean) Lock/unlock the server. A locked server cannot be deleted or updated.
 - `raid` (String) RAID mode for the server. 
 				Updating raid will trigger a reinstall if allow_reinstall is set to true.
 - `ssh_keys` (List of String) List of server SSH key ids. 

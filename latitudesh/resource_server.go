@@ -103,7 +103,7 @@ func resourceServer() *schema.Resource {
 			},
 			"locked": {
 				Type:        schema.TypeBool,
-				Description: "Server lock, a locked server cannot be deleted or updated.",
+				Description: "Lock/unlock the server. A locked server cannot be deleted or updated.",
 				Optional:    true,
 				Default:     false,
 			},
