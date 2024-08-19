@@ -4,8 +4,6 @@ go 1.22.4
 
 toolchain go1.22.5
 
-// replace github.com/latitudesh/latitudesh-go => ../latitudesh-go
-
 require (
 	github.com/hashicorp/terraform-plugin-docs v0.13.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.34.0
