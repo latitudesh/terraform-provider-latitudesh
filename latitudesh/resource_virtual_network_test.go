@@ -18,6 +18,10 @@ const (
 func TestAccVirtualNetwork_Basic(t *testing.T) {
 	var VirtualNetwork api.VirtualNetwork
 
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)
