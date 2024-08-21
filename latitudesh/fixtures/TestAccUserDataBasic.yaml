@@ -1,0 +1,367 @@
+---
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 131
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: |
+            {"data":{"type":"user_data","attributes":{"description":"test description","content":"bGF0aXR1ZGVzaCB1c2VyIGRhdGEgZXhhbXBsZQ=="}}}
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            Content-Type:
+                - application/json
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/projects/proj_ogXka9v7m0JdB/user_data
+        method: POST
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: 295
+        uncompressed: false
+        body: '{"data":{"id":"ud_gXQvNejq5zpbP","type":"user_data","attributes":{"description":"test description","content":"bGF0aXR1ZGVzaCB1c2VyIGRhdGEgZXhhbXBsZQ==","created_at":"2024-08-19T20:36:34+00:00","updated_at":"2024-08-19T20:36:34+00:00","decoded_content":"latitudesh user data example"}},"meta":{}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5cefc46d3ecb16-GIG
+            Content-Length:
+                - "295"
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 19 Aug 2024 20:36:34 GMT
+            Etag:
+                - W/"de7ca9917da3ba41ec6281094ccf7d91"
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=bAqdll5y1PZyFps%2BbDVJjgR2%2FNPeDG%2F2WiHosuHbXOByapIfJWzUUUAa5xPEhF7pw%2FXScpUWRWJUqmocS2vIvC25gyvCZA%2BFTBNvSZeBy4KUS8Ba6ZnCgS2Igmv17JtWLA%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - 697716ae-b2f8-4c5e-9d66-d717a416c62f
+            X-Runtime:
+                - "0.112086"
+            X-Xss-Protection:
+                - "0"
+        status: 201 Created
+        code: 201
+        duration: 292.918375ms
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/projects/proj_ogXka9v7m0JdB/user_data/ud_gXQvNejq5zpbP
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":{"id":"ud_gXQvNejq5zpbP","type":"user_data","attributes":{"description":"test description","content":"bGF0aXR1ZGVzaCB1c2VyIGRhdGEgZXhhbXBsZQ==","created_at":"2024-08-19T20:36:34+00:00","updated_at":"2024-08-19T20:36:34+00:00","decoded_content":"latitudesh user data example"}},"meta":{}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5cefc88cd86475-GIG
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 19 Aug 2024 20:36:35 GMT
+            Etag:
+                - W/"de7ca9917da3ba41ec6281094ccf7d91"
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=96Pdo2tIBrXWCM2lJAyN%2BDfNCg3M3mmPB0zKiquPKg516bOy4LeGR76pnXGyIbpOtXsXcdmCyOcQAoV0jJmymJ29DBzlxKhGjFMyAgWUL5bktfuaxy2GL%2B9WVB9yRcLnaQ%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - 8df91a33-66ed-44e3-8d19-f01e13b27e1d
+            X-Runtime:
+                - "0.038234"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 577.352125ms
+    - id: 2
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/projects/proj_ogXka9v7m0JdB/user_data/ud_gXQvNejq5zpbP
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":{"id":"ud_gXQvNejq5zpbP","type":"user_data","attributes":{"description":"test description","content":"bGF0aXR1ZGVzaCB1c2VyIGRhdGEgZXhhbXBsZQ==","created_at":"2024-08-19T20:36:34+00:00","updated_at":"2024-08-19T20:36:34+00:00","decoded_content":"latitudesh user data example"}},"meta":{}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5cefd09ecb64ba-GIG
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 19 Aug 2024 20:36:37 GMT
+            Etag:
+                - W/"de7ca9917da3ba41ec6281094ccf7d91"
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=zmX%2BsPldTjGBXY8bnucPMYei7dHdnjmLzINBZpasT1Q0aXstiogZBlGiztAFmfBzieEKUwyNMLV8GU6YzJ6WycZZvJdC4H1ODcA3UF31WLzXOB3NxHqmlq0QLHWpfho%2F5Q%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - 76e8b5b7-d311-48f4-83a6-fde1a8ba0fba
+            X-Runtime:
+                - "0.041938"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 627.591292ms
+    - id: 3
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            Content-Type:
+                - application/json
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/projects/proj_ogXka9v7m0JdB/user_data/ud_gXQvNejq5zpbP
+        method: DELETE
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: 0
+        uncompressed: false
+        body: ""
+        headers:
+            Cache-Control:
+                - no-cache
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5cefd97c517a18-GIG
+            Date:
+                - Mon, 19 Aug 2024 20:36:38 GMT
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=5gKu0Rq74Ffkphn8WvKHK%2B%2FrUoo1XruAvK6o7YAXfVajbL4dJGcm66ENaXnReC9FHgFcOITpDJx6KCw6Bu2zG6dI8B4DzVTff2UkOvTMQagJkxsTcJXmxgHMli0roQEFjQ%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - 28811a36-7a9e-4e1f-b7d0-b1abc5c83300
+            X-Runtime:
+                - "0.063392"
+            X-Xss-Protection:
+                - "0"
+        status: 204 No Content
+        code: 204
+        duration: 638.158916ms
+    - id: 4
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/projects/proj_ogXka9v7m0JdB/user_data/ud_gXQvNejq5zpbP
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"errors":[{"code":"not_found","status":"404","title":"Error","detail":"Specified Record Not Found","meta":{}}]}'
+        headers:
+            Cache-Control:
+                - no-cache
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5cefe19b5e7a67-GIG
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 19 Aug 2024 20:36:39 GMT
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=4rk57eQoEd%2FGqzPL2bMlfeaLxbAYSD53wNjD9UkSdlZNwpQ3TZ%2BTR8ahoB%2BYN%2BDZddhSWIyscCGW457sAsiyK1PCZlh9ydCgJbTStj8Plgtdk1Eylov5EhNd0FUHk3WiEw%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Request-Id:
+                - a2f3a780-b47f-4533-91a4-0dd88334ced4
+            X-Runtime:
+                - "0.035980"
+            X-Xss-Protection:
+                - "0"
+        status: 404 Not Found
+        code: 404
+        duration: 574.9685ms

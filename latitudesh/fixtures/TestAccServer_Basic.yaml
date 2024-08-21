@@ -1,0 +1,513 @@
+---
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 169
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: |
+            {"data":{"type":"servers","attributes":{"project":"proj_ogXka9v7m0JdB","plan":"c2-small-x86","site":"SAO","operating_system":"ubuntu_24_04_x64_lts","hostname":"test"}}}
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            Content-Type:
+                - application/json
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/servers
+        method: POST
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: 401
+        uncompressed: false
+        body: '{"data":{"type":"servers","id":"sv_3xMV0xMXpNmQp","attributes":{"hostname":"test","label":"19AS020449","role":"Bare Metal","status":"starting_deploy","primary_ipv4":"103.88.235.22","specs":{"cpu":"Xeon E-2276G CPU @ 3.80GHz (6 cores)","disk":"500 GB SSD","ram":"64 GB","nic":"2 X 1 Gbit/s"},"plan":{"id":"plan_2X6KG5mA5yPBM","name":"c2.small.x86","slug":"c2-small-x86","billing":"hourly"}}},"meta":{}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5ceebc3c83ca5e-GIG
+            Content-Length:
+                - "401"
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 19 Aug 2024 20:35:54 GMT
+            Etag:
+                - W/"f41b19014ececa8940db1c1ab3840e83"
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=DchwsA9VYgnxAwPP8x6C8s0fGV%2B7emvNy4SWvCS1%2BXZjmxjo5fR59ovJKUKfgykRhkLvd2cv2XdBHJ69cCdZp91HYXulw%2FxMaERSqYwwyPziPwY9p0mWZ4kNNhOBLD94Vg%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - 34804e17-4965-43a1-a3ed-834ce89bb8da
+            X-Runtime:
+                - "1.761672"
+            X-Xss-Protection:
+                - "0"
+        status: 201 Created
+        code: 201
+        duration: 1.929871292s
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/servers/sv_3xMV0xMXpNmQp
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":{"id":"sv_3xMV0xMXpNmQp","type":"servers","attributes":{"tags":[],"hostname":"test","label":"19AS020449","price":0.22,"role":"Bare Metal","primary_ipv4":"103.88.235.22","status":"on","ipmi_status":"Normal","created_at":"2024-08-19T20:35:53+00:00","scheduled_deletion_at":null,"locked":false,"region":{"city":"São Paulo","country":"Brazil","site":{"id":"loc_87vRENkgNdPyk","name":"São Paulo","slug":"SAO","facility":"Latitude.sh SP1"}},"team":{"id":"team_KpGnxgwe3KS3ojrYVekYUXO22GQ","name":"SDK-Teams-test","slug":"sdk-teams-test","description":"SoHssZNy","address":"HzoVWLcu","currency":{"id":"cur_87vRENkgNdPyk","code":"USD","name":"United States Dollar"},"status":"verified"},"project":{"id":"proj_ogXka9v7m0JdB","name":"Terraform Test","slug":"terraform-test","description":"Test terraform provider","billing_type":"Normal","billing_method":"Normal","bandwidth_alert":false,"environment":"Development","billing":{"subscription_id":"sub_1PpbX7LpWuMxVFxQvDDmZwCn","type":"Normal","method":"Normal"},"stats":{"ip_addresses":0,"prefixes":0,"servers":2,"containers":0,"vlans":1}},"plan":{"id":"plan_2X6KG5mA5yPBM","name":"c2.small.x86","slug":"c2-small-x86","billing":"hourly"},"operating_system":{"name":"Ubuntu","slug":"ubuntu_24_04_x64_lts","version":"24.04","features":{"raid":true,"rescue":true,"ssh_keys":true,"user_data":true},"distro":{"name":"ubuntu","slug":"ubuntu","series":"noble"}},"specs":{"cpu":"Xeon E-2276G CPU @ 3.80GHz (6 cores)","disk":"500 GB SSD","ram":"64 GB","nic":"2 X 1 Gbit/s","gpu":null}}},"meta":{}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5cef32c8976d42-GIG
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 19 Aug 2024 20:36:12 GMT
+            Etag:
+                - W/"e2487b642c94a25156e0cc824aff0342"
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=TYYSlOVqt%2Bxq%2F51hk%2BOMvLgbQxx0zATprf5L4Sxa4ZOJxVdo3rOQ%2FWY1OMh7DFThJi1npeEUOFKhXRyCmnduZJILl9A%2FwsBUwVqaYNaZndUlS2kK3nwukWbmhREbz8Mvmg%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - c97f850e-3949-4e3e-b0fb-41556cd9cdea
+            X-Runtime:
+                - "0.642318"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 1.145724958s
+    - id: 2
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/servers/sv_3xMV0xMXpNmQp
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":{"id":"sv_3xMV0xMXpNmQp","type":"servers","attributes":{"tags":[],"hostname":"test","label":"19AS020449","price":0.22,"role":"Bare Metal","primary_ipv4":"103.88.235.22","status":"on","ipmi_status":"Normal","created_at":"2024-08-19T20:35:53+00:00","scheduled_deletion_at":null,"locked":false,"region":{"city":"São Paulo","country":"Brazil","site":{"id":"loc_87vRENkgNdPyk","name":"São Paulo","slug":"SAO","facility":"Latitude.sh SP1"}},"team":{"id":"team_KpGnxgwe3KS3ojrYVekYUXO22GQ","name":"SDK-Teams-test","slug":"sdk-teams-test","description":"SoHssZNy","address":"HzoVWLcu","currency":{"id":"cur_87vRENkgNdPyk","code":"USD","name":"United States Dollar"},"status":"verified"},"project":{"id":"proj_ogXka9v7m0JdB","name":"Terraform Test","slug":"terraform-test","description":"Test terraform provider","billing_type":"Normal","billing_method":"Normal","bandwidth_alert":false,"environment":"Development","billing":{"subscription_id":"sub_1PpbX7LpWuMxVFxQvDDmZwCn","type":"Normal","method":"Normal"},"stats":{"ip_addresses":0,"prefixes":0,"servers":2,"containers":0,"vlans":1}},"plan":{"id":"plan_2X6KG5mA5yPBM","name":"c2.small.x86","slug":"c2-small-x86","billing":"hourly"},"operating_system":{"name":"Ubuntu","slug":"ubuntu_24_04_x64_lts","version":"24.04","features":{"raid":true,"rescue":true,"ssh_keys":true,"user_data":true},"distro":{"name":"ubuntu","slug":"ubuntu","series":"noble"}},"specs":{"cpu":"Xeon E-2276G CPU @ 3.80GHz (6 cores)","disk":"500 GB SSD","ram":"64 GB","nic":"2 X 1 Gbit/s","gpu":null}}},"meta":{}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5cef408fa17a5f-GIG
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 19 Aug 2024 20:36:14 GMT
+            Etag:
+                - W/"e2487b642c94a25156e0cc824aff0342"
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=D%2B2OrEQ9R7mhJAn1fxkRbpo9s6%2BVSOoKa86NomsXCjzhD%2FqOENBuO3ptz9bcbwquR3o1QWIZVQKb25V9arU1IjFvzQWOrvSYxI3WYu%2BB2vI6V08%2FYJtB%2BTGmRY6%2BlKxcig%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - faa30f29-2ec5-48d3-b9e7-2240beacdf2a
+            X-Runtime:
+                - "0.698090"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 1.107627958s
+    - id: 3
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/servers/sv_3xMV0xMXpNmQp
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":{"id":"sv_3xMV0xMXpNmQp","type":"servers","attributes":{"tags":[],"hostname":"test","label":"19AS020449","price":0.22,"role":"Bare Metal","primary_ipv4":"103.88.235.22","status":"on","ipmi_status":"Normal","created_at":"2024-08-19T20:35:53+00:00","scheduled_deletion_at":null,"locked":false,"region":{"city":"São Paulo","country":"Brazil","site":{"id":"loc_87vRENkgNdPyk","name":"São Paulo","slug":"SAO","facility":"Latitude.sh SP1"}},"team":{"id":"team_KpGnxgwe3KS3ojrYVekYUXO22GQ","name":"SDK-Teams-test","slug":"sdk-teams-test","description":"SoHssZNy","address":"HzoVWLcu","currency":{"id":"cur_87vRENkgNdPyk","code":"USD","name":"United States Dollar"},"status":"verified"},"project":{"id":"proj_ogXka9v7m0JdB","name":"Terraform Test","slug":"terraform-test","description":"Test terraform provider","billing_type":"Normal","billing_method":"Normal","bandwidth_alert":false,"environment":"Development","billing":{"subscription_id":"sub_1PpbX7LpWuMxVFxQvDDmZwCn","type":"Normal","method":"Normal"},"stats":{"ip_addresses":0,"prefixes":0,"servers":2,"containers":0,"vlans":1}},"plan":{"id":"plan_2X6KG5mA5yPBM","name":"c2.small.x86","slug":"c2-small-x86","billing":"hourly"},"operating_system":{"name":"Ubuntu","slug":"ubuntu_24_04_x64_lts","version":"24.04","features":{"raid":true,"rescue":true,"ssh_keys":true,"user_data":true},"distro":{"name":"ubuntu","slug":"ubuntu","series":"noble"}},"specs":{"cpu":"Xeon E-2276G CPU @ 3.80GHz (6 cores)","disk":"500 GB SSD","ram":"64 GB","nic":"2 X 1 Gbit/s","gpu":null}}},"meta":{}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5cef4ec8f3cb59-GIG
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 19 Aug 2024 20:36:17 GMT
+            Etag:
+                - W/"e2487b642c94a25156e0cc824aff0342"
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=89arG4qxutkbuhcWSpMOvjnn60fsB%2BksBhk19LCxbAuYmc3pMjeroNvcX8FpIOEguJrvjjZb%2FDSk%2BZRLWEfo76kG8z50oquOaQgWJ%2B1s1dlXwqmIg%2B%2BKG6HViyKS4%2FriBw%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - aa89dbdf-37a8-499f-9d49-d49710498fc9
+            X-Runtime:
+                - "1.365973"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 1.6252595s
+    - id: 4
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/servers/sv_3xMV0xMXpNmQp
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":{"id":"sv_3xMV0xMXpNmQp","type":"servers","attributes":{"tags":[],"hostname":"test","label":"19AS020449","price":0.22,"role":"Bare Metal","primary_ipv4":"103.88.235.22","status":"on","ipmi_status":"Normal","created_at":"2024-08-19T20:35:53+00:00","scheduled_deletion_at":null,"locked":false,"region":{"city":"São Paulo","country":"Brazil","site":{"id":"loc_87vRENkgNdPyk","name":"São Paulo","slug":"SAO","facility":"Latitude.sh SP1"}},"team":{"id":"team_KpGnxgwe3KS3ojrYVekYUXO22GQ","name":"SDK-Teams-test","slug":"sdk-teams-test","description":"SoHssZNy","address":"HzoVWLcu","currency":{"id":"cur_87vRENkgNdPyk","code":"USD","name":"United States Dollar"},"status":"verified"},"project":{"id":"proj_ogXka9v7m0JdB","name":"Terraform Test","slug":"terraform-test","description":"Test terraform provider","billing_type":"Normal","billing_method":"Normal","bandwidth_alert":false,"environment":"Development","billing":{"subscription_id":"sub_1PpbX7LpWuMxVFxQvDDmZwCn","type":"Normal","method":"Normal"},"stats":{"ip_addresses":0,"prefixes":0,"servers":2,"containers":0,"vlans":1}},"plan":{"id":"plan_2X6KG5mA5yPBM","name":"c2.small.x86","slug":"c2-small-x86","billing":"hourly"},"operating_system":{"name":"Ubuntu","slug":"ubuntu_24_04_x64_lts","version":"24.04","features":{"raid":true,"rescue":true,"ssh_keys":true,"user_data":true},"distro":{"name":"ubuntu","slug":"ubuntu","series":"noble"}},"specs":{"cpu":"Xeon E-2276G CPU @ 3.80GHz (6 cores)","disk":"500 GB SSD","ram":"64 GB","nic":"2 X 1 Gbit/s","gpu":null}}},"meta":{}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5cef63ee5564f1-GIG
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 19 Aug 2024 20:36:20 GMT
+            Etag:
+                - W/"e2487b642c94a25156e0cc824aff0342"
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=7k0vYCUIwUzNyQhqjlFJm6YTy7iue4F%2BiAescyOfMfl1TDUPl2et%2BKMUStYOjvaSUgeybCt2z9d8yOyvyC%2BnCnHZsjHqAoQq8Ud7s%2FYmIlrZk2aE5wXyf00phlHtU5n1aQ%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - 9d773874-e172-41e0-9af5-1340b0b8f13a
+            X-Runtime:
+                - "0.800248"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 1.007024208s
+    - id: 5
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            Content-Type:
+                - application/json
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/servers/sv_3xMV0xMXpNmQp
+        method: DELETE
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: 0
+        uncompressed: false
+        body: ""
+        headers:
+            Cache-Control:
+                - no-cache
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5cef718d8264b5-GIG
+            Date:
+                - Mon, 19 Aug 2024 20:36:22 GMT
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=NIHf%2FGwgFTe%2B%2BUluX6%2B%2FJfcQLLVfX2nz2WLq%2BjwhWtp2AVEtrVXukncTf0oq6kzudyLgqQBTCWj4u%2FzUeYK1xhazdLsz8xIOVehaMPcRPfmHSYp1ZL7FJIz3TvwpB8eG%2Bg%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - 54b499ad-4e99-469b-a460-c756626ae162
+            X-Runtime:
+                - "1.461184"
+            X-Xss-Protection:
+                - "0"
+        status: 204 No Content
+        code: 204
+        duration: 1.698310167s
+    - id: 6
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/servers/sv_3xMV0xMXpNmQp
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"errors":[{"code":"not_found","status":"404","title":"Error","detail":"Specified Record Not Found","meta":{}}]}'
+        headers:
+            Cache-Control:
+                - no-cache
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5cef86ea7c6505-GIG
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 19 Aug 2024 20:36:24 GMT
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=gMj2lniETP2rfX450LoPNy3Se2DHe6RRjwKbU4amEASlcVmtRmoVMgacKzfhlcWP%2FrwQnfuKUxIpEQFOxSlhE0eHec6FYZ0i666sHFWo5RwLICTf8zuhVazlc2qqnKU1Tg%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Request-Id:
+                - 58f8194d-a47d-48df-81be-5f3b0ac4d3c0
+            X-Runtime:
+                - "0.039282"
+            X-Xss-Protection:
+                - "0"
+        status: 404 Not Found
+        code: 404
+        duration: 214.336625ms
