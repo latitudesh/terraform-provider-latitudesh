@@ -1,0 +1,368 @@
+---
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/plans?filter%5Bname%5D=c2.small.x86
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"plan_2X6KG5mA5yPBM","type":"plans","attributes":{"slug":"c2-small-x86","name":"c2.small.x86","features":["ssh","user_data"],"specs":{"cpu":{"type":"E-2134G","clock":3.5,"cores":4,"count":1},"memory":{"total":32},"drives":[{"count":1,"size":"500 GB","type":"SSD"}],"nics":[{"count":1,"type":"1 Gbps"}],"gpu":{}},"regions":[{"name":"Chile","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["SAN3","SAN"],"in_stock":["SAN3","SAN"]},"stock_level":"high","pricing":{"USD":{"hour":0.22,"month":153.0,"year":1349.0},"BRL":{"hour":1.08,"month":749.0,"year":6623.0}}},{"name":"Germany","deploys_instantly":[],"locations":{"available":["FRA"],"in_stock":[]},"stock_level":"unavailable","pricing":{"USD":{"hour":0.21,"month":146.0,"year":1288.0},"BRL":{"hour":1.05,"month":728.0,"year":6439.0}}},{"name":"Australia","deploys_instantly":[],"locations":{"available":["SYD2","SYD"],"in_stock":[]},"stock_level":"unavailable","pricing":{"USD":{"hour":0.29,"month":201.0,"year":1778.0},"BRL":{"hour":1.43,"month":992.0,"year":8769.0}}},{"name":"Mexico","deploys_instantly":["ubuntu_24_04_x64_lts","ubuntu_22_04_x64_lts"],"locations":{"available":["MEX2"],"in_stock":["MEX2"]},"stock_level":"high","pricing":{"USD":{"hour":0.3,"month":208.0,"year":1840.0},"BRL":{"hour":1.49,"month":1033.0,"year":9137.0}}},{"name":"United States","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["CHI","ASH","DAL","MIA2","LAX","NYC","MIA"],"in_stock":["CHI","DAL","MIA2","LAX","NYC"]},"stock_level":"high","pricing":{"USD":{"hour":0.21,"month":146.0,"year":1288.0},"BRL":{"hour":1.05,"month":728.0,"year":6439.0}}},{"name":"Colombia","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["BGT"],"in_stock":["BGT"]},"stock_level":"low","pricing":{"USD":{"hour":0.3,"month":208.0,"year":1840.0},"BRL":{"hour":1.49,"month":1033.0,"year":9137.0}}},{"name":"Japan","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["TYO","TYO3","TYO2"],"in_stock":["TYO","TYO3","TYO2"]},"stock_level":"high","pricing":{"USD":{"hour":0.22,"month":153.0,"year":1349.0},"BRL":{"hour":1.08,"month":749.0,"year":6623.0}}},{"name":"United Kingdom","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["LON","LON2"],"in_stock":["LON2"]},"stock_level":"high","pricing":{"USD":{"hour":0.21,"month":146.0,"year":1288.0},"BRL":{"hour":1.05,"month":728.0,"year":6439.0}}},{"name":"Argentina","deploys_instantly":[],"locations":{"available":["BUE"],"in_stock":[]},"stock_level":"unavailable","pricing":{"USD":{"hour":0.29,"month":201.0,"year":1778.0},"BRL":{"hour":1.43,"month":992.0,"year":8769.0}}},{"name":"Brazil","deploys_instantly":["ubuntu_24_04_x64_lts","ubuntu_22_04_x64_lts"],"locations":{"available":["SAO2","SAO"],"in_stock":["SAO2","SAO"]},"stock_level":"high","pricing":{"USD":{"hour":0.22,"month":153.0,"year":1349.0},"BRL":{"hour":1.08,"month":749.0,"year":6623.0}}}]}}],"meta":{}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5ced8f6c95ca93-GIG
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 19 Aug 2024 20:35:04 GMT
+            Etag:
+                - W/"96794eb82fa96e6cfe6724ba05c8fa6b"
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=5uGfiz2Kf%2BFdLZwULLdPTHfNlX4bZ4cMjP9sgtEWLoB8WVnT6alvAXsnmUAROU8ZeKsCl%2FHAL3AvUuQjIsCGzvr%2FfN2sH2gBWLBOEuxNxg1V%2FZGa8kg6Rkd%2FDkzwea%2FJTg%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - 86dc7831-3f74-43c4-8ca9-2192f8a9920c
+            X-Runtime:
+                - "0.240316"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 735.622792ms
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/plans?filter%5Bname%5D=c2.small.x86
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"plan_2X6KG5mA5yPBM","type":"plans","attributes":{"slug":"c2-small-x86","name":"c2.small.x86","features":["ssh","user_data"],"specs":{"cpu":{"type":"E-2134G","clock":3.5,"cores":4,"count":1},"memory":{"total":32},"drives":[{"count":1,"size":"500 GB","type":"SSD"}],"nics":[{"count":1,"type":"1 Gbps"}],"gpu":{}},"regions":[{"name":"Chile","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["SAN3","SAN"],"in_stock":["SAN3","SAN"]},"stock_level":"high","pricing":{"USD":{"hour":0.22,"month":153.0,"year":1349.0},"BRL":{"hour":1.08,"month":749.0,"year":6623.0}}},{"name":"Germany","deploys_instantly":[],"locations":{"available":["FRA"],"in_stock":[]},"stock_level":"unavailable","pricing":{"USD":{"hour":0.21,"month":146.0,"year":1288.0},"BRL":{"hour":1.05,"month":728.0,"year":6439.0}}},{"name":"Australia","deploys_instantly":[],"locations":{"available":["SYD2","SYD"],"in_stock":[]},"stock_level":"unavailable","pricing":{"USD":{"hour":0.29,"month":201.0,"year":1778.0},"BRL":{"hour":1.43,"month":992.0,"year":8769.0}}},{"name":"Mexico","deploys_instantly":["ubuntu_24_04_x64_lts","ubuntu_22_04_x64_lts"],"locations":{"available":["MEX2"],"in_stock":["MEX2"]},"stock_level":"high","pricing":{"USD":{"hour":0.3,"month":208.0,"year":1840.0},"BRL":{"hour":1.49,"month":1033.0,"year":9137.0}}},{"name":"United States","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["CHI","ASH","DAL","MIA2","LAX","NYC","MIA"],"in_stock":["CHI","DAL","MIA2","LAX","NYC"]},"stock_level":"high","pricing":{"USD":{"hour":0.21,"month":146.0,"year":1288.0},"BRL":{"hour":1.05,"month":728.0,"year":6439.0}}},{"name":"Colombia","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["BGT"],"in_stock":["BGT"]},"stock_level":"low","pricing":{"USD":{"hour":0.3,"month":208.0,"year":1840.0},"BRL":{"hour":1.49,"month":1033.0,"year":9137.0}}},{"name":"Japan","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["TYO","TYO3","TYO2"],"in_stock":["TYO","TYO3","TYO2"]},"stock_level":"high","pricing":{"USD":{"hour":0.22,"month":153.0,"year":1349.0},"BRL":{"hour":1.08,"month":749.0,"year":6623.0}}},{"name":"United Kingdom","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["LON","LON2"],"in_stock":["LON2"]},"stock_level":"high","pricing":{"USD":{"hour":0.21,"month":146.0,"year":1288.0},"BRL":{"hour":1.05,"month":728.0,"year":6439.0}}},{"name":"Argentina","deploys_instantly":[],"locations":{"available":["BUE"],"in_stock":[]},"stock_level":"unavailable","pricing":{"USD":{"hour":0.29,"month":201.0,"year":1778.0},"BRL":{"hour":1.43,"month":992.0,"year":8769.0}}},{"name":"Brazil","deploys_instantly":["ubuntu_24_04_x64_lts","ubuntu_22_04_x64_lts"],"locations":{"available":["SAO2","SAO"],"in_stock":["SAO2","SAO"]},"stock_level":"high","pricing":{"USD":{"hour":0.22,"month":153.0,"year":1349.0},"BRL":{"hour":1.08,"month":749.0,"year":6623.0}}}]}}],"meta":{}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5ced98edc16d42-GIG
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 19 Aug 2024 20:35:06 GMT
+            Etag:
+                - W/"96794eb82fa96e6cfe6724ba05c8fa6b"
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=VXMXVd4AyXOGQXpAo29zEoh5UeScpY%2BA%2FEwVOE3tlzhuBN8ruz5DWSm369mAPQ44U6m9ghpNG9%2FQjUeWbAXWTQtQZf58VlX%2BzjC2ijyzFrx5c0VwoGx%2FvptEF34u1SKb5A%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - 839e35e7-4b3f-4172-a253-45f0034704eb
+            X-Runtime:
+                - "0.240123"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 674.093417ms
+    - id: 2
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/plans?filter%5Bname%5D=c2.small.x86
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"plan_2X6KG5mA5yPBM","type":"plans","attributes":{"slug":"c2-small-x86","name":"c2.small.x86","features":["ssh","user_data"],"specs":{"cpu":{"type":"E-2134G","clock":3.5,"cores":4,"count":1},"memory":{"total":32},"drives":[{"count":1,"size":"500 GB","type":"SSD"}],"nics":[{"count":1,"type":"1 Gbps"}],"gpu":{}},"regions":[{"name":"Chile","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["SAN3","SAN"],"in_stock":["SAN3","SAN"]},"stock_level":"high","pricing":{"USD":{"hour":0.22,"month":153.0,"year":1349.0},"BRL":{"hour":1.08,"month":749.0,"year":6623.0}}},{"name":"Germany","deploys_instantly":[],"locations":{"available":["FRA"],"in_stock":[]},"stock_level":"unavailable","pricing":{"USD":{"hour":0.21,"month":146.0,"year":1288.0},"BRL":{"hour":1.05,"month":728.0,"year":6439.0}}},{"name":"Australia","deploys_instantly":[],"locations":{"available":["SYD2","SYD"],"in_stock":[]},"stock_level":"unavailable","pricing":{"USD":{"hour":0.29,"month":201.0,"year":1778.0},"BRL":{"hour":1.43,"month":992.0,"year":8769.0}}},{"name":"Mexico","deploys_instantly":["ubuntu_24_04_x64_lts","ubuntu_22_04_x64_lts"],"locations":{"available":["MEX2"],"in_stock":["MEX2"]},"stock_level":"high","pricing":{"USD":{"hour":0.3,"month":208.0,"year":1840.0},"BRL":{"hour":1.49,"month":1033.0,"year":9137.0}}},{"name":"United States","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["CHI","ASH","DAL","MIA2","LAX","NYC","MIA"],"in_stock":["CHI","DAL","MIA2","LAX","NYC"]},"stock_level":"high","pricing":{"USD":{"hour":0.21,"month":146.0,"year":1288.0},"BRL":{"hour":1.05,"month":728.0,"year":6439.0}}},{"name":"Colombia","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["BGT"],"in_stock":["BGT"]},"stock_level":"low","pricing":{"USD":{"hour":0.3,"month":208.0,"year":1840.0},"BRL":{"hour":1.49,"month":1033.0,"year":9137.0}}},{"name":"Japan","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["TYO","TYO3","TYO2"],"in_stock":["TYO","TYO3","TYO2"]},"stock_level":"high","pricing":{"USD":{"hour":0.22,"month":153.0,"year":1349.0},"BRL":{"hour":1.08,"month":749.0,"year":6623.0}}},{"name":"United Kingdom","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["LON","LON2"],"in_stock":["LON2"]},"stock_level":"high","pricing":{"USD":{"hour":0.21,"month":146.0,"year":1288.0},"BRL":{"hour":1.05,"month":728.0,"year":6439.0}}},{"name":"Argentina","deploys_instantly":[],"locations":{"available":["BUE"],"in_stock":[]},"stock_level":"unavailable","pricing":{"USD":{"hour":0.29,"month":201.0,"year":1778.0},"BRL":{"hour":1.43,"month":992.0,"year":8769.0}}},{"name":"Brazil","deploys_instantly":["ubuntu_24_04_x64_lts","ubuntu_22_04_x64_lts"],"locations":{"available":["SAO2","SAO"],"in_stock":["SAO2","SAO"]},"stock_level":"high","pricing":{"USD":{"hour":0.22,"month":153.0,"year":1349.0},"BRL":{"hour":1.08,"month":749.0,"year":6623.0}}}]}}],"meta":{}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5ceda2494d7aa0-GIG
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 19 Aug 2024 20:35:07 GMT
+            Etag:
+                - W/"96794eb82fa96e6cfe6724ba05c8fa6b"
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=ffvbSlDjweo6Vwtmqmgm6NOiUlaHVcpoiwJ6jC%2BuauR8FDjZv16ULFNsSvo54BoQ9a7KU6tr9fV79ZXyd2qnRDNTiV88NqdihBgzTafx9vjzdCHWMwyjLchFE0usMRuATg%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - df19e9b0-9e92-4e2b-b72c-a09c2d8a758b
+            X-Runtime:
+                - "0.270697"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 671.123042ms
+    - id: 3
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/plans?filter%5Bname%5D=c2.small.x86
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"plan_2X6KG5mA5yPBM","type":"plans","attributes":{"slug":"c2-small-x86","name":"c2.small.x86","features":["ssh","user_data"],"specs":{"cpu":{"type":"E-2134G","clock":3.5,"cores":4,"count":1},"memory":{"total":32},"drives":[{"count":1,"size":"500 GB","type":"SSD"}],"nics":[{"count":1,"type":"1 Gbps"}],"gpu":{}},"regions":[{"name":"Chile","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["SAN3","SAN"],"in_stock":["SAN3","SAN"]},"stock_level":"high","pricing":{"USD":{"hour":0.22,"month":153.0,"year":1349.0},"BRL":{"hour":1.08,"month":749.0,"year":6623.0}}},{"name":"Germany","deploys_instantly":[],"locations":{"available":["FRA"],"in_stock":[]},"stock_level":"unavailable","pricing":{"USD":{"hour":0.21,"month":146.0,"year":1288.0},"BRL":{"hour":1.05,"month":728.0,"year":6439.0}}},{"name":"Australia","deploys_instantly":[],"locations":{"available":["SYD2","SYD"],"in_stock":[]},"stock_level":"unavailable","pricing":{"USD":{"hour":0.29,"month":201.0,"year":1778.0},"BRL":{"hour":1.43,"month":992.0,"year":8769.0}}},{"name":"Mexico","deploys_instantly":["ubuntu_24_04_x64_lts","ubuntu_22_04_x64_lts"],"locations":{"available":["MEX2"],"in_stock":["MEX2"]},"stock_level":"high","pricing":{"USD":{"hour":0.3,"month":208.0,"year":1840.0},"BRL":{"hour":1.49,"month":1033.0,"year":9137.0}}},{"name":"United States","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["CHI","ASH","DAL","MIA2","LAX","NYC","MIA"],"in_stock":["CHI","DAL","MIA2","LAX","NYC"]},"stock_level":"high","pricing":{"USD":{"hour":0.21,"month":146.0,"year":1288.0},"BRL":{"hour":1.05,"month":728.0,"year":6439.0}}},{"name":"Colombia","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["BGT"],"in_stock":["BGT"]},"stock_level":"low","pricing":{"USD":{"hour":0.3,"month":208.0,"year":1840.0},"BRL":{"hour":1.49,"month":1033.0,"year":9137.0}}},{"name":"Japan","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["TYO","TYO3","TYO2"],"in_stock":["TYO","TYO3","TYO2"]},"stock_level":"high","pricing":{"USD":{"hour":0.22,"month":153.0,"year":1349.0},"BRL":{"hour":1.08,"month":749.0,"year":6623.0}}},{"name":"United Kingdom","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["LON","LON2"],"in_stock":["LON2"]},"stock_level":"high","pricing":{"USD":{"hour":0.21,"month":146.0,"year":1288.0},"BRL":{"hour":1.05,"month":728.0,"year":6439.0}}},{"name":"Argentina","deploys_instantly":[],"locations":{"available":["BUE"],"in_stock":[]},"stock_level":"unavailable","pricing":{"USD":{"hour":0.29,"month":201.0,"year":1778.0},"BRL":{"hour":1.43,"month":992.0,"year":8769.0}}},{"name":"Brazil","deploys_instantly":["ubuntu_24_04_x64_lts","ubuntu_22_04_x64_lts"],"locations":{"available":["SAO2","SAO"],"in_stock":["SAO2","SAO"]},"stock_level":"high","pricing":{"USD":{"hour":0.22,"month":153.0,"year":1349.0},"BRL":{"hour":1.08,"month":749.0,"year":6623.0}}}]}}],"meta":{}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5cedab6d2ccb1c-GIG
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 19 Aug 2024 20:35:09 GMT
+            Etag:
+                - W/"96794eb82fa96e6cfe6724ba05c8fa6b"
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=7wg%2Bb16XfnSHGR8uQTMAB1eORxJ9B0LUVVtvKI95i5QOeVFmnxoGS2JRrf3VE%2FWaFJyd6HheKgM8K4Ge%2BNOG3JUT6KUB2ymPJ5bEX8CPdoD%2F6akcsv0xC71pmi68XUiZrw%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - ffd8b583-89c8-4963-8fee-1c19db5a07eb
+            X-Runtime:
+                - "0.152841"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 671.809916ms
+    - id: 4
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/plans?filter%5Bname%5D=c2.small.x86
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"plan_2X6KG5mA5yPBM","type":"plans","attributes":{"slug":"c2-small-x86","name":"c2.small.x86","features":["ssh","user_data"],"specs":{"cpu":{"type":"E-2134G","clock":3.5,"cores":4,"count":1},"memory":{"total":32},"drives":[{"count":1,"size":"500 GB","type":"SSD"}],"nics":[{"count":1,"type":"1 Gbps"}],"gpu":{}},"regions":[{"name":"Chile","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["SAN3","SAN"],"in_stock":["SAN3","SAN"]},"stock_level":"high","pricing":{"USD":{"hour":0.22,"month":153.0,"year":1349.0},"BRL":{"hour":1.08,"month":749.0,"year":6623.0}}},{"name":"Germany","deploys_instantly":[],"locations":{"available":["FRA"],"in_stock":[]},"stock_level":"unavailable","pricing":{"USD":{"hour":0.21,"month":146.0,"year":1288.0},"BRL":{"hour":1.05,"month":728.0,"year":6439.0}}},{"name":"Australia","deploys_instantly":[],"locations":{"available":["SYD2","SYD"],"in_stock":[]},"stock_level":"unavailable","pricing":{"USD":{"hour":0.29,"month":201.0,"year":1778.0},"BRL":{"hour":1.43,"month":992.0,"year":8769.0}}},{"name":"Mexico","deploys_instantly":["ubuntu_24_04_x64_lts","ubuntu_22_04_x64_lts"],"locations":{"available":["MEX2"],"in_stock":["MEX2"]},"stock_level":"high","pricing":{"USD":{"hour":0.3,"month":208.0,"year":1840.0},"BRL":{"hour":1.49,"month":1033.0,"year":9137.0}}},{"name":"United States","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["CHI","ASH","DAL","MIA2","LAX","NYC","MIA"],"in_stock":["CHI","DAL","MIA2","LAX","NYC"]},"stock_level":"high","pricing":{"USD":{"hour":0.21,"month":146.0,"year":1288.0},"BRL":{"hour":1.05,"month":728.0,"year":6439.0}}},{"name":"Colombia","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["BGT"],"in_stock":["BGT"]},"stock_level":"low","pricing":{"USD":{"hour":0.3,"month":208.0,"year":1840.0},"BRL":{"hour":1.49,"month":1033.0,"year":9137.0}}},{"name":"Japan","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["TYO","TYO3","TYO2"],"in_stock":["TYO","TYO3","TYO2"]},"stock_level":"high","pricing":{"USD":{"hour":0.22,"month":153.0,"year":1349.0},"BRL":{"hour":1.08,"month":749.0,"year":6623.0}}},{"name":"United Kingdom","deploys_instantly":["ubuntu_24_04_x64_lts"],"locations":{"available":["LON","LON2"],"in_stock":["LON2"]},"stock_level":"high","pricing":{"USD":{"hour":0.21,"month":146.0,"year":1288.0},"BRL":{"hour":1.05,"month":728.0,"year":6439.0}}},{"name":"Argentina","deploys_instantly":[],"locations":{"available":["BUE"],"in_stock":[]},"stock_level":"unavailable","pricing":{"USD":{"hour":0.29,"month":201.0,"year":1778.0},"BRL":{"hour":1.43,"month":992.0,"year":8769.0}}},{"name":"Brazil","deploys_instantly":["ubuntu_24_04_x64_lts","ubuntu_22_04_x64_lts"],"locations":{"available":["SAO2","SAO"],"in_stock":["SAO2","SAO"]},"stock_level":"high","pricing":{"USD":{"hour":0.22,"month":153.0,"year":1349.0},"BRL":{"hour":1.08,"month":749.0,"year":6623.0}}}]}}],"meta":{}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 8b5cedb44ff8cb0b-GIG
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 19 Aug 2024 20:35:10 GMT
+            Etag:
+                - W/"96794eb82fa96e6cfe6724ba05c8fa6b"
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=U94wawUZt%2BAEGTswhAht%2BRpjfFUUb5qV5vAASRGpjUVue2USk7e2faZDKu3CNayfLqDqggAH%2FwOQ3P6awYNnCtN89iOvrnqObpkuZb%2F544pwVgcbiyxsytpJE7zqqDiZCA%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - b8b46183-fd09-47e6-9614-c6730cb819c3
+            X-Runtime:
+                - "0.288304"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 746.134292ms

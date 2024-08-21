@@ -1,0 +1,42 @@
+name: "Run go test"
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      -
+        name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.22.4'
+      - 
+        name: Install dependencies
+        run: go get .
+      - 
+        name: Build
+        run: go build -v ./...
+      - 
+        name: Export Variables and Run Tests
+        run: | 
+          export LATITUDESH_TEST_SSH_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC4y/S9agzMmMyXzSWYbuAuzt7sOKqz3IYZlph5KdNuqcL0JUJBtg1kf1uBpPTlavEZOPUHnN4Qfba5XEqgiEXogaq3PTbvk+Jte2Ui5DaC7bqreA9RlHFGVFxdG3g7PFTj5uddXfc/64m2UFWNxvcAGa11HBwY1UBTWS2k3PH1ZPIY97aHvIbubhBKdZa8DqGm7LKzwQxyx9+/VyRipE5xtwWkFs7AYOFYsFyIUfZy+WxB9+MpoUMQiPMZV9tFOud2mO4jlev442pJBPUnvnucQwwTmunJAih3u8bPLH7JFvbvTZx+rj39veHwwp6600pjZE+ysJsaOlZGejXTNUwDXXYSg/zfBMw5yTBY9otCw9wxvK72pHlJO6lLJbamZjfrOg/AW7I8KS4nZVuKOw3f1b+XA0x+p4aVbyaFaGCML23kckhKZ31berCoR8857pnxXwQPyqF5AicZi1HwfO54mmISRGPkwnc/Tf8gnA9PJao0qceO6YcDZGaU2U+gSo8hSnW9yl4kgsieY8qN5aKWrz8XYXhHutJyi+0MIVjulJ1ZVltgQHorNidQMOG8CPTZDJtyJm6XHzO3WpQC0voWXg+MdV4GYrqowWZc7z/kLSmCYX5UHGto+ZXRgrxzEcor5uW2TR2d+rsMWhLTW+5JgwlqKeXkygXvTrcfFbMdKw=="
+          export LATITUDESH_TEST_USER_DATA_CONTENT=bGF0aXR1ZGVzaCB1c2VyIGRhdGEgZXhhbXBsZQ==
+          export LATITUDESH_TEST_SERVER_ID=sv_PVwea4wdR5B9O
+          export LATITUDESH_TEST_VIRTUAL_NETWORK_ID=vlan_M3Beab6eyaLnb
+          export LATITUDESH_AUTH_TOKEN=test
+          export LATITUDESH_TEST_PROJECT=proj_ogXka9v7m0JdB
+          TF_ACC=1 LATITUDE_TEST_RECORDER=play go test ./... -v -timeout 10m

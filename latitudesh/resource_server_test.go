@@ -14,11 +14,15 @@ const (
 	testServerHostname        = "test"
 	testServerPlan            = "c2-small-x86"
 	testServerSite            = "SAO"
-	testServerOperatingSystem = "ubuntu_22_04_x64_lts"
+	testServerOperatingSystem = "ubuntu_24_04_x64_lts"
 )
 
 func TestAccServer_Basic(t *testing.T) {
 	var server api.Server
+
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -38,7 +42,6 @@ func TestAccServer_Basic(t *testing.T) {
 			},
 		},
 	})
-
 }
 
 func testAccCheckServerDestroy(s *terraform.State) error {

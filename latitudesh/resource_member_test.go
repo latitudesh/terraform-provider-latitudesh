@@ -19,6 +19,10 @@ const (
 func TestAccMember_Basic(t *testing.T) {
 	var Member api.Member
 
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)

@@ -18,6 +18,10 @@ var (
 func TestAccVlanAssignment_Basic(t *testing.T) {
 	var VlanAssignment api.VlanAssignment
 
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)

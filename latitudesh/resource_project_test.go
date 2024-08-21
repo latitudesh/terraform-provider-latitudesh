@@ -12,6 +12,10 @@ import (
 func TestAccProject_Basic(t *testing.T) {
 	var project api.Project
 
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccTokenCheck(t) },
 		Providers:    testAccProviders,
@@ -78,7 +82,8 @@ func testAccCheckProjectBasic() string {
 resource "latitudesh_project" "test_item" {
   name        = "test"
   description = "hello"
-	environment = "Development"
+  environment = "Development"
+  provisioning_type = "on_demand"
 }
 `
 }
