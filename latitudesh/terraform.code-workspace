@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../dev/latitudesh-go"
+		},
+		{
+			"path": "../../dev/terraform-latitudesh-engineering/test"
+		}
+	],
+	"settings": {}
+}

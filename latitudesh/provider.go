@@ -6,7 +6,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	api "github.com/latitudesh/latitudesh-go"
+	latitude "github.com/latitudesh/latitudesh-go"
 )
 
 const (
@@ -25,14 +25,16 @@ func Provider() *schema.Provider {
 			},
 		},
 		ResourcesMap: map[string]*schema.Resource{
-			"latitudesh_project":         resourceProject(),
-			"latitudesh_server":          resourceServer(),
-			"latitudesh_ssh_key":         resourceSSHKey(),
-			"latitudesh_user_data":       resourceUserData(),
-			"latitudesh_virtual_network": resourceVirtualNetwork(),
-			"latitudesh_vlan_assignment": resourceVlanAssignment(),
-			"latitudesh_tag":             resourceTag(),
-			"latitudesh_member":          resourceMember(),
+			"latitudesh_project":             resourceProject(),
+			"latitudesh_server":              resourceServer(),
+			"latitudesh_ssh_key":             resourceSSHKey(),
+			"latitudesh_user_data":           resourceUserData(),
+			"latitudesh_virtual_network":     resourceVirtualNetwork(),
+			"latitudesh_vlan_assignment":     resourceVlanAssignment(),
+			"latitudesh_tag":                 resourceTag(),
+			"latitudesh_member":              resourceMember(),
+			"latitudesh_firewall":            resourceFirewall(),
+			"latitudesh_firewall_assignment": resourceFirewallAssignment(),
 		},
 		DataSourcesMap: map[string]*schema.Resource{
 			"latitudesh_plan":   dataSourcePlan(),
@@ -49,12 +51,12 @@ func providerConfigure(ctx context.Context, d *schema.ResourceData) (interface{}
 	var diags diag.Diagnostics
 
 	if authToken != "" {
-		c := api.NewClientWithAuth("latitudesh", authToken, nil)
+		c := latitude.NewClientWithAuth("latitudesh", authToken, nil)
 		c.UserAgent = fmt.Sprintf("%s/%s", userAgentForProvider, currentVersion)
 
 		return c, diags
 	}
-	c := api.NewClientWithAuth("latitudesh", " ", nil)
+	c := latitude.NewClientWithAuth("latitudesh", " ", nil)
 
 	return c, diags
 }
