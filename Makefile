@@ -4,7 +4,10 @@ NAMESPACE=iac
 NAME=latitudesh
 BINARY=terraform-provider-${NAME}
 VERSION=0.0.1
-OS_ARCH=darwin_amd64
+# Automatically detect OS and architecture
+OS=$(shell go env GOOS)
+ARCH=$(shell go env GOARCH)
+OS_ARCH=$(OS)_$(ARCH)
 
 default: install
 
