@@ -3,6 +3,7 @@ package latitudesh
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -110,7 +111,7 @@ func resourceFirewallRead(ctx context.Context, d *schema.ResourceData, m interfa
 
 	firewall, resp, err := c.Firewalls.Get(firewallID, nil)
 	if err != nil {
-		if resp.StatusCode == http.StatusNotFound {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
 			d.SetId("")
 			return diags
 		}
@@ -118,16 +119,29 @@ func resourceFirewallRead(ctx context.Context, d *schema.ResourceData, m interfa
 		return diag.FromErr(err)
 	}
 
+	if firewall == nil {
+		d.SetId("")
+		return diags
+	}
+
 	if err := d.Set("name", firewall.Name); err != nil {
 		return diag.FromErr(err)
 	}
 
-	if err := d.Set("project", firewall.Project.ID); err != nil {
-		return diag.FromErr(err)
+	if firewall.Project.ID != "" {
+		if err := d.Set("project", firewall.Project.ID); err != nil {
+			return diag.FromErr(err)
+		}
+	} else if projectID, ok := d.GetOk("project"); ok {
+		if err := d.Set("project", projectID); err != nil {
+			return diag.FromErr(err)
+		}
 	}
 
-	if err := d.Set("rules", flattenFirewallRules(firewall.Rules)); err != nil {
-		return diag.FromErr(err)
+	if firewall.Rules != nil {
+		if err := d.Set("rules", flattenFirewallRules(firewall.Rules)); err != nil {
+			return diag.FromErr(err)
+		}
 	}
 
 	return diags
@@ -201,11 +215,17 @@ func parseFirewallRules(d *schema.ResourceData) []latitude.FirewallRule {
 func flattenFirewallRules(rules []latitude.FirewallRule) []map[string]interface{} {
 	result := make([]map[string]interface{}, 0, len(rules))
 	for _, rule := range rules {
+		from := rule.From
+
+		to := rule.To
+
+		protocol := strings.ToLower(rule.Protocol)
+
 		result = append(result, map[string]interface{}{
-			"from":     rule.From,
-			"to":       rule.To,
+			"from":     from,
+			"to":       to,
 			"port":     rule.Port,
-			"protocol": rule.Protocol,
+			"protocol": protocol,
 			"default":  rule.Default,
 		})
 	}

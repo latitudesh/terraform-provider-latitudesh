@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
@@ -89,16 +90,15 @@ func testAccCheckFirewallExists(n string, firewall *api.Firewall) resource.TestC
 }
 
 func testAccCheckLatitudeFirewallConfig_basic() string {
-	return `
-resource "latitudesh_project" "test" {
-  name = "test-project-for-firewall"
-  environment = "Development"
-  provisioning_type = "on_demand"
-}
+	projectID := os.Getenv("LATITUDESH_TEST_PROJECT")
+	if projectID == "" {
+		projectID = "test-project-id" // fallback for VCR mode
+	}
 
+	return fmt.Sprintf(`
 resource "latitudesh_firewall" "test" {
   name = "test-firewall"
-  project = latitudesh_project.test.id
+  project = "%s"
   rules {
     from = "0.0.0.0/0"
     to = "server"
@@ -118,5 +118,5 @@ resource "latitudesh_firewall" "test" {
     protocol = "tcp"
   }
 }
-`
+`, projectID)
 }

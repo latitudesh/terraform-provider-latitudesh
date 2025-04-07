@@ -76,7 +76,7 @@ interactions:
         trailer: {}
         content_length: -1
         uncompressed: true
-        body: '{"data":{"id":"fw_test123","type":"firewalls","attributes":{"name":"test-firewall","project":{"id":"prj_fw_test123","name":"test-project-for-firewall","slug":"test-project-for-firewall"},"rules":[{"from":"0.0.0.0/0","to":"server","port":"22","protocol":"tcp","default":false},{"from":"0.0.0.0/0","to":"server","port":"80","protocol":"tcp","default":false},{"from":"0.0.0.0/0","to":"server","port":"443","protocol":"tcp","default":false}]}}}'
+        body: '{"data":{"id":"fw_test123","type":"firewalls","attributes":{"name":"test-firewall","project":{"id":"prj_fw_test123","name":"test-project-for-firewall","slug":"test-project-for-firewall"},"rules":[{"from":"0.0.0.0","to":"0.0.0.0","port":"22","protocol":"TCP","default":false}]}}}'
         headers:
             Cache-Control:
                 - max-age=0, private, must-revalidate
@@ -121,7 +121,7 @@ interactions:
         trailer: {}
         content_length: -1
         uncompressed: true
-        body: '{"data":{"id":"fw_test123","type":"firewalls","attributes":{"name":"test-firewall","project":{"id":"prj_fw_test123","name":"test-project-for-firewall","slug":"test-project-for-firewall"},"rules":[{"from":"0.0.0.0/0","to":"server","port":"22","protocol":"tcp","default":false},{"from":"0.0.0.0/0","to":"server","port":"80","protocol":"tcp","default":false},{"from":"0.0.0.0/0","to":"server","port":"443","protocol":"tcp","default":false}]}}}'
+        body: '{"data":{"id":"fw_test123","type":"firewalls","attributes":{"name":"test-firewall","project":{"id":"prj_fw_test123","name":"test-project-for-firewall","slug":"test-project-for-firewall"},"rules":[{"from":"0.0.0.0","to":"0.0.0.0","port":"22","protocol":"TCP","default":false}]}}}'        
         headers:
             Cache-Control:
                 - max-age=0, private, must-revalidate

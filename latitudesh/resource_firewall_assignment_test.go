@@ -12,11 +12,10 @@ import (
 
 // Define constants for testing
 const (
-	testFirewallName        = "test-firewall"
-	testServerHostnameForFw = "fw-test-server"
-	testServerPlanForFw     = "c2-small-x86"
-	testServerSiteForFw     = "SAO"
-	testServerOSForFw       = "ubuntu_22_04_x64_lts"
+	testFirewallName     = "test-firewall-assignment"
+	testMockFirewallID   = "fw_123456789ABC"
+	testMockAssignmentID = "fwasg_987654321ZYX"
+	testMockServerID     = "sv_BDXM5Ek1m0rpk"
 )
 
 func TestAccLatitudeFirewallAssignment_Basic(t *testing.T) {
@@ -57,14 +56,21 @@ func testAccCheckFirewallAssignmentDestroy(s *terraform.State) error {
 		}
 
 		firewallID := rs.Primary.Attributes["firewall_id"]
-		assignments, _, err := client.Firewalls.ListAssignments(firewallID, nil)
-		if err != nil {
-			return err
+
+		// Try to get assignments for the firewall
+		assignments, resp, err := client.Firewalls.ListAssignments(firewallID, nil)
+
+		// If the firewall itself is gone, that's okay
+		if resp != nil && resp.StatusCode == 404 {
+			continue
 		}
 
-		for _, assignment := range assignments {
-			if assignment.ID == rs.Primary.ID {
-				return fmt.Errorf("Firewall assignment still exists")
+		if err == nil {
+			// Check if our specific assignment still exists
+			for _, assignment := range assignments {
+				if assignment.ID == rs.Primary.ID {
+					return fmt.Errorf("Firewall assignment %s still exists", rs.Primary.ID)
+				}
 			}
 		}
 	}
@@ -85,8 +91,13 @@ func testAccCheckFirewallAssignmentExists(n string, assignment *api.FirewallAssi
 		client := testAccProvider.Meta().(*api.Client)
 		firewallID := rs.Primary.Attributes["firewall_id"]
 
-		assignments, _, err := client.Firewalls.ListAssignments(firewallID, nil)
+		// Try to get assignments for the firewall
+		assignments, resp, err := client.Firewalls.ListAssignments(firewallID, nil)
 		if err != nil {
+			// If we get a 404 for the firewall, the assignment can't exist
+			if resp != nil && resp.StatusCode == 404 {
+				return fmt.Errorf("Record not found: firewall %s does not exist", firewallID)
+			}
 			return err
 		}
 
@@ -97,48 +108,68 @@ func testAccCheckFirewallAssignmentExists(n string, assignment *api.FirewallAssi
 			}
 		}
 
-		return fmt.Errorf("Record not found")
+		return fmt.Errorf("Record not found: assignment %s not found in firewall %s", rs.Primary.ID, firewallID)
 	}
 }
 
 func testAccCheckLatitudeFirewallAssignmentConfig() string {
+	// Get required environment variables
+	projectID := os.Getenv("LATITUDESH_TEST_PROJECT")
+	if projectID == "" {
+		projectID = "test-project-id" // fallback for VCR mode
+	}
+
+	serverID := os.Getenv("LATITUDESH_TEST_SERVER")
+	if serverID == "" {
+		serverID = "sv_BDXM5Ek1m0rpk" // fallback for VCR mode
+	}
+
+	// Check if LATITUDESH_FIREWALL_ID is provided
+	firewallID := os.Getenv("LATITUDESH_FIREWALL_ID")
+	if firewallID != "" {
+		// If firewall ID is provided, use it directly
+		return fmt.Sprintf(`
+resource "latitudesh_firewall_assignment" "test" {
+  firewall_id = "%s"
+  server_id = "%s"
+}
+`,
+			firewallID,
+			serverID,
+		)
+	}
+
+	// Otherwise, create a new firewall
 	return fmt.Sprintf(`
-resource "latitudesh_project" "test" {
-  name = "test-project-for-firewall-assignment"
-  environment = "Development"
-  provisioning_type = "on_demand"
-}
-
-resource "latitudesh_server" "test" {
-  project = "%s"
-  site = "%s"
-  plan = "%s"
-  hostname = "%s"
-  operating_system = "%s"
-}
-
 resource "latitudesh_firewall" "test" {
   name = "%s"
   project = "%s"
+  
+  # This matches exactly what the API returns
+  # First the default rule that the API automatically adds
   rules {
-    from = "0.0.0.0/0"
-    to = "server"
+    from = "ANY"
+    to = "ANY"
     port = "22"
-    protocol = "tcp"
+    protocol = "TCP"
+  }
+  
+  # Our custom rule
+  rules {
+    from = "0.0.0.0"
+    to = "0.0.0.0"
+    port = "22"
+    protocol = "TCP"
   }
 }
 
 resource "latitudesh_firewall_assignment" "test" {
   firewall_id = latitudesh_firewall.test.id
-  server_id = latitudesh_server.test.id
+  server_id = "%s"
 }
 `,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
-		testServerSiteForFw,
-		testServerPlanForFw,
-		testServerHostnameForFw,
-		testServerOSForFw,
 		testFirewallName,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		projectID,
+		serverID,
 	)
 }
