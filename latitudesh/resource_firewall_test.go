@@ -11,6 +11,11 @@ import (
 )
 
 func TestAccLatitudeFirewall_Basic(t *testing.T) {
+	// Skip if LATITUDESH_FIREWALL_ID is set
+	if os.Getenv("LATITUDESH_FIREWALL_ID") != "" {
+		t.Skip("Skipping TestAccLatitudeFirewall_Basic because LATITUDESH_FIREWALL_ID is set")
+	}
+
 	var firewall api.Firewall
 
 	recorder, teardown := createTestRecorder(t)
@@ -99,23 +104,25 @@ func testAccCheckLatitudeFirewallConfig_basic() string {
 resource "latitudesh_firewall" "test" {
   name = "test-firewall"
   project = "%s"
+  # Default rule - API will automatically add this
   rules {
-    from = "0.0.0.0/0"
-    to = "server"
+    from = "ANY"
+    to = "ANY"
     port = "22"
-    protocol = "tcp"
+    protocol = "TCP"
   }
+  # Custom rules
   rules {
-    from = "0.0.0.0/0" 
-    to = "server"
+    from = "0.0.0.0" 
+    to = "0.0.0.0"
     port = "80"
-    protocol = "tcp"
+    protocol = "TCP"
   }
   rules {
-    from = "0.0.0.0/0"
-    to = "server" 
+    from = "0.0.0.0"
+    to = "0.0.0.0" 
     port = "443"
-    protocol = "tcp"
+    protocol = "TCP"
   }
 }
 `, projectID)

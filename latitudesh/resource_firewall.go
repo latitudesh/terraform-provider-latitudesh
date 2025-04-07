@@ -3,7 +3,6 @@ package latitudesh
 import (
 	"context"
 	"net/http"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -216,10 +215,8 @@ func flattenFirewallRules(rules []latitude.FirewallRule) []map[string]interface{
 	result := make([]map[string]interface{}, 0, len(rules))
 	for _, rule := range rules {
 		from := rule.From
-
 		to := rule.To
-
-		protocol := strings.ToLower(rule.Protocol)
+		protocol := rule.Protocol
 
 		result = append(result, map[string]interface{}{
 			"from":     from,

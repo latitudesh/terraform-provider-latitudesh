@@ -145,8 +145,7 @@ resource "latitudesh_firewall" "test" {
   name = "%s"
   project = "%s"
   
-  # This matches exactly what the API returns
-  # First the default rule that the API automatically adds
+  # Default rule - API will automatically add this
   rules {
     from = "ANY"
     to = "ANY"
@@ -154,7 +153,7 @@ resource "latitudesh_firewall" "test" {
     protocol = "TCP"
   }
   
-  # Our custom rule
+  # Custom rule
   rules {
     from = "0.0.0.0"
     to = "0.0.0.0"
