@@ -1,0 +1,79 @@
+---
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 150
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: |
+            {"data":{"type":"projects","attributes":{"name":"test-project-for-firewall-assignment","provisioning_type":"on_demand","environment":"Development"}}}
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            Content-Type:
+                - application/json
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/projects
+        method: POST
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: 191
+        uncompressed: false
+        body: '{"errors":[{"code":"PROJECT_CREATION_ERROR","status":"bad_request","title":"Project Creation Error","detail":"A project with the same name already exists. Please use a new name.","meta":{}}]}'
+        headers:
+            Cache-Control:
+                - no-cache
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 92ca245689fa012f-GRU
+            Content-Length:
+                - "191"
+            Content-Type:
+                - application/json; charset=utf-8
+            Date:
+                - Mon, 07 Apr 2025 14:16:18 GMT
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=aHCglYEgVLGGECgWuuz9cOGEpwq37DpGkzCXl3SA9u6cLVVzFCHFYlYcKgjM3Me4coWK0INGO9TUNMWypxtdmWsCbbG65Tiog3y%2F82xNrzRZxag7hBlW1Q%2FsVubPfRScKBeN89kXx5KGM7JtTA%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Server-Timing:
+                - cfL4;desc="?proto=TCP&rtt=30026&min_rtt=27206&rtt_var=9433&sent=7&recv=10&lost=0&retrans=0&sent_bytes=3176&recv_bytes=786&delivery_rate=131192&cwnd=253&unsent_bytes=0&cid=72ec85a3efe49b31&ts=1073&x=0"
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin, Accept-Encoding
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Request-Id:
+                - 04457a95-a359-40af-ac2e-6365fbe17968
+            X-Runtime:
+                - "0.651666"
+            X-Xss-Protection:
+                - "0"
+        status: 400 Bad Request
+        code: 400
+        duration: 1.134431458s

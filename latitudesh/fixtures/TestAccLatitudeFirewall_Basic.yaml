@@ -1,0 +1,228 @@
+---
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/projects
+        method: POST
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":{"id":"prj_fw_test123","type":"projects","attributes":{"slug":"test-project-for-firewall","name":"test-project-for-firewall","description":null,"environment":"Development","provisioning_type":"on_demand"}}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 20 Aug 2024 15:20:25 GMT
+            Status:
+                - 201 Created
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+        status: 201 Created
+        code: 201
+        duration: 500ms
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/firewalls
+        method: POST
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":{"id":"fw_test123","type":"firewalls","attributes":{"name":"test-firewall","project":{"id":"prj_fw_test123","name":"test-project-for-firewall","slug":"test-project-for-firewall"},"rules":[{"from":"0.0.0.0/0","to":"server","port":"22","protocol":"tcp","default":false},{"from":"0.0.0.0/0","to":"server","port":"80","protocol":"tcp","default":false},{"from":"0.0.0.0/0","to":"server","port":"443","protocol":"tcp","default":false}]}}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 20 Aug 2024 15:20:26 GMT
+            Status:
+                - 201 Created
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+        status: 201 Created
+        code: 201
+        duration: 500ms
+    - id: 2
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/firewalls/fw_test123
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":{"id":"fw_test123","type":"firewalls","attributes":{"name":"test-firewall","project":{"id":"prj_fw_test123","name":"test-project-for-firewall","slug":"test-project-for-firewall"},"rules":[{"from":"0.0.0.0/0","to":"server","port":"22","protocol":"tcp","default":false},{"from":"0.0.0.0/0","to":"server","port":"80","protocol":"tcp","default":false},{"from":"0.0.0.0/0","to":"server","port":"443","protocol":"tcp","default":false}]}}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 20 Aug 2024 15:20:27 GMT
+            Status:
+                - 200 OK
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+        status: 200 OK
+        code: 200
+        duration: 500ms
+    - id: 3
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/firewalls/fw_test123
+        method: DELETE
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: ''
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 20 Aug 2024 15:20:28 GMT
+            Status:
+                - 204 No Content
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+        status: 204 No Content
+        code: 204
+        duration: 500ms
+    - id: 4
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/projects/prj_fw_test123
+        method: DELETE
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: ''
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Mon, 20 Aug 2024 15:20:29 GMT
+            Status:
+                - 204 No Content
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+        status: 204 No Content
+        code: 204
+        duration: 500ms 
