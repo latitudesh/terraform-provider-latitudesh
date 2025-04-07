@@ -39,4 +39,5 @@ jobs:
           export LATITUDESH_TEST_VIRTUAL_NETWORK_ID=vlan_M3Beab6eyaLnb
           export LATITUDESH_AUTH_TOKEN=test
           export LATITUDESH_TEST_PROJECT=proj_ogXka9v7m0JdB
+          export LATITUDESH_FIREWALL_ID=fw_y3ZXaD7n5p2ml
           TF_ACC=1 LATITUDE_TEST_RECORDER=play go test ./... -v -timeout 10m
