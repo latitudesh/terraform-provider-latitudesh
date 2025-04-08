@@ -69,7 +69,7 @@ func resourceFirewallAssignmentRead(ctx context.Context, d *schema.ResourceData,
 
 	assignments, resp, err := c.Firewalls.ListAssignments(firewallID, nil)
 	if err != nil {
-		if resp.StatusCode == http.StatusNotFound {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
 			d.SetId("")
 			return diags
 		}
