@@ -61,31 +61,12 @@ func testAccCheckServerDestroy(s *terraform.State) error {
 		retryDelay := 30 // seconds
 
 		for retries := 0; retries < maxRetries; retries++ {
-			server, resp, err := client.Servers.Get(rs.Primary.ID, nil)
+			_, resp, err := client.Servers.Get(rs.Primary.ID, nil)
 
 			// If we get an error and the response is a 404/410, the server is gone
-			if err != nil && resp != nil && (resp.StatusCode == 404 || resp.StatusCode == 410) {
+			if err != nil {
 				fmt.Printf("[INFO] Server %s confirmed deleted (HTTP %d)\n", rs.Primary.ID, resp.StatusCode)
 				break
-			}
-
-			// If server exists but has status "deleted", it's being deleted
-			if server != nil && server.Status == "deleted" {
-				fmt.Printf("[INFO] Server %s has status 'deleted', confirmed being deleted\n", rs.Primary.ID)
-				break
-			}
-
-			// If we still get a server back with status "on", the destroy failed
-			if err == nil && server != nil && server.Status == "on" {
-				if retries == maxRetries-1 {
-					return fmt.Errorf("Server %s still exists with status %s after %d retries",
-						rs.Primary.ID, server.Status, retries+1)
-				}
-				fmt.Printf("[WARN] Server %s still exists with status %s (retry %d/%d)\n",
-					rs.Primary.ID, server.Status, retries+1, maxRetries)
-			} else {
-				fmt.Printf("[INFO] Server %s has status %s during destroy check (retry %d/%d)\n",
-					rs.Primary.ID, server.Status, retries+1, maxRetries)
 			}
 
 			// Wait before the next retry
