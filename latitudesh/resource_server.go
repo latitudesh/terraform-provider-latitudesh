@@ -2,7 +2,9 @@ package latitudesh
 
 import (
 	"context"
-	"net/http"
+	"errors"
+	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -10,6 +12,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	api "github.com/latitudesh/latitudesh-go"
 )
+
+var ErrServerDeleted = errors.New("server was removed during provisioning due to failure")
 
 var triggerReinstall = []string{
 	"operating_system",
@@ -161,7 +165,43 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 		return diag.FromErr(err)
 	}
 
+	// Store original server ID for error reporting in case server is deleted
+	originalServerID := server.ID
+
+	// Set the resource ID in Terraform state
 	d.SetId(server.ID)
+
+	log.Printf("[INFO] Server %s created, waiting for provisioning to complete", server.ID)
+
+	err = waitForServerProvisioning(ctx, d, c)
+
+	if err != nil {
+		return diag.Diagnostics{
+			diag.Diagnostic{
+				Severity: diag.Error,
+				Summary:  "Server provisioning failed",
+				Detail:   fmt.Sprintf("Server '%s' was deleted during provisioning. This likely indicates a provisioning failure on the Latitude.sh platform. The server is no longer in your account and will be recreated on the next apply.", originalServerID),
+			},
+		}
+	}
+
+	log.Printf("[INFO] Server %s provisioning completed successfully", server.ID)
+
+	updatedServer, resp, err := c.Servers.Get(server.ID, nil)
+	if err != nil || resp == nil || resp.StatusCode != 200 || updatedServer == nil {
+		log.Printf("[ERROR] Server %s verification check failed after provisioning", server.ID)
+		d.SetId("")
+		return diag.Diagnostics{
+			diag.Diagnostic{
+				Severity: diag.Error,
+				Summary:  "Server verification failed",
+				Detail:   fmt.Sprintf("Server '%s' could not be verified after provisioning completed. Please check your Latitude.sh dashboard.", originalServerID),
+			},
+		}
+	}
+
+	// Use the updated server for setting attributes
+	server = updatedServer
 
 	if err := d.Set("hostname", &server.Hostname); err != nil {
 		return diag.FromErr(err)
@@ -176,12 +216,6 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 	if _, defined := d.GetOk("tags"); defined {
 		ctx := context.WithValue(ctx, "justCreated", true)
 		resourceServerUpdate(ctx, d, m)
-	}
-
-	// Get server to fill information that isn't returned by create
-	server, _, err = c.Servers.Get(server.ID, nil)
-	if err != nil {
-		return diag.FromErr(err)
 	}
 
 	// server.Project.ID is an interface{} type so we should verify before using
@@ -223,18 +257,29 @@ func resourceServerRead(ctx context.Context, d *schema.ResourceData, m interface
 	var diags diag.Diagnostics
 
 	serverID := d.Id()
+	log.Printf("[DEBUG] Reading server with ID: %s", serverID)
 
 	server, resp, err := c.Servers.Get(serverID, nil)
 	if err != nil {
-		if resp.StatusCode == http.StatusNotFound {
+		// Check if the server was deleted
+		if resp != nil && (resp.StatusCode == 404 || resp.StatusCode == 410) {
+			log.Printf("[WARN] Server %s not found (status code: %d), removing from state", serverID, resp.StatusCode)
 			d.SetId("")
-			return diags
+			return diag.Diagnostics{}
 		}
 
-		return diag.FromErr(err)
+		return diag.Errorf("error retrieving server: %s", err)
 	}
 
-	// server.Project.ID is an interface{} type so we should verify before using
+	if server.Status != "on" && server.Status != "inventory" {
+		log.Printf("[WARN] Server %s has unusual status: %s", serverID, server.Status)
+		diags = append(diags, diag.Diagnostic{
+			Severity: diag.Warning,
+			Summary:  fmt.Sprintf("Server has unusual status: %s", server.Status),
+			Detail:   fmt.Sprintf("The server exists but its status indicates it may not be fully operational. Please check your Latitude.sh dashboard for server ID: %s.", serverID),
+		})
+	}
+
 	var serverProjectId string
 	switch server.Project.ID.(type) {
 	case string:
@@ -402,4 +447,64 @@ func parseSSHKeys(d *schema.ResourceData) []string {
 		ssh_keys_slice[i] = ssh_key.(string)
 	}
 	return ssh_keys_slice
+}
+
+func waitForServerProvisioning(ctx context.Context, d *schema.ResourceData, client *api.Client) error {
+	serverID := d.Id()
+	timeoutMinutes := 30
+	iterationSeconds := 30
+	maxIterations := (timeoutMinutes * 60) / iterationSeconds
+	requiredConsecutiveSuccesses := 3
+	consecutiveSuccessCount := 0
+
+	expectedProject := d.Get("project").(string)
+	expectedOS := d.Get("operating_system").(string)
+
+	log.Printf("[INFO] Waiting for server %s to be provisioned, checking every %d seconds with timeout of %d minutes",
+		serverID, iterationSeconds, timeoutMinutes)
+
+	for i := 0; i < maxIterations; i++ {
+		server, resp, err := client.Servers.Get(serverID, nil)
+
+		if err != nil {
+			d.SetId("")
+			return fmt.Errorf("server %s was deleted during provisioning (HTTP %d response)",
+				serverID, resp.StatusCode)
+		}
+
+		log.Printf("[INFO] Server %s status: %s (attempt %d/%d)",
+			serverID, server.Status, i+1, maxIterations)
+
+		serverProjectID := server.Project.ID.(string)
+
+		if server.Status == "on" &&
+			serverProjectID == expectedProject &&
+			server.OperatingSystem.Slug == expectedOS {
+
+			consecutiveSuccessCount++
+			log.Printf("[INFO] Server %s conditions met (%d/%d): status=on, project=%s, os=%s",
+				serverID, consecutiveSuccessCount, requiredConsecutiveSuccesses,
+				serverProjectID, server.OperatingSystem.Slug)
+
+			// Return success only after meeting conditions for required number of consecutive iterations
+			if consecutiveSuccessCount >= requiredConsecutiveSuccesses {
+				log.Printf("[INFO] Server %s is now confirmed stable after %d consecutive successful checks",
+					serverID, requiredConsecutiveSuccesses)
+				return nil
+			}
+		} else {
+			if consecutiveSuccessCount > 0 {
+				d.SetId("")
+				return fmt.Errorf("server %s was deleted during provisioning (HTTP %d response)",
+					serverID, resp.StatusCode)
+			}
+		}
+
+		time.Sleep(time.Duration(iterationSeconds) * time.Second)
+	}
+
+	log.Printf("[ERROR] Timeout reached waiting for server %s to be provisioned after %d minutes",
+		serverID, timeoutMinutes)
+	return fmt.Errorf("timeout reached waiting for server %s to be provisioned after %d minutes",
+		serverID, timeoutMinutes)
 }
