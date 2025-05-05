@@ -13,7 +13,7 @@ interactions:
         remote_addr: ""
         request_uri: ""
         body: |
-            {"data":{"type":"virtual_network_assignment","attributes":{"server_id":"sv_PVwea4wdR5B9O","virtual_network_id":"vlan_M3Beab6eyaLnb"}}}
+            {"data":{"type":"virtual_network_assignment","attributes":{"server_id":"sv_ZWr75Zbjr5A91","virtual_network_id":"vlan_BDXM5E1Yo5rpk"}}}
         form: {}
         headers:
             Api-Version:
@@ -32,32 +32,34 @@ interactions:
         proto_minor: 0
         transfer_encoding: []
         trailer: {}
-        content_length: 235
+        content_length: 225
         uncompressed: false
-        body: '{"data":{"id":"vnasg_ewOM5GA3b0p8E","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_M3Beab6eyaLnb","vid":2006,"server_id":"sv_PVwea4wdR5B9O","description":"test-terraform","status":"connecting"}},"meta":{}}'
+        body: '{"data":{"id":"vnasg_PVwea48OkaB9O","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_BDXM5E1Yo5rpk","vid":2123,"server_id":"sv_ZWr75Zbjr5A91","description":"test","status":"connecting"}},"meta":{}}'
         headers:
             Cache-Control:
                 - max-age=0, private, must-revalidate
             Cf-Cache-Status:
                 - DYNAMIC
             Cf-Ray:
-                - 8b5cf0342d3cca93-GIG
+                - 93b3ae025c460176-GRU
             Content-Length:
-                - "235"
+                - "225"
             Content-Type:
                 - application/vnd.api+json; charset=utf-8
             Date:
-                - Mon, 19 Aug 2024 20:36:56 GMT
+                - Mon, 05 May 2025 22:30:03 GMT
             Etag:
-                - W/"535e288e270f254a48b50b01ea6997c7"
+                - W/"87a7b74ead7c6f98423e7ad6c643f080"
             Nel:
                 - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
             Referrer-Policy:
                 - strict-origin-when-cross-origin
             Report-To:
-                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=ZPjagmflVlMUXXnN3bd%2FkYThWWXkoLYAZnj1H7w4iPyqIeLekirqI3t%2FiGGRhtoCNVbJID81zMf0JBr43LWSbC7M6PZsFQNvSV%2BUv8vjXsCqHv2%2B%2FmVGSGSfAxDkSttoCw%3D%3D"}],"group":"cf-nel","max_age":604800}'
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=kSzfkn3iU9Upk3f8fCQKT1C2Nmkt3rF5cgIESNFCFfZ6yBcC1Xgm2ZqlYp5OfQG%2FbhpwDLCGxb78LsXo5kXiaWm0U5nNuRIrrPevak7AWHQc2X1wH9HFWSbDZleMJKyKVLsk1%2FWpZ7H4PEMyfw%3D%3D"}],"group":"cf-nel","max_age":604800}'
             Server:
                 - cloudflare
+            Server-Timing:
+                - cfL4;desc="?proto=TCP&rtt=33011&min_rtt=32088&rtt_var=10532&sent=7&recv=10&lost=0&retrans=0&sent_bytes=3175&recv_bytes=787&delivery_rate=107759&cwnd=253&unsent_bytes=0&cid=34d5c6985c56cc4e&ts=5130&x=0"
             Strict-Transport-Security:
                 - max-age=63072000; includeSubDomains
             Vary:
@@ -71,14 +73,14 @@ interactions:
             X-Powered-By:
                 - cloud66
             X-Request-Id:
-                - 3a26aadf-f691-432c-9911-6465f4be4955
+                - 7a12c360-efde-415b-9a29-5ebfe54b2983
             X-Runtime:
-                - "3.851078"
+                - "4.717939"
             X-Xss-Protection:
                 - "0"
         status: 201 Created
         code: 201
-        duration: 4.346613458s
+        duration: 5.240783417s
     - id: 1
       request:
         proto: HTTP/1.1
@@ -109,28 +111,30 @@ interactions:
         trailer: {}
         content_length: -1
         uncompressed: true
-        body: '{"data":[{"id":"vnasg_ewOM5GA3b0p8E","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_M3Beab6eyaLnb","vid":2006,"description":"test-terraform","status":"connecting","server":{"id":"sv_PVwea4wdR5B9O","hostname":"test-terraform","label":"196S011293","status":"on"}}}],"meta":{}}'
+        body: '{"data":[{"id":"vnasg_PVwea48OkaB9O","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_BDXM5E1Yo5rpk","vid":2123,"description":"test","status":"connecting","server":{"id":"sv_ZWr75Zbjr5A91","hostname":"21BS005889","label":"21BS005889","status":"off"}}}],"meta":{}}'
         headers:
             Cache-Control:
                 - max-age=0, private, must-revalidate
             Cf-Cache-Status:
                 - DYNAMIC
             Cf-Ray:
-                - 8b5cf06afd6ecaee-GIG
+                - 93b3ae443a63a43b-GRU
             Content-Type:
                 - application/vnd.api+json; charset=utf-8
             Date:
-                - Mon, 19 Aug 2024 20:37:01 GMT
+                - Mon, 05 May 2025 22:30:09 GMT
             Etag:
-                - W/"fb63a64be801ff9a1f8d6faa98543f52"
+                - W/"63bae167aee647b0b7f9348a64e71b5d"
             Nel:
                 - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
             Referrer-Policy:
                 - strict-origin-when-cross-origin
             Report-To:
-                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=dv6KMGTa0ptQ2xfSMvhLQbpME2v%2BdkWwKzKqrvDbpCy7qlZ%2BaxyBSSNeFP9cDEuqt940tY5YXLuN8y5yitjgCcpyXXf3Ss0XPzwUfFmcy9QdnI9A3vKFACb5L%2FjgagC%2FNQ%3D%3D"}],"group":"cf-nel","max_age":604800}'
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=cT6F5DchtuUYv2cWv9izXVpi3EYiCVMP%2Fzh8tK%2FiMGqj7HEkzdrVMJSfyDInaTD1iw1FSsUdxpWtqLPWCbw%2FBdrwkb8BlEVHqfkEPneNttWQ5NLrWFml1grJ401%2BiNJFJ44%2Fp%2FQwTsmUw5eUsA%3D%3D"}],"group":"cf-nel","max_age":604800}'
             Server:
                 - cloudflare
+            Server-Timing:
+                - cfL4;desc="?proto=TCP&rtt=34391&min_rtt=31857&rtt_var=9697&sent=8&recv=10&lost=0&retrans=0&sent_bytes=3198&recv_bytes=603&delivery_rate=92593&cwnd=254&unsent_bytes=0&cid=5654ae8e66a654f0&ts=583&x=0"
             Strict-Transport-Security:
                 - max-age=63072000; includeSubDomains
             Vary:
@@ -144,14 +148,14 @@ interactions:
             X-Powered-By:
                 - cloud66
             X-Request-Id:
-                - 410f86a8-8a5d-4605-804c-c0ac9cc221d6
+                - 0c60a217-9e93-4583-b27b-000372e6f56f
             X-Runtime:
-                - "0.050243"
+                - "0.035759"
             X-Xss-Protection:
                 - "0"
         status: 200 OK
         code: 200
-        duration: 219.227958ms
+        duration: 661.988375ms
     - id: 2
       request:
         proto: HTTP/1.1
@@ -182,28 +186,30 @@ interactions:
         trailer: {}
         content_length: -1
         uncompressed: true
-        body: '{"data":[{"id":"vnasg_ewOM5GA3b0p8E","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_M3Beab6eyaLnb","vid":2006,"description":"test-terraform","status":"connecting","server":{"id":"sv_PVwea4wdR5B9O","hostname":"test-terraform","label":"196S011293","status":"on"}}}],"meta":{}}'
+        body: '{"data":[{"id":"vnasg_PVwea48OkaB9O","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_BDXM5E1Yo5rpk","vid":2123,"description":"test","status":"connecting","server":{"id":"sv_ZWr75Zbjr5A91","hostname":"21BS005889","label":"21BS005889","status":"off"}}}],"meta":{}}'
         headers:
             Cache-Control:
                 - max-age=0, private, must-revalidate
             Cf-Cache-Status:
                 - DYNAMIC
             Cf-Ray:
-                - 8b5cf06e8f866d5a-GIG
+                - 93b3ae4d7e56794f-GRU
             Content-Type:
                 - application/vnd.api+json; charset=utf-8
             Date:
-                - Mon, 19 Aug 2024 20:37:02 GMT
+                - Mon, 05 May 2025 22:30:11 GMT
             Etag:
-                - W/"fb63a64be801ff9a1f8d6faa98543f52"
+                - W/"63bae167aee647b0b7f9348a64e71b5d"
             Nel:
                 - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
             Referrer-Policy:
                 - strict-origin-when-cross-origin
             Report-To:
-                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=Dar%2BsGntGUh6f9bG3vZHvzaCgB0QmwAarAZTy8on4VBlVFjpRgDxDHz4qOA4WVbjtTtfjVnoIJpWaUXlYNvmZqdcbueo4TuD4ozarncs6TXq24Nu1eSDyljYBTuBMpEXMg%3D%3D"}],"group":"cf-nel","max_age":604800}'
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=UTPNVnuVfpAHKdUhJ6lAFjaNgVOzIB3FxzEQLbnbX6idEBQsoTHTunK5EYFfBT5%2FHlq%2FVDmj0GG5QP2YaZeXFQ1N5kWa5P6BNOVIeR5CfuKySNZuJhbqmCF7PobZxm2%2BS1UPG4woQzLVBxZOxQ%3D%3D"}],"group":"cf-nel","max_age":604800}'
             Server:
                 - cloudflare
+            Server-Timing:
+                - cfL4;desc="?proto=TCP&rtt=30528&min_rtt=30201&rtt_var=9142&sent=7&recv=9&lost=0&retrans=0&sent_bytes=3175&recv_bytes=603&delivery_rate=133386&cwnd=253&unsent_bytes=0&cid=78c369519947e98c&ts=538&x=0"
             Strict-Transport-Security:
                 - max-age=63072000; includeSubDomains
             Vary:
@@ -217,14 +223,14 @@ interactions:
             X-Powered-By:
                 - cloud66
             X-Request-Id:
-                - b3336653-abe1-4088-b569-784c5041ac54
+                - 8115e4cf-6379-4512-b104-845bce7fa744
             X-Runtime:
-                - "0.040515"
+                - "0.042072"
             X-Xss-Protection:
                 - "0"
         status: 200 OK
         code: 200
-        duration: 643.678042ms
+        duration: 602.555584ms
     - id: 3
       request:
         proto: HTTP/1.1
@@ -247,7 +253,7 @@ interactions:
                 - application/json
             User-Agent:
                 - Latitude-Terraform-Provider/1.2.0
-        url: https://api.latitude.sh/virtual_networks/assignments/vnasg_ewOM5GA3b0p8E
+        url: https://api.latitude.sh/virtual_networks/assignments/vnasg_PVwea48OkaB9O
         method: DELETE
       response:
         proto: HTTP/2.0
@@ -264,17 +270,19 @@ interactions:
             Cf-Cache-Status:
                 - DYNAMIC
             Cf-Ray:
-                - 8b5cf07799b964d3-GIG
+                - 93b3ae565a4af233-GRU
             Date:
-                - Mon, 19 Aug 2024 20:37:06 GMT
+                - Mon, 05 May 2025 22:30:20 GMT
             Nel:
                 - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
             Referrer-Policy:
                 - strict-origin-when-cross-origin
             Report-To:
-                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=LtJduLXQ1xkKmhxO630yi9PwjOV%2BVxpKCfS%2FVfnZQbbb2JyHEGLrKYb3cwv81wT4QddH8RbJ4LCPvcyYML9lMU7GBKuBsJj54SKw1NuVZBR5A7tjcn71Kp6yNN6%2BmOXgMQ%3D%3D"}],"group":"cf-nel","max_age":604800}'
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=0rrLhQ4mzkCfRMbuNBs5a7hIEtY3PxDN%2Fgpl9uhtEgjUT%2F6pi74Kl8koigEN0UPA12%2BYdP7rCI1pkkQtxWha5UA53u4OmmTtjZUnyJDKthb%2BxhJX%2Bs3CNRD68jB1b7azkIaTWBR6ldJ3%2FMzVFw%3D%3D"}],"group":"cf-nel","max_age":604800}'
             Server:
                 - cloudflare
+            Server-Timing:
+                - cfL4;desc="?proto=TCP&rtt=27313&min_rtt=26826&rtt_var=8317&sent=7&recv=9&lost=0&retrans=0&sent_bytes=3176&recv_bytes=638&delivery_rate=134504&cwnd=253&unsent_bytes=0&cid=388033a61278a3c4&ts=8535&x=0"
             Strict-Transport-Security:
                 - max-age=63072000; includeSubDomains
             Vary:
@@ -288,14 +296,14 @@ interactions:
             X-Powered-By:
                 - cloud66
             X-Request-Id:
-                - 949e8aa5-49f7-4c66-816a-a2cfe69baa5d
+                - 1d6c3626-c968-4b38-b877-e3b095e9b407
             X-Runtime:
-                - "2.898463"
+                - "8.140617"
             X-Xss-Protection:
                 - "0"
         status: 204 No Content
         code: 204
-        duration: 3.306629458s
+        duration: 8.592560792s
     - id: 4
       request:
         proto: HTTP/1.1
@@ -333,13 +341,13 @@ interactions:
             Cf-Cache-Status:
                 - DYNAMIC
             Cf-Ray:
-                - 8b5cf0a18af9648b-GIG
+                - 93b3aec24db46272-GRU
             Content-Length:
                 - "21"
             Content-Type:
                 - application/vnd.api+json; charset=utf-8
             Date:
-                - Mon, 19 Aug 2024 20:37:10 GMT
+                - Mon, 05 May 2025 22:30:30 GMT
             Etag:
                 - W/"e5c0644466f49dfb193a225e813eb639"
             Nel:
@@ -347,9 +355,11 @@ interactions:
             Referrer-Policy:
                 - strict-origin-when-cross-origin
             Report-To:
-                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=Wxbseof6Hf2wgZDHuz992ZKRVxfarSSZKfgBmefBLcSv%2B%2BawrUhy2m6fzZWf1uI%2F4YgM75H4GqzvguxQFUXmuGOvMAaVFlvk2zcKpVc6Fhl6%2BfFypPc5Clbg9%2BAwTLgexw%3D%3D"}],"group":"cf-nel","max_age":604800}'
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=rmlbBPFSen2l7pTTWOtUyFp12niFRCyzShgBpLufEUTDJnT4Fgul86fy38yO8YTHq4K3drfLKS2c%2FLhOreRbQgKNwLcdX%2Br%2FxjSJad3XNvwvSPb2CaTVDjqdKvDRJao9tiVxJJoQ58Qd6LezvA%3D%3D"}],"group":"cf-nel","max_age":604800}'
             Server:
                 - cloudflare
+            Server-Timing:
+                - cfL4;desc="?proto=TCP&rtt=39110&min_rtt=32775&rtt_var=11533&sent=7&recv=10&lost=0&retrans=0&sent_bytes=3174&recv_bytes=603&delivery_rate=99684&cwnd=253&unsent_bytes=0&cid=8b3f5e2cee0104c1&ts=576&x=0"
             Strict-Transport-Security:
                 - max-age=63072000; includeSubDomains
             Vary:
@@ -363,11 +373,11 @@ interactions:
             X-Powered-By:
                 - cloud66
             X-Request-Id:
-                - 9e18e749-07c5-4e63-bd90-75bc6a5f8937
+                - f1db8b63-77a5-41eb-8a71-c13abbc41d88
             X-Runtime:
-                - "0.032485"
+                - "0.020013"
             X-Xss-Protection:
                 - "0"
         status: 200 OK
         code: 200
-        duration: 644.04275ms
+        duration: 652.310625ms
