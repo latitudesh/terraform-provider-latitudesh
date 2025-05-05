@@ -165,10 +165,8 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 		return diag.FromErr(err)
 	}
 
-	// Store original server ID for error reporting in case server is deleted
 	originalServerID := server.ID
 
-	// Set the resource ID in Terraform state
 	d.SetId(server.ID)
 
 	log.Printf("[INFO] Server %s created, waiting for provisioning to complete", server.ID)
@@ -200,7 +198,6 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 		}
 	}
 
-	// Use the updated server for setting attributes
 	server = updatedServer
 
 	if err := d.Set("hostname", &server.Hostname); err != nil {
