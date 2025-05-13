@@ -17,6 +17,7 @@ var (
 
 func TestAccVlanAssignment_Basic(t *testing.T) {
 	var VlanAssignment api.VlanAssignment
+	var VlanAssignment2 api.VlanAssignment
 
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
@@ -41,6 +42,17 @@ func TestAccVlanAssignment_Basic(t *testing.T) {
 						"latitudesh_vlan_assignment.test_item", "virtual_network_id", virtual_network_id),
 				),
 			},
+			{
+				Config: testAccCheckVlanAssignmentBasic(),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckVlanAssignmentExists("latitudesh_vlan_assignment.test_item", &VlanAssignment2),
+					resource.TestCheckResourceAttr(
+						"latitudesh_vlan_assignment.test_item", "server_id", server_id),
+					resource.TestCheckResourceAttr(
+						"latitudesh_vlan_assignment.test_item", "virtual_network_id", virtual_network_id),
+					testAccCheckVlanAssignmentIdempotent(&VlanAssignment, &VlanAssignment2),
+				),
+			},
 		},
 	})
 }
@@ -52,8 +64,16 @@ func testAccCheckVlanAssignmentDestroy(s *terraform.State) error {
 		if rs.Type != "latitudesh_vlan_assignment" {
 			continue
 		}
-		if _, _, err := client.VlanAssignments.Get(rs.Primary.ID); err == nil {
-			return fmt.Errorf("Virtual network still exists")
+
+		assignments, _, err := client.VlanAssignments.List(nil)
+		if err != nil {
+			return err
+		}
+
+		for _, assignment := range assignments {
+			if assignment.ID == rs.Primary.ID {
+				return fmt.Errorf("VLAN assignment %s still exists", rs.Primary.ID)
+			}
 		}
 	}
 
@@ -72,16 +92,23 @@ func testAccCheckVlanAssignmentExists(n string, vlanAssignment *api.VlanAssignme
 
 		client := testAccProvider.Meta().(*api.Client)
 
-		foundVlanAssignment, _, err := client.VlanAssignments.Get(rs.Primary.ID)
+		assignments, _, err := client.VlanAssignments.List(nil)
 		if err != nil {
 			return err
 		}
 
-		if foundVlanAssignment.ID != rs.Primary.ID {
-			return fmt.Errorf("Record not found: %v - %v", rs.Primary.ID, foundVlanAssignment)
+		var found bool
+		for _, assignment := range assignments {
+			if assignment.ID == rs.Primary.ID {
+				*vlanAssignment = assignment
+				found = true
+				break
+			}
 		}
 
-		*vlanAssignment = *foundVlanAssignment
+		if !found {
+			return fmt.Errorf("VLAN assignment with ID %s not found", rs.Primary.ID)
+		}
 
 		return nil
 	}
@@ -97,4 +124,13 @@ resource "latitudesh_vlan_assignment" "test_item" {
 		os.Getenv("LATITUDESH_TEST_SERVER_ID"),
 		os.Getenv("LATITUDESH_TEST_VIRTUAL_NETWORK_ID"),
 	)
+}
+
+func testAccCheckVlanAssignmentIdempotent(vlanAssignment1, vlanAssignment2 *api.VlanAssignment) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		if vlanAssignment1.ID != vlanAssignment2.ID {
+			return fmt.Errorf("VlanAssignment IDs are different: %v - %v", vlanAssignment1.ID, vlanAssignment2.ID)
+		}
+		return nil
+	}
 }
