@@ -17,7 +17,6 @@ var (
 
 func TestAccVlanAssignment_Basic(t *testing.T) {
 	var VlanAssignment api.VlanAssignment
-	var VlanAssignment2 api.VlanAssignment
 
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
@@ -42,16 +41,10 @@ func TestAccVlanAssignment_Basic(t *testing.T) {
 						"latitudesh_vlan_assignment.test_item", "virtual_network_id", virtual_network_id),
 				),
 			},
+			// Test idempotency: apply the same config - should have no changes
 			{
-				Config: testAccCheckVlanAssignmentBasic(),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckVlanAssignmentExists("latitudesh_vlan_assignment.test_item", &VlanAssignment2),
-					resource.TestCheckResourceAttr(
-						"latitudesh_vlan_assignment.test_item", "server_id", server_id),
-					resource.TestCheckResourceAttr(
-						"latitudesh_vlan_assignment.test_item", "virtual_network_id", virtual_network_id),
-					testAccCheckVlanAssignmentIdempotent(&VlanAssignment, &VlanAssignment2),
-				),
+				Config:   testAccCheckVlanAssignmentBasic(),
+				PlanOnly: true,
 			},
 		},
 	})
@@ -124,13 +117,4 @@ resource "latitudesh_vlan_assignment" "test_item" {
 		os.Getenv("LATITUDESH_TEST_SERVER_ID"),
 		os.Getenv("LATITUDESH_TEST_VIRTUAL_NETWORK_ID"),
 	)
-}
-
-func testAccCheckVlanAssignmentIdempotent(vlanAssignment1, vlanAssignment2 *api.VlanAssignment) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		if vlanAssignment1.ID != vlanAssignment2.ID {
-			return fmt.Errorf("VlanAssignment IDs are different: %v - %v", vlanAssignment1.ID, vlanAssignment2.ID)
-		}
-		return nil
-	}
 }
