@@ -2,7 +2,6 @@ package latitudesh
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
@@ -10,16 +9,9 @@ import (
 	api "github.com/latitudesh/latitudesh-go"
 )
 
-var (
-	server_id          = os.Getenv("LATITUDESH_TEST_SERVER_ID")
-	virtual_network_id = os.Getenv("LATITUDESH_TEST_VIRTUAL_NETWORK_ID")
-)
-
 func TestAccVlanAssignment_Basic(t *testing.T) {
-	// TODO: Remove this skip when the test is fixed
-	t.Skip("Skipping TestAccVlanAssignment_Basic test temporarily")
-
-	var VlanAssignment api.VlanAssignment
+	serverID := "sv_ZWr75Zbjr5A91"
+	vlanID := "vlan_BDXM5E1Yo5rpk"
 
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
@@ -28,20 +20,16 @@ func TestAccVlanAssignment_Basic(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)
-			testAccServerCheck(t)
-			testAccVirtualNetworkCheck(t)
 		},
 		Providers:    testAccProviders,
 		CheckDestroy: testAccCheckVlanAssignmentDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCheckVlanAssignmentBasic(),
+				Config: testAccVlanAssignmentConfig(serverID, vlanID),
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckVlanAssignmentExists("latitudesh_vlan_assignment.test_item", &VlanAssignment),
-					resource.TestCheckResourceAttr(
-						"latitudesh_vlan_assignment.test_item", "server_id", server_id),
-					resource.TestCheckResourceAttr(
-						"latitudesh_vlan_assignment.test_item", "virtual_network_id", virtual_network_id),
+					testAccCheckVlanAssignmentExists("latitudesh_vlan_assignment.test"),
+					resource.TestCheckResourceAttr("latitudesh_vlan_assignment.test", "server_id", serverID),
+					resource.TestCheckResourceAttr("latitudesh_vlan_assignment.test", "virtual_network_id", vlanID),
 				),
 			},
 		},
@@ -55,49 +43,54 @@ func testAccCheckVlanAssignmentDestroy(s *terraform.State) error {
 		if rs.Type != "latitudesh_vlan_assignment" {
 			continue
 		}
-		if _, _, err := client.VlanAssignments.Get(rs.Primary.ID); err == nil {
-			return fmt.Errorf("Virtual network still exists")
+
+		assignments, _, err := client.VlanAssignments.List(nil)
+		if err != nil {
+			return fmt.Errorf("error fetching VLAN assignments: %s", err)
+		}
+
+		for _, assignment := range assignments {
+			if assignment.ID == rs.Primary.ID {
+				return fmt.Errorf("VLAN assignment %s still exists", rs.Primary.ID)
+			}
 		}
 	}
 
 	return nil
 }
 
-func testAccCheckVlanAssignmentExists(n string, vlanAssignment *api.VlanAssignment) resource.TestCheckFunc {
+func testAccCheckVlanAssignmentExists(n string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[n]
 		if !ok {
-			return fmt.Errorf("Not found: %s", n)
+			return fmt.Errorf("not found: %s", n)
 		}
+
 		if rs.Primary.ID == "" {
-			return fmt.Errorf("No Record ID is set")
+			return fmt.Errorf("no ID is set")
 		}
 
 		client := testAccProvider.Meta().(*api.Client)
-
-		foundVlanAssignment, _, err := client.VlanAssignments.Get(rs.Primary.ID)
+		assignments, _, err := client.VlanAssignments.List(nil)
 		if err != nil {
-			return err
+			return fmt.Errorf("error fetching VLAN assignments: %s", err)
 		}
 
-		if foundVlanAssignment.ID != rs.Primary.ID {
-			return fmt.Errorf("Record not found: %v - %v", rs.Primary.ID, foundVlanAssignment)
+		for _, assignment := range assignments {
+			if assignment.ID == rs.Primary.ID {
+				return nil
+			}
 		}
 
-		*vlanAssignment = *foundVlanAssignment
-
-		return nil
+		return fmt.Errorf("VLAN assignment %s not found", rs.Primary.ID)
 	}
 }
 
-func testAccCheckVlanAssignmentBasic() string {
+func testAccVlanAssignmentConfig(serverID, vlanID string) string {
 	return fmt.Sprintf(`
-resource "latitudesh_vlan_assignment" "test_item" {
-  	server_id          = "%s"
-  	virtual_network_id = "%s"
+resource "latitudesh_vlan_assignment" "test" {
+	server_id          = "%s"
+	virtual_network_id = "%s"
 }
-`,
-		os.Getenv("LATITUDESH_TEST_SERVER_ID"),
-		os.Getenv("LATITUDESH_TEST_VIRTUAL_NETWORK_ID"),
-	)
+`, serverID, vlanID)
 }

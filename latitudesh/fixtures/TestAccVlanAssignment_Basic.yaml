@@ -6,6 +6,81 @@ interactions:
         proto: HTTP/1.1
         proto_major: 1
         proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/virtual_networks/assignments
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"vnasg_zrPm0dwJ3aKOw","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_ewOM5Go9Y5p8E","vid":2040,"description":"Consensus 2025 Demo VLAN","status":"connected","server":{"id":"sv_ewOM5G7Dm5p8E","hostname":"c2-small-x86-chi-2-test-2","label":"197S001019","status":"on"}}},{"id":"vnasg_X6KG5mnm3ayPB","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_ewOM5Go9Y5p8E","vid":2040,"description":"Consensus 2025 Demo VLAN","status":"connected","server":{"id":"sv_XDO7NYy78NPgw","hostname":"c2-small-x86-chi-1-test-1","label":"197S000982","status":"on"}}},{"id":"vnasg_PVwea48zYaB9O","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_jv6m5JXnQ0LPe","vid":2127,"description":"test-error","status":"connected","server":{"id":"sv_YGwn0VAKpa63J","hostname":"test-server-for-assignment","label":"197S000957NODE10","status":"on"}}}],"meta":{}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 93fc5f5a0d4bf221-GRU
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Wed, 14 May 2025 18:13:57 GMT
+            Etag:
+                - W/"4f4030a180b806f9317690ef5892a001"
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=vPjhx1vAYWkoRbr%2BK2C2tuGejdVqsDivsYmhtcOsnvYyUxexyzcuUt9kWI9Ervyn0ggfql5b7GvEcmCOv3bXd0o8OI%2BUZKPxdVrT2Gx1cuV67xKDerVtrLA0JzzslEBgfqscqArnZBUQo72TeQ%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Server-Timing:
+                - cfL4;desc="?proto=TCP&rtt=35791&min_rtt=33763&rtt_var=7232&sent=8&recv=11&lost=0&retrans=0&sent_bytes=3196&recv_bytes=603&delivery_rate=99773&cwnd=254&unsent_bytes=0&cid=fcf1f87e83d4607e&ts=583&x=0"
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - 45f3fb3a-cda0-44f5-9fef-c6b57818799b
+            X-Runtime:
+                - "0.045105"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 763.324667ms
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
         content_length: 135
         transfer_encoding: []
         trailer: {}
@@ -34,32 +109,32 @@ interactions:
         trailer: {}
         content_length: 225
         uncompressed: false
-        body: '{"data":{"id":"vnasg_ZWr75ZqEWNA91","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_BDXM5E1Yo5rpk","vid":2123,"server_id":"sv_ZWr75Zbjr5A91","description":"test","status":"connecting"}},"meta":{}}'
+        body: '{"data":{"id":"vnasg_ZozMazevy57kw","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_BDXM5E1Yo5rpk","vid":2123,"server_id":"sv_ZWr75Zbjr5A91","description":"test","status":"connecting"}},"meta":{}}'
         headers:
             Cache-Control:
                 - max-age=0, private, must-revalidate
             Cf-Cache-Status:
                 - DYNAMIC
             Cf-Ray:
-                - 93eb992ced05a164-GRU
+                - 93fc5f633e65794f-GRU
             Content-Length:
                 - "225"
             Content-Type:
                 - application/vnd.api+json; charset=utf-8
             Date:
-                - Mon, 12 May 2025 17:22:32 GMT
+                - Wed, 14 May 2025 18:14:02 GMT
             Etag:
-                - W/"0a313e819ac73a58701fa14e04cfa55e"
+                - W/"59633b9008e710c4f82a3111456f72ac"
             Nel:
                 - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
             Referrer-Policy:
                 - strict-origin-when-cross-origin
             Report-To:
-                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=BVXSLZkxHd787Q8zvomzPL6nlsPUD3p1Ykx3puy7UWUZawjCuzuuSnQe0LcrUSC9gO328iEaas1OV7HI9fAzFeJOeeATsfG8VbsUU96808cjApevlgQHB2Mbdj3XYt7Op3BcU0b13vAitmLT3Q%3D%3D"}],"group":"cf-nel","max_age":604800}'
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=5LA%2FigyRt4oy0h1mSqQfR0dPfxqjPLtbhiTXVmeqHVe846hcCSDtdpvlJyyySzOsFedxw8zLrQXuN0LZUTCI2VNbNBGKBlJMjIM0FZQyvsS93lvYJQeWErog7qH6j2L%2FUxYIhdwd60uif5k3FA%3D%3D"}],"group":"cf-nel","max_age":604800}'
             Server:
                 - cloudflare
             Server-Timing:
-                - cfL4;desc="?proto=TCP&rtt=163577&min_rtt=150333&rtt_var=64955&sent=7&recv=10&lost=0&retrans=0&sent_bytes=3173&recv_bytes=787&delivery_rate=19132&cwnd=253&unsent_bytes=0&cid=4de505367340515d&ts=4350&x=0"
+                - cfL4;desc="?proto=TCP&rtt=31538&min_rtt=29532&rtt_var=9794&sent=8&recv=10&lost=0&retrans=0&sent_bytes=3173&recv_bytes=787&delivery_rate=136936&cwnd=253&unsent_bytes=0&cid=7b051ae7fce22158&ts=3677&x=0"
             Strict-Transport-Security:
                 - max-age=63072000; includeSubDomains
             Vary:
@@ -73,89 +148,14 @@ interactions:
             X-Powered-By:
                 - cloud66
             X-Request-Id:
-                - 1ab1fbb5-07f1-4650-b3e0-2300e260e153
+                - 329072aa-1a9b-4da6-af4f-11f43ec1c6d2
             X-Runtime:
-                - "3.760970"
+                - "3.269522"
             X-Xss-Protection:
                 - "0"
         status: 201 Created
         code: 201
-        duration: 4.731025334s
-    - id: 1
-      request:
-        proto: HTTP/1.1
-        proto_major: 1
-        proto_minor: 1
-        content_length: 0
-        transfer_encoding: []
-        trailer: {}
-        host: api.latitude.sh
-        remote_addr: ""
-        request_uri: ""
-        body: ""
-        form: {}
-        headers:
-            Api-Version:
-                - "2023-06-01"
-            Authorization:
-                - '[REDACTED]'
-            User-Agent:
-                - Latitude-Terraform-Provider/1.2.0
-        url: https://api.latitude.sh/virtual_networks/assignments
-        method: GET
-      response:
-        proto: HTTP/2.0
-        proto_major: 2
-        proto_minor: 0
-        transfer_encoding: []
-        trailer: {}
-        content_length: -1
-        uncompressed: true
-        body: '{"data":[{"id":"vnasg_ZWr75ZqEWNA91","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_BDXM5E1Yo5rpk","vid":2123,"description":"test","status":"connecting","server":{"id":"sv_ZWr75Zbjr5A91","hostname":"21BS005889","label":"21BS005889","status":"off"}}}],"meta":{}}'
-        headers:
-            Cache-Control:
-                - max-age=0, private, must-revalidate
-            Cf-Cache-Status:
-                - DYNAMIC
-            Cf-Ray:
-                - 93eb99694dca1d30-GRU
-            Content-Type:
-                - application/vnd.api+json; charset=utf-8
-            Date:
-                - Mon, 12 May 2025 17:22:38 GMT
-            Etag:
-                - W/"4a1608af6751b6b983350eefa2627574"
-            Nel:
-                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
-            Referrer-Policy:
-                - strict-origin-when-cross-origin
-            Report-To:
-                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=9fzqduZCJ4VcC5ECWuYVczL704G9R8cryqOiLfv862wnX2DlyikCw9hO1FnnED7Dz1ze6Y6F6aVJAD4WbnywAUq0Y%2BjrF2OhoKRMOMG6d4Zu5bIo1A8RO9PHDB34SVtfbEcu%2B6O0N3WNxXJ7Zg%3D%3D"}],"group":"cf-nel","max_age":604800}'
-            Server:
-                - cloudflare
-            Server-Timing:
-                - cfL4;desc="?proto=TCP&rtt=234018&min_rtt=174592&rtt_var=101964&sent=7&recv=9&lost=0&retrans=0&sent_bytes=3173&recv_bytes=603&delivery_rate=23162&cwnd=253&unsent_bytes=0&cid=b88b2448aeae2d1d&ts=708&x=0"
-            Strict-Transport-Security:
-                - max-age=63072000; includeSubDomains
-            Vary:
-                - Origin
-            X-Content-Type-Options:
-                - nosniff
-            X-Frame-Options:
-                - SAMEORIGIN
-            X-Permitted-Cross-Domain-Policies:
-                - none
-            X-Powered-By:
-                - cloud66
-            X-Request-Id:
-                - 9add8a54-8fe1-4425-8c54-58c91dfe857f
-            X-Runtime:
-                - "0.032450"
-            X-Xss-Protection:
-                - "0"
-        status: 200 OK
-        code: 200
-        duration: 1.247804667s
+        duration: 3.745651167s
     - id: 2
       request:
         proto: HTTP/1.1
@@ -186,30 +186,30 @@ interactions:
         trailer: {}
         content_length: -1
         uncompressed: true
-        body: '{"data":[{"id":"vnasg_ZWr75ZqEWNA91","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_BDXM5E1Yo5rpk","vid":2123,"description":"test","status":"connecting","server":{"id":"sv_ZWr75Zbjr5A91","hostname":"21BS005889","label":"21BS005889","status":"off"}}}],"meta":{}}'
+        body: '{"data":[{"id":"vnasg_zrPm0dwJ3aKOw","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_ewOM5Go9Y5p8E","vid":2040,"description":"Consensus 2025 Demo VLAN","status":"connected","server":{"id":"sv_ewOM5G7Dm5p8E","hostname":"c2-small-x86-chi-2-test-2","label":"197S001019","status":"on"}}},{"id":"vnasg_X6KG5mnm3ayPB","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_ewOM5Go9Y5p8E","vid":2040,"description":"Consensus 2025 Demo VLAN","status":"connected","server":{"id":"sv_XDO7NYy78NPgw","hostname":"c2-small-x86-chi-1-test-1","label":"197S000982","status":"on"}}},{"id":"vnasg_PVwea48zYaB9O","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_jv6m5JXnQ0LPe","vid":2127,"description":"test-error","status":"connected","server":{"id":"sv_YGwn0VAKpa63J","hostname":"test-server-for-assignment","label":"197S000957NODE10","status":"on"}}},{"id":"vnasg_ZozMazevy57kw","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_BDXM5E1Yo5rpk","vid":2123,"description":"test","status":"connecting","server":{"id":"sv_ZWr75Zbjr5A91","hostname":"21BS005889","label":"21BS005889","status":"off"}}}],"meta":{}}'
         headers:
             Cache-Control:
                 - max-age=0, private, must-revalidate
             Cf-Cache-Status:
                 - DYNAMIC
             Cf-Ray:
-                - 93eb99790d56f199-GRU
+                - 93fc5f928beba41b-GRU
             Content-Type:
                 - application/vnd.api+json; charset=utf-8
             Date:
-                - Mon, 12 May 2025 17:22:40 GMT
+                - Wed, 14 May 2025 18:14:07 GMT
             Etag:
-                - W/"4a1608af6751b6b983350eefa2627574"
+                - W/"8b1e82f85ad65a1e4702139b7930c579"
             Nel:
                 - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
             Referrer-Policy:
                 - strict-origin-when-cross-origin
             Report-To:
-                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=bhDN9NBRO3DhD4oQR7rxrLsfW%2B0ckA1bC38Oyfl4g0UcmHQlx%2BOMKvhbW1xKBohCFUypnCb%2BftXT9lxEXJlEQePI5lTC36EVxtbllkoTaothcRdTAQwjeEXL3GcXio6Svg%3D%3D"}],"group":"cf-nel","max_age":604800}'
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=bJ%2BpNnu6%2BxckGXg0aR2cQxR8mjOmcVMepddzs9M5g%2BOpj72lt5PDyc9c3ah916euG4LZPEdNuhEOy2i%2FW%2Br8api4tY0WQvBL4%2FVR5FceHt%2FXG0hkvDr3OAd71okVjU1XCCQOv60TDknir7n8Ig%3D%3D"}],"group":"cf-nel","max_age":604800}'
             Server:
                 - cloudflare
             Server-Timing:
-                - cfL4;desc="?proto=TCP&rtt=204615&min_rtt=170160&rtt_var=64688&sent=8&recv=10&lost=0&retrans=0&sent_bytes=3195&recv_bytes=603&delivery_rate=20114&cwnd=254&unsent_bytes=0&cid=01d84640f0bbb20c&ts=716&x=0"
+                - cfL4;desc="?proto=TCP&rtt=34244&min_rtt=33418&rtt_var=9999&sent=7&recv=9&lost=0&retrans=0&sent_bytes=3175&recv_bytes=603&delivery_rate=121012&cwnd=253&unsent_bytes=0&cid=0ae5eec169b6720e&ts=586&x=0"
             Strict-Transport-Security:
                 - max-age=63072000; includeSubDomains
             Vary:
@@ -223,88 +223,15 @@ interactions:
             X-Powered-By:
                 - cloud66
             X-Request-Id:
-                - 678e9a49-3710-4452-9ebc-bb9cf4d84e62
+                - cbaa08ad-e2b2-4c01-bc27-a43dfa3282ec
             X-Runtime:
-                - "0.030033"
+                - "0.055478"
             X-Xss-Protection:
                 - "0"
         status: 200 OK
         code: 200
-        duration: 1.128597792s
+        duration: 658.533375ms
     - id: 3
-      request:
-        proto: HTTP/1.1
-        proto_major: 1
-        proto_minor: 1
-        content_length: 0
-        transfer_encoding: []
-        trailer: {}
-        host: api.latitude.sh
-        remote_addr: ""
-        request_uri: ""
-        body: ""
-        form: {}
-        headers:
-            Api-Version:
-                - "2023-06-01"
-            Authorization:
-                - '[REDACTED]'
-            Content-Type:
-                - application/json
-            User-Agent:
-                - Latitude-Terraform-Provider/1.2.0
-        url: https://api.latitude.sh/virtual_networks/assignments/vnasg_ZWr75ZqEWNA91
-        method: DELETE
-      response:
-        proto: HTTP/2.0
-        proto_major: 2
-        proto_minor: 0
-        transfer_encoding: []
-        trailer: {}
-        content_length: 0
-        uncompressed: false
-        body: ""
-        headers:
-            Cache-Control:
-                - no-cache
-            Cf-Cache-Status:
-                - DYNAMIC
-            Cf-Ray:
-                - 93eb99882af9f179-GRU
-            Date:
-                - Mon, 12 May 2025 17:22:44 GMT
-            Nel:
-                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
-            Referrer-Policy:
-                - strict-origin-when-cross-origin
-            Report-To:
-                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=1bU4oneioXFqZ8x5hujOQ3v5YOmQWC5cj8kfVg1ZYsLnVKlemG%2FAZoDkEw094mujLvmrXG1KTIlVB1aDUpdEqsRgCfWfCQTnf%2BITrLNI4eG0RtTurjlkED5t1YEeDmfHdw%3D%3D"}],"group":"cf-nel","max_age":604800}'
-            Server:
-                - cloudflare
-            Server-Timing:
-                - cfL4;desc="?proto=TCP&rtt=203633&min_rtt=185662&rtt_var=47672&sent=8&recv=11&lost=0&retrans=0&sent_bytes=3196&recv_bytes=639&delivery_rate=16225&cwnd=254&unsent_bytes=0&cid=c7c515452a2bf855&ts=2242&x=0"
-            Strict-Transport-Security:
-                - max-age=63072000; includeSubDomains
-            Vary:
-                - Origin
-            X-Content-Type-Options:
-                - nosniff
-            X-Frame-Options:
-                - SAMEORIGIN
-            X-Permitted-Cross-Domain-Policies:
-                - none
-            X-Powered-By:
-                - cloud66
-            X-Request-Id:
-                - 94f6bf1f-2342-4feb-9fee-7f3c1d4382ef
-            X-Runtime:
-                - "1.616556"
-            X-Xss-Protection:
-                - "0"
-        status: 204 No Content
-        code: 204
-        duration: 2.611538333s
-    - id: 4
       request:
         proto: HTTP/1.1
         proto_major: 1
@@ -332,34 +259,32 @@ interactions:
         proto_minor: 0
         transfer_encoding: []
         trailer: {}
-        content_length: 21
-        uncompressed: false
-        body: '{"data":[],"meta":{}}'
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"vnasg_zrPm0dwJ3aKOw","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_ewOM5Go9Y5p8E","vid":2040,"description":"Consensus 2025 Demo VLAN","status":"connected","server":{"id":"sv_ewOM5G7Dm5p8E","hostname":"c2-small-x86-chi-2-test-2","label":"197S001019","status":"on"}}},{"id":"vnasg_X6KG5mnm3ayPB","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_ewOM5Go9Y5p8E","vid":2040,"description":"Consensus 2025 Demo VLAN","status":"connected","server":{"id":"sv_XDO7NYy78NPgw","hostname":"c2-small-x86-chi-1-test-1","label":"197S000982","status":"on"}}},{"id":"vnasg_PVwea48zYaB9O","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_jv6m5JXnQ0LPe","vid":2127,"description":"test-error","status":"connected","server":{"id":"sv_YGwn0VAKpa63J","hostname":"test-server-for-assignment","label":"197S000957NODE10","status":"on"}}},{"id":"vnasg_ZozMazevy57kw","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_BDXM5E1Yo5rpk","vid":2123,"description":"test","status":"connecting","server":{"id":"sv_ZWr75Zbjr5A91","hostname":"21BS005889","label":"21BS005889","status":"off"}}}],"meta":{}}'
         headers:
             Cache-Control:
                 - max-age=0, private, must-revalidate
             Cf-Cache-Status:
                 - DYNAMIC
             Cf-Ray:
-                - 93eb99a8fffaa188-GRU
-            Content-Length:
-                - "21"
+                - 93fc5f9d7d50a417-GRU
             Content-Type:
                 - application/vnd.api+json; charset=utf-8
             Date:
-                - Mon, 12 May 2025 17:22:48 GMT
+                - Wed, 14 May 2025 18:14:08 GMT
             Etag:
-                - W/"e5c0644466f49dfb193a225e813eb639"
+                - W/"8b1e82f85ad65a1e4702139b7930c579"
             Nel:
                 - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
             Referrer-Policy:
                 - strict-origin-when-cross-origin
             Report-To:
-                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=UmVM3E1gY9Ok%2FiOzlBuNsPI6UW4DUQUjDB%2BNOG51dXMWViSt3wRVIyB8vlq6qtLEo5fB3%2BAf4jrVXd7U1YpwqbiJs9RYoqLwSlvnu4HqGDhHf38riB6doxTC%2FqL%2F5wRM3Q%3D%3D"}],"group":"cf-nel","max_age":604800}'
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=2jDmfTplnO9yQpe5yUkQGBF9EHYjv9DNxf9wEkUEYswPDiTsHZpzY66%2Bo5JNrUmUR0xZzpSO6c12n5OnSG5Mo6uPM8dNFPbEMWeAj0DEkwJf9iQ5Bx2d4q%2Fn7I%2FPuK1f4A%3D%3D"}],"group":"cf-nel","max_age":604800}'
             Server:
                 - cloudflare
             Server-Timing:
-                - cfL4;desc="?proto=TCP&rtt=191561&min_rtt=175283&rtt_var=60637&sent=7&recv=9&lost=0&retrans=0&sent_bytes=3174&recv_bytes=603&delivery_rate=20826&cwnd=253&unsent_bytes=0&cid=1545e91ec9a48edc&ts=745&x=0"
+                - cfL4;desc="?proto=TCP&rtt=33172&min_rtt=29368&rtt_var=10397&sent=8&recv=10&lost=0&retrans=1&sent_bytes=3244&recv_bytes=603&delivery_rate=116662&cwnd=252&unsent_bytes=0&cid=5644953c23a7d076&ts=591&x=0"
             Strict-Transport-Security:
                 - max-age=63072000; includeSubDomains
             Vary:
@@ -373,11 +298,159 @@ interactions:
             X-Powered-By:
                 - cloud66
             X-Request-Id:
-                - ca62520a-c398-4192-81f7-d56f4ef6bee9
+                - c76fef8c-0c1e-474b-bc71-1a5751c9aa1f
             X-Runtime:
-                - "0.026584"
+                - "0.046543"
             X-Xss-Protection:
                 - "0"
         status: 200 OK
         code: 200
-        duration: 1.163584916s
+        duration: 974.635667ms
+    - id: 4
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            Content-Type:
+                - application/json
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/virtual_networks/assignments/vnasg_ZozMazevy57kw
+        method: DELETE
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: 0
+        uncompressed: false
+        body: ""
+        headers:
+            Cache-Control:
+                - no-cache
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 93fc5fa8ae3c02fa-GRU
+            Date:
+                - Wed, 14 May 2025 18:14:12 GMT
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=qY2MPBVgLRGD0hi6qt09Cw13vURV7f%2FD5wQML9AmnYF1r2FNAq%2BprDGxX2tvh3KiO5fFJISdDkewmmQXkcXLIRwiowqojxfQ3OPWTkC7%2FuIm44S30icGu8NdcW%2FjUzRhiZR8dT3bsCFHfTuNcQ%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Server-Timing:
+                - cfL4;desc="?proto=TCP&rtt=33709&min_rtt=33312&rtt_var=7637&sent=8&recv=10&lost=0&retrans=0&sent_bytes=3196&recv_bytes=638&delivery_rate=119116&cwnd=254&unsent_bytes=0&cid=d5e231fb822083f9&ts=2127&x=0"
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - 7add5d20-f066-4642-9487-f39cabd4f510
+            X-Runtime:
+                - "1.697920"
+            X-Xss-Protection:
+                - "0"
+        status: 204 No Content
+        code: 204
+        duration: 2.243187208s
+    - id: 5
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/1.2.0
+        url: https://api.latitude.sh/virtual_networks/assignments
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"vnasg_zrPm0dwJ3aKOw","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_ewOM5Go9Y5p8E","vid":2040,"description":"Consensus 2025 Demo VLAN","status":"connected","server":{"id":"sv_ewOM5G7Dm5p8E","hostname":"c2-small-x86-chi-2-test-2","label":"197S001019","status":"on"}}},{"id":"vnasg_X6KG5mnm3ayPB","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_ewOM5Go9Y5p8E","vid":2040,"description":"Consensus 2025 Demo VLAN","status":"connected","server":{"id":"sv_XDO7NYy78NPgw","hostname":"c2-small-x86-chi-1-test-1","label":"197S000982","status":"on"}}},{"id":"vnasg_PVwea48zYaB9O","type":"virtual_network_assignment","attributes":{"virtual_network_id":"vlan_jv6m5JXnQ0LPe","vid":2127,"description":"test-error","status":"connected","server":{"id":"sv_YGwn0VAKpa63J","hostname":"test-server-for-assignment","label":"197S000957NODE10","status":"on"}}}],"meta":{}}'
+        headers:
+            Cache-Control:
+                - max-age=0, private, must-revalidate
+            Cf-Cache-Status:
+                - DYNAMIC
+            Cf-Ray:
+                - 93fc5fc4da716274-GRU
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+            Date:
+                - Wed, 14 May 2025 18:14:15 GMT
+            Etag:
+                - W/"4f4030a180b806f9317690ef5892a001"
+            Nel:
+                - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+            Referrer-Policy:
+                - strict-origin-when-cross-origin
+            Report-To:
+                - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=J0LoAaXMyZ2ye9iFH0qnT4%2FdLgFx88tYT19eaM0wx3urztN8LZNqca5H9QyzlpLduKGFtuch%2FAQCcv1UAc1EeKmAlWh%2BN6LETwOiUSQ45aNAMmG5CWWNX%2B7FMdLmayINnuW2DaWP0t%2FRFV11YA%3D%3D"}],"group":"cf-nel","max_age":604800}'
+            Server:
+                - cloudflare
+            Server-Timing:
+                - cfL4;desc="?proto=TCP&rtt=31472&min_rtt=29801&rtt_var=7399&sent=7&recv=10&lost=0&retrans=0&sent_bytes=3175&recv_bytes=603&delivery_rate=124768&cwnd=253&unsent_bytes=0&cid=c8c248f11a09f889&ts=573&x=0"
+            Strict-Transport-Security:
+                - max-age=63072000; includeSubDomains
+            Vary:
+                - Origin
+            X-Content-Type-Options:
+                - nosniff
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Permitted-Cross-Domain-Policies:
+                - none
+            X-Powered-By:
+                - cloud66
+            X-Request-Id:
+                - dee77476-cc16-403f-b39d-69199db2020c
+            X-Runtime:
+                - "0.026288"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 639.263333ms
