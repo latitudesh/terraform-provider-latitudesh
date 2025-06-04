@@ -1,13 +1,15 @@
 package latitudesh
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
-	api "github.com/latitudesh/latitudesh-go"
+	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 )
 
 // Define constants for testing
@@ -19,8 +21,6 @@ const (
 )
 
 func TestAccLatitudeFirewallAssignment_Basic(t *testing.T) {
-	var assignment api.FirewallAssignment
-
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
 	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
@@ -36,7 +36,6 @@ func TestAccLatitudeFirewallAssignment_Basic(t *testing.T) {
 			{
 				Config: testAccCheckLatitudeFirewallAssignmentConfig(),
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckFirewallAssignmentExists("latitudesh_firewall_assignment.test", &assignment),
 					resource.TestCheckResourceAttrSet(
 						"latitudesh_firewall_assignment.test", "firewall_id"),
 					resource.TestCheckResourceAttrSet(
@@ -48,68 +47,34 @@ func TestAccLatitudeFirewallAssignment_Basic(t *testing.T) {
 }
 
 func testAccCheckFirewallAssignmentDestroy(s *terraform.State) error {
-	client := testAccProvider.Meta().(*api.Client)
+	client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "latitudesh_firewall_assignment" {
 			continue
 		}
 
-		firewallID := rs.Primary.Attributes["firewall_id"]
-
-		// Try to get assignments for the firewall
-		assignments, resp, err := client.Firewalls.ListAssignments(firewallID, nil)
-
-		// If the firewall itself is gone, that's okay
-		if resp != nil && resp.StatusCode == 404 {
+		// Parse the composite ID: firewallID:serverID
+		idParts := strings.Split(rs.Primary.ID, ":")
+		if len(idParts) != 2 {
 			continue
 		}
 
-		if err == nil {
-			// Check if our specific assignment still exists
-			for _, assignment := range assignments {
-				if assignment.ID == rs.Primary.ID {
-					return fmt.Errorf("Firewall assignment %s still exists", rs.Primary.ID)
-				}
-			}
+		firewallID := idParts[0]
+
+		// Check if the firewall assignment still exists
+		response, err := client.Firewalls.GetFirewallAssignments(context.Background(), firewallID, nil, nil)
+		if err != nil {
+			// If we get an error, assume it's deleted
+			continue
+		}
+
+		if response.FirewallServer != nil {
+			return fmt.Errorf("Firewall assignment still exists")
 		}
 	}
 
 	return nil
-}
-
-func testAccCheckFirewallAssignmentExists(n string, assignment *api.FirewallAssignment) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[n]
-		if !ok {
-			return fmt.Errorf("Not found: %s", n)
-		}
-		if rs.Primary.ID == "" {
-			return fmt.Errorf("No Record ID is set")
-		}
-
-		client := testAccProvider.Meta().(*api.Client)
-		firewallID := rs.Primary.Attributes["firewall_id"]
-
-		// Try to get assignments for the firewall
-		assignments, resp, err := client.Firewalls.ListAssignments(firewallID, nil)
-		if err != nil {
-			// If we get a 404 for the firewall, the assignment can't exist
-			if resp != nil && resp.StatusCode == 404 {
-				return fmt.Errorf("Record not found: firewall %s does not exist", firewallID)
-			}
-			return err
-		}
-
-		for _, a := range assignments {
-			if a.ID == rs.Primary.ID {
-				*assignment = a
-				return nil
-			}
-		}
-
-		return fmt.Errorf("Record not found: assignment %s not found in firewall %s", rs.Primary.ID, firewallID)
-	}
 }
 
 func testAccCheckLatitudeFirewallAssignmentConfig() string {

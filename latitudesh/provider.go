@@ -2,61 +2,106 @@ package latitudesh
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	latitude "github.com/latitudesh/latitudesh-go"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/provider"
+	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 )
 
 const (
 	userAgentForProvider = "Latitude-Terraform-Provider"
 )
 
-var currentVersion = "1.2.0" // update variable when version updated
+var currentVersion = "2.0.0"
 
-func Provider() *schema.Provider {
-	return &schema.Provider{
-		Schema: map[string]*schema.Schema{
-			"auth_token": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				DefaultFunc: schema.EnvDefaultFunc("LATITUDESH_AUTH_TOKEN", nil),
-			},
-		},
-		ResourcesMap: map[string]*schema.Resource{
-			"latitudesh_project":             resourceProject(),
-			"latitudesh_server":              resourceServer(),
-			"latitudesh_ssh_key":             resourceSSHKey(),
-			"latitudesh_user_data":           resourceUserData(),
-			"latitudesh_virtual_network":     resourceVirtualNetwork(),
-			"latitudesh_vlan_assignment":     resourceVlanAssignment(),
-			"latitudesh_tag":                 resourceTag(),
-			"latitudesh_member":              resourceMember(),
-			"latitudesh_firewall":            resourceFirewall(),
-			"latitudesh_firewall_assignment": resourceFirewallAssignment(),
-		},
-		DataSourcesMap: map[string]*schema.Resource{
-			"latitudesh_plan":   dataSourcePlan(),
-			"latitudesh_region": dataSourceRegion(),
-			"latitudesh_role":   dataSourceRole(),
-		},
-		ConfigureContextFunc: providerConfigure,
+// Ensure latitudeshProvider satisfies various provider interfaces
+var _ provider.Provider = &latitudeshProvider{}
+
+// latitudeshProvider defines the provider implementation.
+type latitudeshProvider struct {
+	version string
+}
+
+// latitudeshProviderModel describes the provider data model.
+type latitudeshProviderModel struct {
+	AuthToken types.String `tfsdk:"auth_token"`
+}
+
+func New(version string) func() provider.Provider {
+	return func() provider.Provider {
+		return &latitudeshProvider{
+			version: version,
+		}
 	}
 }
 
-func providerConfigure(ctx context.Context, d *schema.ResourceData) (interface{}, diag.Diagnostics) {
-	authToken := d.Get("auth_token").(string)
+func (p *latitudeshProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
+	resp.TypeName = "latitudesh"
+	resp.Version = p.version
+}
 
-	var diags diag.Diagnostics
+func (p *latitudeshProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"auth_token": schema.StringAttribute{
+				MarkdownDescription: "Latitude.sh API authentication token",
+				Optional:            true,
+				Sensitive:           true,
+			},
+		},
+	}
+}
+
+func (p *latitudeshProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
+	var data latitudeshProviderModel
+
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Configuration values are now available.
+	// Example client configuration for data sources and resources.
+	authToken := data.AuthToken.ValueString()
 
 	if authToken != "" {
-		c := latitude.NewClientWithAuth("latitudesh", authToken, nil)
-		c.UserAgent = fmt.Sprintf("%s/%s", userAgentForProvider, currentVersion)
-
-		return c, diags
+		sdkClient := latitudeshgosdk.New(
+			latitudeshgosdk.WithSecurity(authToken),
+		)
+		resp.DataSourceData = sdkClient
+		resp.ResourceData = sdkClient
+	} else {
+		sdkClient := latitudeshgosdk.New(
+			latitudeshgosdk.WithSecurity(""),
+		)
+		resp.DataSourceData = sdkClient
+		resp.ResourceData = sdkClient
 	}
-	c := latitude.NewClientWithAuth("latitudesh", " ", nil)
+}
 
-	return c, diags
+func (p *latitudeshProvider) Resources(ctx context.Context) []func() resource.Resource {
+	return []func() resource.Resource{
+		NewProjectResource,
+		NewServerResource,
+		NewSSHKeyResource,
+		NewUserDataResource,
+		NewVirtualNetworkResource,
+		NewVlanAssignmentResource,
+		NewTagResource,
+		NewMemberResource,
+		NewFirewallResource,
+		NewFirewallAssignmentResource,
+	}
+}
+
+func (p *latitudeshProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
+	return []func() datasource.DataSource{
+		NewPlanDataSource,
+		NewRegionDataSource,
+		NewRoleDataSource,
+	}
 }

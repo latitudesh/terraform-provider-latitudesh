@@ -1,13 +1,15 @@
 package latitudesh
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
-	api "github.com/latitudesh/latitudesh-go"
+	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 )
 
 const (
@@ -15,7 +17,7 @@ const (
 )
 
 func TestAccUserDataBasic(t *testing.T) {
-	var userData api.UserData
+	var userData components.UserDataProperties
 
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
@@ -38,6 +40,10 @@ func TestAccUserDataBasic(t *testing.T) {
 						"latitudesh_user_data.test_item", "description", testUserDataDescription),
 					resource.TestCheckResourceAttr(
 						"latitudesh_user_data.test_item", "content", os.Getenv("LATITUDESH_TEST_USER_DATA_CONTENT")),
+					resource.TestCheckResourceAttrSet(
+						"latitudesh_user_data.test_item", "created_at"),
+					resource.TestCheckResourceAttrSet(
+						"latitudesh_user_data.test_item", "updated_at"),
 				),
 			},
 		},
@@ -45,13 +51,13 @@ func TestAccUserDataBasic(t *testing.T) {
 }
 
 func testAccCheckUserDataDestroy(s *terraform.State) error {
-	client := testAccProvider.Meta().(*api.Client)
+	client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "latitudesh_user_data" {
 			continue
 		}
-		if _, _, err := client.UserData.Get(rs.Primary.ID, rs.Primary.Attributes["project"], nil); err == nil {
+		if _, err := client.UserData.Get(context.Background(), rs.Primary.Attributes["project"], rs.Primary.ID, nil); err == nil {
 			return fmt.Errorf("User data still exists")
 		}
 	}
@@ -59,7 +65,7 @@ func testAccCheckUserDataDestroy(s *terraform.State) error {
 	return nil
 }
 
-func testAccCheckUserDataExists(n string, userData *api.UserData) resource.TestCheckFunc {
+func testAccCheckUserDataExists(n string, userData *components.UserDataProperties) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[n]
 		if !ok {
@@ -69,14 +75,19 @@ func testAccCheckUserDataExists(n string, userData *api.UserData) resource.TestC
 			return fmt.Errorf("No Record ID is set")
 		}
 
-		client := testAccProvider.Meta().(*api.Client)
+		client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
 
-		foundUserData, _, err := client.UserData.Get(rs.Primary.ID, rs.Primary.Attributes["project"], nil)
+		response, err := client.UserData.Get(context.Background(), rs.Primary.Attributes["project"], rs.Primary.ID, nil)
 		if err != nil {
 			return err
 		}
 
-		if foundUserData.ID != rs.Primary.ID {
+		if response.UserData == nil || response.UserData.Data == nil {
+			return fmt.Errorf("User data not found in response")
+		}
+
+		foundUserData := response.UserData.Data
+		if foundUserData.ID == nil || *foundUserData.ID != rs.Primary.ID {
 			return fmt.Errorf("Record not found: %v - %v", rs.Primary.ID, foundUserData)
 		}
 

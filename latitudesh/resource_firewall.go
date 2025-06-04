@@ -4,227 +4,359 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	latitude "github.com/latitudesh/latitudesh-go"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"github.com/latitudesh/latitudesh-go-sdk/models/components"
+	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
-func resourceFirewall() *schema.Resource {
-	return &schema.Resource{
-		CreateContext: resourceFirewallCreate,
-		ReadContext:   resourceFirewallRead,
-		UpdateContext: resourceFirewallUpdate,
-		DeleteContext: resourceFirewallDelete,
-		Schema: map[string]*schema.Schema{
-			"name": {
-				Type:        schema.TypeString,
-				Description: "The name of the firewall",
-				Required:    true,
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ resource.Resource = &FirewallResource{}
+var _ resource.ResourceWithImportState = &FirewallResource{}
+
+func NewFirewallResource() resource.Resource {
+	return &FirewallResource{}
+}
+
+// FirewallResource defines the resource implementation.
+type FirewallResource struct {
+	client *latitudeshgosdk.Latitudesh
+}
+
+// FirewallRuleModel describes a firewall rule.
+type FirewallRuleModel struct {
+	From     types.String `tfsdk:"from"`
+	To       types.String `tfsdk:"to"`
+	Port     types.String `tfsdk:"port"`
+	Protocol types.String `tfsdk:"protocol"`
+}
+
+// FirewallResourceModel describes the resource data model.
+type FirewallResourceModel struct {
+	ID      types.String        `tfsdk:"id"`
+	Name    types.String        `tfsdk:"name"`
+	Project types.String        `tfsdk:"project"`
+	Rules   []FirewallRuleModel `tfsdk:"rules"`
+}
+
+func (r *FirewallResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_firewall"
+}
+
+func (r *FirewallResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		MarkdownDescription: "Firewall resource",
+
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				MarkdownDescription: "Firewall identifier",
+				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
-			"project": {
-				Type:        schema.TypeString,
-				Description: "The id or slug of the project",
-				Required:    true,
-				ForceNew:    true,
+			"name": schema.StringAttribute{
+				MarkdownDescription: "The firewall name",
+				Required:            true,
 			},
-			"rules": {
-				Type:        schema.TypeSet,
-				Description: "The firewall rules",
-				Optional:    true,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"from": {
-							Type:        schema.TypeString,
-							Description: "The source of the rule",
-							Required:    true,
+			"project": schema.StringAttribute{
+				MarkdownDescription: "The project id or slug",
+				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+		},
+		Blocks: map[string]schema.Block{
+			"rules": schema.ListNestedBlock{
+				MarkdownDescription: "Firewall rules",
+				NestedObject: schema.NestedBlockObject{
+					Attributes: map[string]schema.Attribute{
+						"from": schema.StringAttribute{
+							MarkdownDescription: "Source IP or range",
+							Required:            true,
 						},
-						"to": {
-							Type:        schema.TypeString,
-							Description: "The destination of the rule",
-							Required:    true,
+						"to": schema.StringAttribute{
+							MarkdownDescription: "Destination IP or range",
+							Required:            true,
 						},
-						"port": {
-							Type:        schema.TypeString,
-							Description: "The port or port range for the rule",
-							Required:    true,
+						"port": schema.StringAttribute{
+							MarkdownDescription: "Port or port range",
+							Required:            true,
 						},
-						"protocol": {
-							Type:        schema.TypeString,
-							Description: "The protocol for the rule (e.g., tcp, udp, icmp)",
-							Required:    true,
-						},
-						"default": {
-							Type:        schema.TypeBool,
-							Description: "Whether this is a default rule",
-							Computed:    true,
+						"protocol": schema.StringAttribute{
+							MarkdownDescription: "Protocol (TCP, UDP, ICMP)",
+							Required:            true,
 						},
 					},
 				},
 			},
 		},
-		Importer: &schema.ResourceImporter{
-			StateContext: schema.ImportStatePassthroughContext,
-		},
 	}
 }
 
-func resourceFirewallCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	var diags diag.Diagnostics
-	c := m.(*latitude.Client)
+func (r *FirewallResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	// Prevent panic if the provider has not been configured.
+	if req.ProviderData == nil {
+		return
+	}
 
-	rules := parseFirewallRules(d)
-	createRequest := &latitude.FirewallCreateRequest{
-		Data: latitude.FirewallCreateData{
-			Type: "firewalls",
-			Attributes: latitude.FirewallCreateAttributes{
-				Name:    d.Get("name").(string),
-				Project: d.Get("project").(string),
+	client, ok := req.ProviderData.(*latitudeshgosdk.Latitudesh)
+
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			"Expected *latitudeshgosdk.Latitudesh, got: %T. Please report this issue to the provider developers.",
+		)
+
+		return
+	}
+
+	r.client = client
+}
+
+func (r *FirewallResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data FirewallResourceModel
+
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	name := data.Name.ValueString()
+	project := data.Project.ValueString()
+
+	// Convert rules
+	var rules []operations.CreateFirewallRules
+	for _, rule := range data.Rules {
+		from := rule.From.ValueString()
+		to := rule.To.ValueString()
+		port := rule.Port.ValueString()
+		protocol := rule.Protocol.ValueString()
+
+		// Convert string protocol to the proper type
+		var protocolEnum operations.CreateFirewallProtocol
+		switch protocol {
+		case "TCP":
+			protocolEnum = operations.CreateFirewallProtocolTCP
+		case "UDP":
+			protocolEnum = operations.CreateFirewallProtocolUDP
+		default:
+			protocolEnum = operations.CreateFirewallProtocolTCP // default to TCP
+		}
+
+		rules = append(rules, operations.CreateFirewallRules{
+			From:     &from,
+			To:       &to,
+			Port:     &port,
+			Protocol: &protocolEnum,
+		})
+	}
+
+	createRequest := operations.CreateFirewallFirewallsRequestBody{
+		Data: operations.CreateFirewallData{
+			Type: operations.CreateFirewallTypeFirewalls,
+			Attributes: &operations.CreateFirewallAttributes{
+				Name:    name,
+				Project: project,
 				Rules:   rules,
 			},
 		},
 	}
 
-	firewall, _, err := c.Firewalls.Create(createRequest)
+	result, err := r.client.Firewalls.CreateFirewall(ctx, createRequest)
 	if err != nil {
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError("Client Error", "Unable to create firewall, got error: "+err.Error())
+		return
 	}
 
-	d.SetId(firewall.ID)
-
-	if err := d.Set("name", firewall.Name); err != nil {
-		return diag.FromErr(err)
+	if result.Firewall == nil || result.Firewall.ID == nil {
+		resp.Diagnostics.AddError("API Error", "Failed to get firewall ID from response")
+		return
 	}
 
-	if err := d.Set("rules", flattenFirewallRules(firewall.Rules)); err != nil {
-		return diag.FromErr(err)
+	data.ID = types.StringValue(*result.Firewall.ID)
+
+	// Read the resource to populate all attributes
+	r.readFirewall(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	return diags
+	// Save data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func resourceFirewallRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*latitude.Client)
-	var diags diag.Diagnostics
+func (r *FirewallResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data FirewallResourceModel
 
-	firewallID := d.Id()
+	// Read Terraform prior state data into the model
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 
-	firewall, resp, err := c.Firewalls.Get(firewallID, nil)
-	if err != nil {
-		if resp != nil && resp.StatusCode == http.StatusNotFound {
-			d.SetId("")
-			return diags
-		}
-
-		return diag.FromErr(err)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	if firewall == nil {
-		d.SetId("")
-		return diags
+	r.readFirewall(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	if err := d.Set("name", firewall.Name); err != nil {
-		return diag.FromErr(err)
-	}
-
-	if firewall.Project.ID != "" {
-		if err := d.Set("project", firewall.Project.ID); err != nil {
-			return diag.FromErr(err)
-		}
-	} else if projectID, ok := d.GetOk("project"); ok {
-		if err := d.Set("project", projectID); err != nil {
-			return diag.FromErr(err)
-		}
-	}
-
-	if firewall.Rules != nil {
-		if err := d.Set("rules", flattenFirewallRules(firewall.Rules)); err != nil {
-			return diag.FromErr(err)
-		}
-	}
-
-	return diags
+	// Save updated data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func resourceFirewallUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*latitude.Client)
-	var diags diag.Diagnostics
+func (r *FirewallResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data FirewallResourceModel
 
-	firewallID := d.Id()
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 
-	updateRequest := &latitude.FirewallUpdateRequest{
-		Data: latitude.FirewallUpdateData{
-			ID:   firewallID,
-			Type: "firewalls",
-			Attributes: latitude.FirewallUpdateAttributes{
-				Name:  d.Get("name").(string),
-				Rules: parseFirewallRules(d),
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	firewallID := data.ID.ValueString()
+	name := data.Name.ValueString()
+
+	// Convert rules
+	var rules []operations.UpdateFirewallFirewallsRules
+	for _, rule := range data.Rules {
+		from := rule.From.ValueString()
+		to := rule.To.ValueString()
+		port := rule.Port.ValueString()
+		protocol := rule.Protocol.ValueString()
+
+		// Convert string protocol to the proper type
+		var protocolEnum operations.UpdateFirewallFirewallsProtocol
+		switch protocol {
+		case "TCP":
+			protocolEnum = operations.UpdateFirewallFirewallsProtocolTCP
+		case "UDP":
+			protocolEnum = operations.UpdateFirewallFirewallsProtocolUDP
+		default:
+			protocolEnum = operations.UpdateFirewallFirewallsProtocolTCP // default to TCP
+		}
+
+		rules = append(rules, operations.UpdateFirewallFirewallsRules{
+			From:     &from,
+			To:       &to,
+			Port:     &port,
+			Protocol: &protocolEnum,
+		})
+	}
+
+	updateRequest := operations.UpdateFirewallFirewallsRequestBody{
+		Data: operations.UpdateFirewallFirewallsData{
+			Type: operations.UpdateFirewallFirewallsTypeFirewalls,
+			Attributes: &operations.UpdateFirewallFirewallsAttributes{
+				Name:  &name,
+				Rules: rules,
 			},
 		},
 	}
 
-	firewall, _, err := c.Firewalls.Update(firewallID, updateRequest)
+	_, err := r.client.Firewalls.UpdateFirewall(ctx, firewallID, updateRequest)
 	if err != nil {
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError("Client Error", "Unable to update firewall, got error: "+err.Error())
+		return
 	}
 
-	if err := d.Set("name", firewall.Name); err != nil {
-		return diag.FromErr(err)
+	// Read the resource to populate all attributes
+	r.readFirewall(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	if err := d.Set("rules", flattenFirewallRules(firewall.Rules)); err != nil {
-		return diag.FromErr(err)
-	}
-
-	return diags
+	// Save updated data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func resourceFirewallDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*latitude.Client)
-	var diags diag.Diagnostics
+func (r *FirewallResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data FirewallResourceModel
 
-	firewallID := d.Id()
+	// Read Terraform prior state data into the model
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 
-	_, err := c.Firewalls.Delete(firewallID)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	firewallID := data.ID.ValueString()
+
+	_, err := r.client.Firewalls.DeleteFirewall(ctx, firewallID)
 	if err != nil {
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError("Client Error", "Unable to delete firewall, got error: "+err.Error())
+		return
 	}
-
-	d.SetId("")
-
-	return diags
 }
 
-func parseFirewallRules(d *schema.ResourceData) []latitude.FirewallRule {
-	ruleSet := d.Get("rules").(*schema.Set)
-	rules := make([]latitude.FirewallRule, 0, ruleSet.Len())
+func (r *FirewallResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	var data FirewallResourceModel
+	data.ID = types.StringValue(req.ID)
 
-	for _, ruleRaw := range ruleSet.List() {
-		rule := ruleRaw.(map[string]interface{})
-		rules = append(rules, latitude.FirewallRule{
-			From:     rule["from"].(string),
-			To:       rule["to"].(string),
-			Port:     rule["port"].(string),
-			Protocol: rule["protocol"].(string),
-		})
+	r.readFirewall(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
 	}
-	return rules
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func flattenFirewallRules(rules []latitude.FirewallRule) []map[string]interface{} {
-	result := make([]map[string]interface{}, 0, len(rules))
-	for _, rule := range rules {
-		from := rule.From
-		to := rule.To
-		protocol := rule.Protocol
+func (r *FirewallResource) readFirewall(ctx context.Context, data *FirewallResourceModel, diags *diag.Diagnostics) {
+	firewallID := data.ID.ValueString()
 
-		result = append(result, map[string]interface{}{
-			"from":     from,
-			"to":       to,
-			"port":     rule.Port,
-			"protocol": protocol,
-			"default":  rule.Default,
-		})
+	result, err := r.client.Firewalls.GetFirewall(ctx, firewallID)
+	if err != nil {
+		// Check if the firewall was deleted
+		if apiErr, ok := err.(*components.APIError); ok && apiErr.StatusCode == http.StatusNotFound {
+			data.ID = types.StringNull()
+			return
+		}
+		diags.AddError("Client Error", "Unable to read firewall, got error: "+err.Error())
+		return
 	}
-	return result
+
+	if result.Firewall == nil {
+		data.ID = types.StringNull()
+		return
+	}
+
+	firewall := result.Firewall
+	if firewall.Attributes != nil {
+		if firewall.Attributes.Name != nil {
+			data.Name = types.StringValue(*firewall.Attributes.Name)
+		}
+
+		if firewall.Attributes.Project != nil && firewall.Attributes.Project.ID != nil {
+			data.Project = types.StringValue(*firewall.Attributes.Project.ID)
+		}
+
+		// Convert rules
+		var rules []FirewallRuleModel
+		for _, rule := range firewall.Attributes.Rules {
+			ruleModel := FirewallRuleModel{}
+			if rule.From != nil {
+				ruleModel.From = types.StringValue(*rule.From)
+			}
+			if rule.To != nil {
+				ruleModel.To = types.StringValue(*rule.To)
+			}
+			if rule.Port != nil {
+				ruleModel.Port = types.StringValue(*rule.Port)
+			}
+			if rule.Protocol != nil {
+				ruleModel.Protocol = types.StringValue(*rule.Protocol)
+			}
+			rules = append(rules, ruleModel)
+		}
+		data.Rules = rules
+	}
 }

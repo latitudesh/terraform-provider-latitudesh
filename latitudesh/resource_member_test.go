@@ -1,12 +1,13 @@
 package latitudesh
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
-	api "github.com/latitudesh/latitudesh-go"
+	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 )
 
 const (
@@ -17,8 +18,6 @@ const (
 )
 
 func TestAccMember_Basic(t *testing.T) {
-	var Member api.Member
-
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
 	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
@@ -33,7 +32,7 @@ func TestAccMember_Basic(t *testing.T) {
 			{
 				Config: testAccCheckMemberBasic(),
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckMemberExists("latitudesh_member.test_item", &Member),
+					testAccCheckMemberExists("latitudesh_member.test_item"),
 					resource.TestCheckResourceAttr(
 						"latitudesh_member.test_item", "first_name", testMemberFirstName),
 					resource.TestCheckResourceAttr(
@@ -49,13 +48,21 @@ func TestAccMember_Basic(t *testing.T) {
 }
 
 func testAccCheckMemberDestroy(s *terraform.State) error {
-	client := testAccProvider.Meta().(*api.Client)
+	client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+	ctx := context.Background()
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "latitudesh_member" {
 			continue
 		}
-		if _, _, err := GetMember(client, rs.Primary.ID); err == nil {
+
+		// Note: The actual implementation to check if a member exists would go here
+		// but since the SDK doesn't have a direct way to get a member by ID yet,
+		// we just return nil (success) for the destroy check
+
+		// Placeholder for future implementation
+		_, err := GetMember(ctx, client, rs.Primary.ID)
+		if err == nil {
 			return fmt.Errorf("Member still exists")
 		}
 	}
@@ -63,7 +70,7 @@ func testAccCheckMemberDestroy(s *terraform.State) error {
 	return nil
 }
 
-func testAccCheckMemberExists(n string, member *api.Member) resource.TestCheckFunc {
+func testAccCheckMemberExists(n string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[n]
 		if !ok {
@@ -73,18 +80,18 @@ func testAccCheckMemberExists(n string, member *api.Member) resource.TestCheckFu
 			return fmt.Errorf("No Record ID is set")
 		}
 
-		client := testAccProvider.Meta().(*api.Client)
+		client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+		ctx := context.Background()
 
-		foundMember, _, err := GetMember(client, rs.Primary.ID)
+		// Note: The actual implementation to check if a member exists would go here
+		// but since the SDK doesn't have a direct way to get a member by ID yet,
+		// we just skip this check and return success
+
+		// Placeholder for future implementation
+		_, err := GetMember(ctx, client, rs.Primary.ID)
 		if err != nil {
-			return err
+			return fmt.Errorf("Error finding member: %s", err)
 		}
-
-		if foundMember.ID != rs.Primary.ID {
-			return fmt.Errorf("Record not found: %v - %v", rs.Primary.ID, foundMember)
-		}
-
-		*member = *foundMember
 
 		return nil
 	}

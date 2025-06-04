@@ -2,160 +2,247 @@ package latitudesh
 
 import (
 	"context"
-	"net/http"
-	"time"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-
-	api "github.com/latitudesh/latitudesh-go"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
-func resourceUserData() *schema.Resource {
-	return &schema.Resource{
-		CreateContext: resourceUserDataCreate,
-		ReadContext:   resourceUserDataRead,
-		UpdateContext: resourceUserDataUpdate,
-		DeleteContext: resourceUserDataDelete,
-		Schema: map[string]*schema.Schema{
-			"project": {
-				Type:        schema.TypeString,
-				Description: "The id or slug of the project",
-				Required:    true,
-				ForceNew:    true,
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ resource.Resource = &UserDataResource{}
+var _ resource.ResourceWithImportState = &UserDataResource{}
+
+func NewUserDataResource() resource.Resource {
+	return &UserDataResource{}
+}
+
+type UserDataResource struct {
+	client *latitudeshgosdk.Latitudesh
+}
+
+type UserDataResourceModel struct {
+	ID          types.String `tfsdk:"id"`
+	Description types.String `tfsdk:"description"`
+	Content     types.String `tfsdk:"content"`
+	CreatedAt   types.String `tfsdk:"created_at"`
+	UpdatedAt   types.String `tfsdk:"updated_at"`
+}
+
+func (r *UserDataResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_user_data"
+}
+
+func (r *UserDataResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		MarkdownDescription: "User Data resource",
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				MarkdownDescription: "User Data identifier",
+				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
-			"description": {
-				Type:        schema.TypeString,
-				Description: "The User Data description",
-				Required:    true,
+			"description": schema.StringAttribute{
+				MarkdownDescription: "The User Data description",
+				Required:            true,
 			},
-			"content": {
-				Type:        schema.TypeString,
-				Description: "Base64 encoded content of the User Data				",
-				Required:    true,
+			"content": schema.StringAttribute{
+				MarkdownDescription: "Base64 encoded content of the User Data",
+				Required:            true,
 			},
-			"created": {
-				Type:        schema.TypeString,
-				Description: "The timestamp for when the User Data was created",
-				Computed:    true,
+			"created_at": schema.StringAttribute{
+				MarkdownDescription: "The timestamp for when the User Data was created",
+				Computed:            true,
 			},
-			"updated": {
-				Type:        schema.TypeString,
-				Description: "The timestamp for the last time the User Data was updated",
-				Computed:    true,
+			"updated_at": schema.StringAttribute{
+				MarkdownDescription: "The timestamp for the last time the User Data was updated",
+				Computed:            true,
 			},
-		},
-		Importer: &schema.ResourceImporter{
-			StateContext: NestedResourceRestAPIImport,
 		},
 	}
 }
 
-func resourceUserDataCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	var diags diag.Diagnostics
-	c := m.(*api.Client)
+func (r *UserDataResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
+	}
 
-	createRequest := &api.UserDataCreateRequest{
-		Data: api.UserDataCreateData{
-			Type: "user_data",
-			Attributes: api.UserDataCreateAttributes{
-				Description: d.Get("description").(string),
-				Content:     d.Get("content").(string),
+	client, ok := req.ProviderData.(*latitudeshgosdk.Latitudesh)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			"Expected *latitudeshgosdk.Latitudesh, got: %T. Please report this issue to the provider developers.",
+		)
+		return
+	}
+
+	r.client = client
+}
+
+func (r *UserDataResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data UserDataResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	description := data.Description.ValueString()
+	content := data.Content.ValueString()
+
+	createRequest := operations.PostUserDataUserDataRequestBody{
+		Data: operations.PostUserDataUserDataData{
+			Type: operations.PostUserDataUserDataTypeUserData,
+			Attributes: &operations.PostUserDataUserDataAttributes{
+				Description: description,
+				Content:     content,
 			},
 		},
 	}
 
-	userData, _, err := c.UserData.Create(d.Get("project").(string), createRequest)
+	result, err := r.client.UserData.PostUserData(ctx, createRequest)
 	if err != nil {
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError("Client Error", "Unable to create user data, got error: "+err.Error())
+		return
 	}
 
-	d.SetId(userData.ID)
-
-	if err := d.Set("description", &userData.Description); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("content", &userData.Content); err != nil {
-		return diag.FromErr(err)
+	if result.UserData == nil || result.UserData.Data == nil || result.UserData.Data.ID == nil {
+		resp.Diagnostics.AddError("API Error", "Failed to get user data ID from response")
+		return
 	}
 
-	return diags
+	data.ID = types.StringValue(*result.UserData.Data.ID)
+
+	// Read the resource to populate all attributes
+	r.readUserData(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func resourceUserDataRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*api.Client)
+func (r *UserDataResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data UserDataResourceModel
 
-	var diags diag.Diagnostics
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	userDataID := d.Id()
+	r.readUserData(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	userData, resp, err := c.UserData.Get(userDataID, d.Get("project").(string), nil)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *UserDataResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data UserDataResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	userDataID := data.ID.ValueString()
+	description := data.Description.ValueString()
+	content := data.Content.ValueString()
+
+	updateRequest := &operations.PatchUserDataUserDataRequestBody{
+		Data: operations.PatchUserDataUserDataData{
+			ID:   userDataID,
+			Type: operations.PatchUserDataUserDataTypeUserData,
+			Attributes: &operations.PatchUserDataUserDataAttributes{
+				Description: &description,
+				Content:     &content,
+			},
+		},
+	}
+
+	_, err := r.client.UserData.PatchUserData(ctx, userDataID, updateRequest)
 	if err != nil {
-		if resp.StatusCode == http.StatusNotFound {
-			d.SetId("")
-			return diags
+		resp.Diagnostics.AddError("Client Error", "Unable to update user data, got error: "+err.Error())
+		return
+	}
+
+	// Read the resource to populate all attributes
+	r.readUserData(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *UserDataResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data UserDataResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	userDataID := data.ID.ValueString()
+
+	_, err := r.client.UserData.DeleteUserData(ctx, userDataID)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Unable to delete user data, got error: "+err.Error())
+		return
+	}
+}
+
+func (r *UserDataResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	var data UserDataResourceModel
+	data.ID = types.StringValue(req.ID)
+
+	r.readUserData(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *UserDataResource) readUserData(ctx context.Context, data *UserDataResourceModel, diags *diag.Diagnostics) {
+	userDataID := data.ID.ValueString()
+
+	// Get decoded content for display
+	decodedContent := "decoded_content"
+	response, err := r.client.UserData.GetUserData(ctx, userDataID, &decodedContent)
+	if err != nil {
+		diags.AddError("Client Error", "Unable to read user data, got error: "+err.Error())
+		return
+	}
+
+	if response.UserData == nil || response.UserData.Data == nil {
+		data.ID = types.StringNull()
+		return
+	}
+
+	userData := response.UserData.Data
+	if userData.Attributes != nil {
+		if userData.Attributes.Description != nil {
+			data.Description = types.StringValue(*userData.Attributes.Description)
 		}
 
-		return diag.FromErr(err)
+		if userData.Attributes.Content != nil {
+			data.Content = types.StringValue(*userData.Attributes.Content)
+		}
+
+		if userData.Attributes.CreatedAt != nil {
+			data.CreatedAt = types.StringValue(*userData.Attributes.CreatedAt)
+		}
+
+		if userData.Attributes.UpdatedAt != nil {
+			data.UpdatedAt = types.StringValue(*userData.Attributes.UpdatedAt)
+		}
 	}
-
-	if err := d.Set("description", &userData.Description); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("content", &userData.Content); err != nil {
-		return diag.FromErr(err)
-	}
-
-	return diags
-}
-
-func resourceUserDataUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*api.Client)
-	var diags diag.Diagnostics
-
-	userDataID := d.Id()
-
-	updateRequest := &api.UserDataUpdateRequest{
-		Data: api.UserDataUpdateData{
-			Type: "user_data",
-			ID:   userDataID,
-			Attributes: api.UserDataUpdateAttributes{
-				Description: d.Get("description").(string),
-				Content:     d.Get("content").(string),
-			},
-		},
-	}
-
-	userData, _, err := c.UserData.Update(userDataID, d.Get("project").(string), updateRequest)
-	if err != nil {
-		return diag.FromErr(err)
-	}
-
-	d.Set("updated", time.Now().Format(time.RFC850))
-
-	if err := d.Set("description", &userData.Description); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("content", &userData.Content); err != nil {
-		return diag.FromErr(err)
-	}
-
-	return diags
-}
-
-func resourceUserDataDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*api.Client)
-
-	var diags diag.Diagnostics
-
-	userDataID := d.Id()
-
-	_, err := c.UserData.Delete(userDataID, d.Get("project").(string))
-	if err != nil {
-		return diag.FromErr(err)
-	}
-
-	d.SetId("")
-
-	return diags
 }

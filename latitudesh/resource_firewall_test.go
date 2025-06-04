@@ -1,13 +1,15 @@
 package latitudesh
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
-	api "github.com/latitudesh/latitudesh-go"
+	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 )
 
 func TestAccLatitudeFirewall_Basic(t *testing.T) {
@@ -16,7 +18,7 @@ func TestAccLatitudeFirewall_Basic(t *testing.T) {
 		t.Skip("Skipping TestAccLatitudeFirewall_Basic because LATITUDESH_FIREWALL_ID is set")
 	}
 
-	var firewall api.Firewall
+	var firewall components.Firewall
 
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
@@ -43,48 +45,43 @@ func TestAccLatitudeFirewall_Basic(t *testing.T) {
 }
 
 func testAccCheckFirewallDestroy(s *terraform.State) error {
-	client := testAccProvider.Meta().(*api.Client)
+	client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "latitudesh_firewall" {
 			continue
 		}
-
-		_, resp, err := client.Firewalls.Get(rs.Primary.ID, nil)
-		if err == nil {
+		if _, err := client.Firewalls.GetFirewall(context.Background(), rs.Primary.ID); err == nil {
 			return fmt.Errorf("Firewall still exists")
 		}
-
-		// If we get a 404, the resource is gone
-		if resp != nil && resp.StatusCode == 404 {
-			continue
-		}
-
-		return err
 	}
 
 	return nil
 }
 
-func testAccCheckFirewallExists(n string, firewall *api.Firewall) resource.TestCheckFunc {
+func testAccCheckFirewallExists(n string, firewall *components.Firewall) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[n]
 		if !ok {
 			return fmt.Errorf("Not found: %s", n)
 		}
-
 		if rs.Primary.ID == "" {
 			return fmt.Errorf("No Record ID is set")
 		}
 
-		client := testAccProvider.Meta().(*api.Client)
+		client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
 
-		foundFirewall, _, err := client.Firewalls.Get(rs.Primary.ID, nil)
+		response, err := client.Firewalls.GetFirewall(context.Background(), rs.Primary.ID)
 		if err != nil {
 			return err
 		}
 
-		if foundFirewall.ID != rs.Primary.ID {
+		if response.Firewall == nil {
+			return fmt.Errorf("Firewall not found in response")
+		}
+
+		foundFirewall := response.Firewall
+		if foundFirewall.ID == nil || *foundFirewall.ID != rs.Primary.ID {
 			return fmt.Errorf("Record not found: %v - %v", rs.Primary.ID, foundFirewall)
 		}
 

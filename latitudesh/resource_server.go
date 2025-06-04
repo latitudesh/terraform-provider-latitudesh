@@ -2,506 +2,447 @@ package latitudesh
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"log"
-	"strconv"
-	"time"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	api "github.com/latitudesh/latitudesh-go"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
-var ErrServerDeleted = errors.New("server was removed during provisioning due to failure")
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ resource.Resource = &ServerResource{}
+var _ resource.ResourceWithImportState = &ServerResource{}
 
-var triggerReinstall = []string{
-	"operating_system",
-	"ssh_keys",
-	"user_data",
-	"raid",
-	"ipxe_url",
+func NewServerResource() resource.Resource {
+	return &ServerResource{}
 }
 
-func resourceServer() *schema.Resource {
-	return &schema.Resource{
-		CreateContext: resourceServerCreate,
-		ReadContext:   resourceServerRead,
-		UpdateContext: resourceServerUpdate,
-		DeleteContext: resourceServerDelete,
-		Schema: map[string]*schema.Schema{
-			"project": {
-				Type:        schema.TypeString,
-				Description: "The id or slug of the project",
-				Required:    true,
-				ForceNew:    true,
-			},
-			"site": {
-				Type:        schema.TypeString,
-				Description: "The server site",
-				Required:    true,
-				ForceNew:    true,
-			},
-			"plan": {
-				Type:        schema.TypeString,
-				Description: "The server plan",
-				Required:    true,
-				ForceNew:    true,
-			},
-			"operating_system": {
-				Type: schema.TypeString,
-				Description: `The server OS. 
-				Updating operating_system will trigger a reinstall if allow_reinstall is set to true.`,
-				Required: true,
-			},
-			"hostname": {
-				Type:        schema.TypeString,
-				Description: "The server hostname",
-				Required:    true,
-			},
-			"ssh_keys": {
-				Type: schema.TypeList,
-				Elem: &schema.Schema{
-					Type: schema.TypeString,
+type ServerResource struct {
+	client *latitudeshgosdk.Latitudesh
+}
+
+type ServerResourceModel struct {
+	ID              types.String `tfsdk:"id"`
+	Project         types.String `tfsdk:"project"`
+	Site            types.String `tfsdk:"site"`
+	Plan            types.String `tfsdk:"plan"`
+	OperatingSystem types.String `tfsdk:"operating_system"`
+	Hostname        types.String `tfsdk:"hostname"`
+	SSHKeys         types.List   `tfsdk:"ssh_keys"`
+	UserData        types.String `tfsdk:"user_data"`
+	Raid            types.String `tfsdk:"raid"`
+	Ipxe            types.String `tfsdk:"ipxe"`
+	Billing         types.String `tfsdk:"billing"`
+	Tags            types.List   `tfsdk:"tags"`
+	// Computed fields
+	PrimaryIpv4 types.String `tfsdk:"primary_ipv4"`
+	Status      types.String `tfsdk:"status"`
+	Locked      types.Bool   `tfsdk:"locked"`
+	CreatedAt   types.String `tfsdk:"created_at"`
+	Region      types.String `tfsdk:"region"`
+}
+
+func (r *ServerResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_server"
+}
+
+func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		MarkdownDescription: "Server resource",
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				MarkdownDescription: "Server identifier",
+				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
-				Description: `List of server SSH key ids. 
-				Updating ssh_keys will trigger a reinstall if allow_reinstall is set to true.`,
-				Optional: true,
 			},
-			"user_data": {
-				Type: schema.TypeString,
-				Description: `The id of user data to set on the server. 
-				Updating user_data will trigger a reinstall if allow_reinstall is set to true.`,
-				Optional: true,
-			},
-			"raid": {
-				Type: schema.TypeString,
-				Description: `RAID mode for the server. 
-				Updating raid will trigger a reinstall if allow_reinstall is set to true.`,
-				Optional: true,
-			},
-			"ipxe_url": {
-				Type: schema.TypeString,
-				Description: `Url for the iPXE script that will be used.	
-				Updating ipxe_url will trigger a reinstall if allow_reinstall is set to true.`,
-				Optional: true,
-			},
-			"billing": {
-				Type: schema.TypeString,
-				Description: `The server billing type. 
-				Accepts hourly and monthly for on demand projects and yearly for reserved projects.`,
-				Optional: true,
-			},
-			"primary_ipv4": {
-				Type:        schema.TypeString,
-				Description: "The server IP address",
-				Computed:    true,
-			},
-			"tags": {
-				Type: schema.TypeList,
-				Elem: &schema.Schema{
-					Type: schema.TypeString,
+			"project": schema.StringAttribute{
+				MarkdownDescription: "The project (ID or Slug) to deploy the server",
+				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
 				},
-				Description: "List of server tags",
-				Optional:    true,
 			},
-			"locked": {
-				Type:        schema.TypeBool,
-				Description: "Lock/unlock the server. A locked server cannot be deleted or updated.",
-				Optional:    true,
-				Default:     false,
+			"site": schema.StringAttribute{
+				MarkdownDescription: "The site to deploy the server",
+				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
-			"created": {
-				Type:        schema.TypeString,
-				Description: "The timestamp for when the server was created",
-				Computed:    true,
+			"plan": schema.StringAttribute{
+				MarkdownDescription: "The plan to choose server from",
+				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
-			"updated": {
-				Type:        schema.TypeString,
-				Description: "The timestamp for the last time the server was updated",
-				Computed:    true,
+			"operating_system": schema.StringAttribute{
+				MarkdownDescription: "The operating system for the new server",
+				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
-			"allow_reinstall": {
-				Type: schema.TypeBool,
-				Description: `Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe_url changes.
-				WARNING: The reinstall will be triggered even if Terraform reports an in-place update.`,
-				Optional: true,
-				Default:  false,
-				Deprecated: "This attribute is deprecated and will be removed in a future release. You should use the locked attribute. " +
-					"Learn more: https://www.latitude.sh/changelog/block-destructive-actions-with-server-locking",
+			"hostname": schema.StringAttribute{
+				MarkdownDescription: "The server hostname",
+				Optional:            true,
+				Computed:            true,
 			},
-		},
-		Importer: &schema.ResourceImporter{
-			StateContext: schema.ImportStatePassthroughContext,
-		},
-	}
-}
-
-func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	var diags diag.Diagnostics
-	c := m.(*api.Client)
-
-	ssh_keys := parseSSHKeys(d)
-	createRequest := &api.ServerCreateRequest{
-		Data: api.ServerCreateData{
-			Type: "servers",
-			Attributes: api.ServerCreateAttributes{
-				Project:         d.Get("project").(string),
-				Site:            d.Get("site").(string),
-				Plan:            d.Get("plan").(string),
-				OperatingSystem: d.Get("operating_system").(string),
-				Hostname:        d.Get("hostname").(string),
-				SSHKeys:         ssh_keys,
-				UserData:        d.Get("user_data").(string),
-				Raid:            d.Get("raid").(string),
-				IpxeUrl:         d.Get("ipxe_url").(string),
-				Billing:         d.Get("billing").(string),
+			"ssh_keys": schema.ListAttribute{
+				MarkdownDescription: "SSH Keys to set on the server",
+				ElementType:         types.StringType,
+				Optional:            true,
+				PlanModifiers:       []planmodifier.List{
+					// SSH keys require reinstall, so replace
+					// TODO: Add support for allow_reinstall configuration
+				},
 			},
-		},
-	}
-
-	server, _, err := c.Servers.Create(createRequest)
-	if err != nil {
-		return diag.FromErr(err)
-	}
-
-	originalServerID := server.ID
-
-	d.SetId(server.ID)
-
-	log.Printf("[INFO] Server %s created, waiting for provisioning to complete", server.ID)
-
-	err = waitForServerProvisioning(ctx, d, c)
-
-	if err != nil {
-		return diag.Diagnostics{
-			diag.Diagnostic{
-				Severity: diag.Error,
-				Summary:  "Server provisioning failed",
-				Detail:   fmt.Sprintf("Server '%s' was deleted during provisioning. This likely indicates a provisioning failure on the Latitude.sh platform. The server is no longer in your account and will be recreated on the next apply.", originalServerID),
+			"user_data": schema.StringAttribute{
+				MarkdownDescription: "User data to set on the server",
+				Optional:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
-		}
-	}
-
-	log.Printf("[INFO] Server %s provisioning completed successfully", server.ID)
-
-	updatedServer, resp, err := c.Servers.Get(server.ID, nil)
-	if err != nil || resp == nil || resp.StatusCode != 200 || updatedServer == nil {
-		log.Printf("[ERROR] Server %s verification check failed after provisioning", server.ID)
-		d.SetId("")
-		return diag.Diagnostics{
-			diag.Diagnostic{
-				Severity: diag.Error,
-				Summary:  "Server verification failed",
-				Detail:   fmt.Sprintf("Server '%s' could not be verified after provisioning completed. Please check your Latitude.sh dashboard.", originalServerID),
+			"raid": schema.StringAttribute{
+				MarkdownDescription: "RAID mode for the server (raid-0, raid-1)",
+				Optional:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
-		}
-	}
-
-	server = updatedServer
-
-	if err := d.Set("hostname", &server.Hostname); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("primary_ipv4", &server.PrimaryIPv4); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("plan", &server.Plan.Slug); err != nil {
-		return diag.FromErr(err)
-	}
-
-	if _, defined := d.GetOk("tags"); defined {
-		ctx := context.WithValue(ctx, "justCreated", true)
-		resourceServerUpdate(ctx, d, m)
-	}
-
-	// server.Project.ID is an interface{} type so we should verify before using
-	var serverProjectId string
-	switch server.Project.ID.(type) {
-	case string:
-		serverProjectId = server.Project.ID.(string)
-	case float64:
-		serverProjectId = strconv.FormatFloat(server.Project.ID.(float64), 'b', 2, 64)
-	}
-
-	if err := d.Set("project", serverProjectId); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("operating_system", &server.OperatingSystem.Slug); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("site", &server.Region.Site.Slug); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("created", &server.CreatedAt); err != nil {
-		return diag.FromErr(err)
-	}
-
-	isLocked := d.Get("locked").(bool)
-	if isLocked {
-		server, _, err := c.Servers.Lock(server.ID)
-		if err != nil {
-			return diag.FromErr(err)
-		}
-		d.Set("locked", &server.Locked)
-	}
-
-	return diags
-}
-
-func resourceServerRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*api.Client)
-	var diags diag.Diagnostics
-
-	serverID := d.Id()
-	log.Printf("[DEBUG] Reading server with ID: %s", serverID)
-
-	server, resp, err := c.Servers.Get(serverID, nil)
-	if err != nil {
-		// Check if the server was deleted
-		if resp != nil && (resp.StatusCode == 404 || resp.StatusCode == 410) {
-			log.Printf("[WARN] Server %s not found (status code: %d), removing from state", serverID, resp.StatusCode)
-			d.SetId("")
-			return diag.Diagnostics{}
-		}
-
-		return diag.Errorf("error retrieving server: %s", err)
-	}
-
-	if server.Status != "on" && server.Status != "inventory" {
-		log.Printf("[WARN] Server %s has unusual status: %s", serverID, server.Status)
-		diags = append(diags, diag.Diagnostic{
-			Severity: diag.Warning,
-			Summary:  fmt.Sprintf("Server has unusual status: %s", server.Status),
-			Detail:   fmt.Sprintf("The server exists but its status indicates it may not be fully operational. Please check your Latitude.sh dashboard for server ID: %s.", serverID),
-		})
-	}
-
-	var serverProjectId string
-	switch server.Project.ID.(type) {
-	case string:
-		serverProjectId = server.Project.ID.(string)
-	case float64:
-		serverProjectId = strconv.FormatFloat(server.Project.ID.(float64), 'b', 2, 64)
-	}
-
-	if err := d.Set("project", serverProjectId); err != nil {
-		return diag.FromErr(err)
-	}
-
-	if err := d.Set("hostname", &server.Hostname); err != nil {
-		return diag.FromErr(err)
-	}
-
-	if err := d.Set("primary_ipv4", &server.PrimaryIPv4); err != nil {
-		return diag.FromErr(err)
-	}
-
-	if err := d.Set("operating_system", &server.OperatingSystem.Slug); err != nil {
-		return diag.FromErr(err)
-	}
-
-	if err := d.Set("site", &server.Region.Site.Slug); err != nil {
-		return diag.FromErr(err)
-	}
-
-	if err := d.Set("plan", &server.Plan.Slug); err != nil {
-		return diag.FromErr(err)
-	}
-
-	if err := d.Set("created", &server.CreatedAt); err != nil {
-		return diag.FromErr(err)
-	}
-
-	if err := d.Set("locked", &server.Locked); err != nil {
-		return diag.FromErr(err)
-	}
-
-	if err := d.Set("tags", tagIDs(server.Tags)); err != nil {
-		return diag.FromErr(err)
-	}
-
-	return diags
-}
-
-func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*api.Client)
-	var diags diag.Diagnostics
-
-	serverID := d.Id()
-	tags := parseTags(d)
-
-	// Unlocking server takes place before the update.
-	if d.HasChange("locked") && !d.Get("locked").(bool) {
-		server, _, err := c.Servers.Unlock(serverID)
-		if err != nil {
-			return diag.FromErr(err)
-		}
-		d.Set("locked", &server.Locked)
-	}
-
-	updateRequest := &api.ServerUpdateRequest{
-		Data: api.ServerUpdateData{
-			Type: "servers",
-			ID:   serverID,
-			Attributes: api.ServerUpdateAttributes{
-				Hostname: d.Get("hostname").(string),
-				Billing:  d.Get("billing").(string),
-				Tags:     tags,
+			"ipxe": schema.StringAttribute{
+				MarkdownDescription: "URL where iPXE script is stored on, OR the iPXE script encoded in base64",
+				Optional:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"billing": schema.StringAttribute{
+				MarkdownDescription: "The server billing type (hourly, monthly, yearly)",
+				Optional:            true,
+				Computed:            true,
+			},
+			"tags": schema.ListAttribute{
+				MarkdownDescription: "List of server tags",
+				ElementType:         types.StringType,
+				Optional:            true,
+			},
+			// Computed attributes
+			"primary_ipv4": schema.StringAttribute{
+				MarkdownDescription: "Primary IPv4 address of the server",
+				Computed:            true,
+			},
+			"status": schema.StringAttribute{
+				MarkdownDescription: "Server power status",
+				Computed:            true,
+			},
+			"locked": schema.BoolAttribute{
+				MarkdownDescription: "Whether the server is locked",
+				Computed:            true,
+				Optional:            true,
+			},
+			"created_at": schema.StringAttribute{
+				MarkdownDescription: "The timestamp for when the server was created",
+				Computed:            true,
+			},
+			"region": schema.StringAttribute{
+				MarkdownDescription: "The region where the server is deployed",
+				Computed:            true,
 			},
 		},
 	}
-
-	server, _, err := c.Servers.Update(serverID, updateRequest)
-	if err != nil {
-		return diag.FromErr(err)
-	}
-
-	justCreated, _ := ctx.Value("justCreated").(bool)
-	if d.HasChanges(triggerReinstall...) && !justCreated {
-		if d.Get("allow_reinstall").(bool) {
-			diags = append(diags, serverReinstall(c, serverID, ctx, d)...)
-		}
-	}
-
-	err = d.Set("updated", time.Now().Format(time.RFC850))
-	if err != nil {
-		return diag.FromErr(err)
-	}
-
-	if err := d.Set("hostname", &server.Hostname); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("tags", tagIDs(server.Tags)); err != nil {
-		return diag.FromErr(err)
-	}
-
-	// Locking the server takes place after the update.
-	if d.HasChange("locked") && d.Get("locked").(bool) {
-		server, _, err := c.Servers.Lock(serverID)
-		if err != nil {
-			return diag.FromErr(err)
-		}
-		d.Set("locked", &server.Locked)
-	}
-
-	return diags
 }
 
-func resourceServerDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*api.Client)
-
-	var diags diag.Diagnostics
-
-	serverID := d.Id()
-
-	_, err := c.Servers.Delete(serverID)
-	if err != nil {
-		return diag.FromErr(err)
+func (r *ServerResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
 	}
 
-	d.SetId("")
+	client, ok := req.ProviderData.(*latitudeshgosdk.Latitudesh)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			"Expected *latitudeshgosdk.Latitudesh, got: %T. Please report this issue to the provider developers.",
+		)
+		return
+	}
 
-	return diags
+	r.client = client
 }
 
-func serverReinstall(c *api.Client, serverID string, ctx context.Context, d *schema.ResourceData) diag.Diagnostics {
-	ssh_keys := parseSSHKeys(d)
-	var diags diag.Diagnostics
+func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data ServerResourceModel
 
-	_, err := c.Servers.Reinstall(serverID, &api.ServerReinstallRequest{
-		Data: api.ServerReinstallData{
-			Type: "reinstalls",
-			Attributes: api.ServerReinstallAttributes{
-				OperatingSystem: d.Get("operating_system").(string),
-				Hostname:        d.Get("hostname").(string),
-				SSHKeys:         ssh_keys,
-				UserData:        d.Get("user_data").(string),
-				Raid:            d.Get("raid").(string),
-				IpxeUrl:         d.Get("ipxe_url").(string),
-			},
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Convert string values to SDK enums
+	attrs := &operations.CreateServerServersAttributes{}
+
+	// Required fields
+	if !data.Project.IsNull() {
+		project := data.Project.ValueString()
+		attrs.Project = &project
+	}
+
+	if !data.Plan.IsNull() {
+		planValue := data.Plan.ValueString()
+		plan := operations.CreateServerPlan(planValue)
+		attrs.Plan = &plan
+	}
+
+	if !data.Site.IsNull() {
+		siteValue := data.Site.ValueString()
+		site := operations.CreateServerSite(siteValue)
+		attrs.Site = &site
+	}
+
+	if !data.OperatingSystem.IsNull() {
+		osValue := data.OperatingSystem.ValueString()
+		os := operations.CreateServerOperatingSystem(osValue)
+		attrs.OperatingSystem = &os
+	}
+
+	// Optional fields
+	if !data.Hostname.IsNull() {
+		hostname := data.Hostname.ValueString()
+		attrs.Hostname = &hostname
+	}
+
+	if !data.SSHKeys.IsNull() && !data.SSHKeys.IsUnknown() {
+		var sshKeys []string
+		resp.Diagnostics.Append(data.SSHKeys.ElementsAs(ctx, &sshKeys, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		attrs.SSHKeys = sshKeys
+	}
+
+	if !data.UserData.IsNull() {
+		userData := data.UserData.ValueString()
+		attrs.UserData = &userData
+	}
+
+	if !data.Raid.IsNull() {
+		raidValue := data.Raid.ValueString()
+		raid := operations.CreateServerRaid(raidValue)
+		attrs.Raid = &raid
+	}
+
+	if !data.Ipxe.IsNull() {
+		ipxe := data.Ipxe.ValueString()
+		attrs.Ipxe = &ipxe
+	}
+
+	if !data.Billing.IsNull() {
+		billingValue := data.Billing.ValueString()
+		billing := operations.CreateServerBilling(billingValue)
+		attrs.Billing = &billing
+	}
+
+	createRequest := operations.CreateServerServersRequestBody{
+		Data: &operations.CreateServerServersData{
+			Type:       operations.CreateServerServersTypeServers,
+			Attributes: attrs,
 		},
-	})
+	}
 
+	result, err := r.client.Servers.CreateServer(ctx, createRequest)
 	if err != nil {
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError("Client Error", "Unable to create server, got error: "+err.Error())
+		return
 	}
 
-	diags = append(diags, diag.Diagnostic{
-		Severity: diag.Warning,
-		Summary:  "Your server is being reinstalled",
-		Detail: "[WARN] The changes made to the server resource will trigger a reinstallation. All disks will be erased." +
-			"Please note that this process may take some time to complete.",
-	})
-
-	return diags
-}
-
-func parseSSHKeys(d *schema.ResourceData) []string {
-	ssh_keys := d.Get("ssh_keys").([]interface{})
-	ssh_keys_slice := make([]string, len(ssh_keys))
-	for i, ssh_key := range ssh_keys {
-		ssh_keys_slice[i] = ssh_key.(string)
+	if result.Server == nil || result.Server.Data == nil || result.Server.Data.ID == nil {
+		resp.Diagnostics.AddError("API Error", "Failed to get server ID from response")
+		return
 	}
-	return ssh_keys_slice
+
+	data.ID = types.StringValue(*result.Server.Data.ID)
+
+	// Read the resource to populate all attributes
+	r.readServer(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func waitForServerProvisioning(ctx context.Context, d *schema.ResourceData, client *api.Client) error {
-	serverID := d.Id()
-	timeoutMinutes := 30
-	iterationSeconds := 30
-	maxIterations := (timeoutMinutes * 60) / iterationSeconds
-	requiredConsecutiveSuccesses := 3
-	consecutiveSuccessCount := 0
+func (r *ServerResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data ServerResourceModel
 
-	expectedProject := d.Get("project").(string)
-	expectedOS := d.Get("operating_system").(string)
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	log.Printf("[INFO] Waiting for server %s to be provisioned, checking every %d seconds with timeout of %d minutes",
-		serverID, iterationSeconds, timeoutMinutes)
+	r.readServer(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	for i := 0; i < maxIterations; i++ {
-		server, resp, err := client.Servers.Get(serverID, nil)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
 
-		if err != nil {
-			d.SetId("")
-			return fmt.Errorf("server %s was deleted during provisioning (HTTP %d response)",
-				serverID, resp.StatusCode)
+func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data ServerResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	serverID := data.ID.ValueString()
+
+	// Prepare update request (only certain fields can be updated)
+	attrs := &operations.UpdateServerServersAttributes{}
+
+	if !data.Hostname.IsNull() {
+		hostname := data.Hostname.ValueString()
+		attrs.Hostname = &hostname
+	}
+
+	if !data.Billing.IsNull() {
+		billingValue := data.Billing.ValueString()
+		billing := operations.UpdateServerServersBilling(billingValue)
+		attrs.Billing = &billing
+	}
+
+	if !data.Tags.IsNull() && !data.Tags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(data.Tags.ElementsAs(ctx, &tags, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		attrs.Tags = tags
+	}
+
+	if !data.Project.IsNull() {
+		project := data.Project.ValueString()
+		attrs.Project = &project
+	}
+
+	updateType := operations.UpdateServerServersTypeServers
+	updateRequest := operations.UpdateServerServersRequestBody{
+		ID:         &serverID,
+		Type:       &updateType,
+		Attributes: attrs,
+	}
+
+	_, err := r.client.Servers.UpdateServer(ctx, serverID, updateRequest)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Unable to update server, got error: "+err.Error())
+		return
+	}
+
+	// Read the resource to populate all attributes
+	r.readServer(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *ServerResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data ServerResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	serverID := data.ID.ValueString()
+
+	_, err := r.client.Servers.DestroyServer(ctx, serverID, nil)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Unable to delete server, got error: "+err.Error())
+		return
+	}
+}
+
+func (r *ServerResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	var data ServerResourceModel
+	data.ID = types.StringValue(req.ID)
+
+	r.readServer(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) {
+	serverID := data.ID.ValueString()
+
+	response, err := r.client.Servers.GetServer(ctx, serverID, nil)
+	if err != nil {
+		diags.AddError("Client Error", "Unable to read server, got error: "+err.Error())
+		return
+	}
+
+	if response.Server == nil || response.Server.Data == nil {
+		data.ID = types.StringNull()
+		return
+	}
+
+	server := response.Server.Data
+	if server.Attributes != nil {
+		attrs := server.Attributes
+
+		if attrs.Hostname != nil {
+			data.Hostname = types.StringValue(*attrs.Hostname)
 		}
 
-		log.Printf("[INFO] Server %s status: %s (attempt %d/%d)",
-			serverID, server.Status, i+1, maxIterations)
+		if attrs.Status != nil {
+			data.Status = types.StringValue(string(*attrs.Status))
+		}
 
-		serverProjectID := server.Project.ID.(string)
+		if attrs.PrimaryIpv4 != nil {
+			data.PrimaryIpv4 = types.StringValue(*attrs.PrimaryIpv4)
+		}
 
-		if server.Status == "on" &&
-			serverProjectID == expectedProject &&
-			server.OperatingSystem.Slug == expectedOS {
+		if attrs.Locked != nil {
+			data.Locked = types.BoolValue(*attrs.Locked)
+		}
 
-			consecutiveSuccessCount++
-			log.Printf("[INFO] Server %s conditions met (%d/%d): status=on, project=%s, os=%s",
-				serverID, consecutiveSuccessCount, requiredConsecutiveSuccesses,
-				serverProjectID, server.OperatingSystem.Slug)
+		if attrs.CreatedAt != nil {
+			data.CreatedAt = types.StringValue(*attrs.CreatedAt)
+		}
 
-			// Return success only after meeting conditions for required number of consecutive iterations
-			if consecutiveSuccessCount >= requiredConsecutiveSuccesses {
-				log.Printf("[INFO] Server %s is now confirmed stable after %d consecutive successful checks",
-					serverID, requiredConsecutiveSuccesses)
-				return nil
-			}
-		} else {
-			if consecutiveSuccessCount > 0 {
-				d.SetId("")
-				return fmt.Errorf("server %s was deleted during provisioning (HTTP %d response)",
-					serverID, resp.StatusCode)
+		if attrs.Site != nil {
+			data.Site = types.StringValue(*attrs.Site)
+		}
+
+		if attrs.Plan != nil {
+			if attrs.Plan.Name != nil {
+				data.Plan = types.StringValue(*attrs.Plan.Name)
+			} else if attrs.Plan.ID != nil {
+				data.Plan = types.StringValue(*attrs.Plan.ID)
 			}
 		}
 
-		time.Sleep(time.Duration(iterationSeconds) * time.Second)
-	}
+		if attrs.OperatingSystem != nil && attrs.OperatingSystem.Slug != nil {
+			data.OperatingSystem = types.StringValue(*attrs.OperatingSystem.Slug)
+		}
 
-	log.Printf("[ERROR] Timeout reached waiting for server %s to be provisioned after %d minutes",
-		serverID, timeoutMinutes)
-	return fmt.Errorf("timeout reached waiting for server %s to be provisioned after %d minutes",
-		serverID, timeoutMinutes)
+		if attrs.Project != nil && attrs.Project.ID != nil {
+			data.Project = types.StringValue(*attrs.Project.ID)
+		}
+
+		if attrs.Region != nil && attrs.Region.Site != nil && attrs.Region.Site.Slug != nil {
+			data.Region = types.StringValue(*attrs.Region.Site.Slug)
+		}
+	}
 }

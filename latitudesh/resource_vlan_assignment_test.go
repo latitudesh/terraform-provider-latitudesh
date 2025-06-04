@@ -1,12 +1,14 @@
 package latitudesh
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
-	api "github.com/latitudesh/latitudesh-go"
+	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
 func TestAccVlanAssignment_Basic(t *testing.T) {
@@ -37,21 +39,24 @@ func TestAccVlanAssignment_Basic(t *testing.T) {
 }
 
 func testAccCheckVlanAssignmentDestroy(s *terraform.State) error {
-	client := testAccProvider.Meta().(*api.Client)
+	client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "latitudesh_vlan_assignment" {
 			continue
 		}
 
-		assignments, _, err := client.VlanAssignments.List(nil)
+		ctx := context.Background()
+		response, err := client.PrivateNetworks.GetVirtualNetworksAssignments(ctx, operations.GetVirtualNetworksAssignmentsRequest{})
 		if err != nil {
 			return fmt.Errorf("error fetching VLAN assignments: %s", err)
 		}
 
-		for _, assignment := range assignments {
-			if assignment.ID == rs.Primary.ID {
-				return fmt.Errorf("VLAN assignment %s still exists", rs.Primary.ID)
+		if response.VirtualNetworkAssignments != nil {
+			for _, assignment := range response.VirtualNetworkAssignments.Data {
+				if assignment.ID != nil && *assignment.ID == rs.Primary.ID {
+					return fmt.Errorf("VLAN assignment %s still exists", rs.Primary.ID)
+				}
 			}
 		}
 	}
@@ -70,15 +75,18 @@ func testAccCheckVlanAssignmentExists(n string) resource.TestCheckFunc {
 			return fmt.Errorf("no ID is set")
 		}
 
-		client := testAccProvider.Meta().(*api.Client)
-		assignments, _, err := client.VlanAssignments.List(nil)
+		client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+		ctx := context.Background()
+		response, err := client.PrivateNetworks.GetVirtualNetworksAssignments(ctx, operations.GetVirtualNetworksAssignmentsRequest{})
 		if err != nil {
 			return fmt.Errorf("error fetching VLAN assignments: %s", err)
 		}
 
-		for _, assignment := range assignments {
-			if assignment.ID == rs.Primary.ID {
-				return nil
+		if response.VirtualNetworkAssignments != nil {
+			for _, assignment := range response.VirtualNetworkAssignments.Data {
+				if assignment.ID != nil && *assignment.ID == rs.Primary.ID {
+					return nil
+				}
 			}
 		}
 

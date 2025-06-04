@@ -2,237 +2,343 @@ package latitudesh
 
 import (
 	"context"
-	"errors"
-	"net/http"
-	"strings"
-	"time"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	api "github.com/latitudesh/latitudesh-go"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"github.com/latitudesh/latitudesh-go-sdk/models/components"
+	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
-func resourceProject() *schema.Resource {
-	return &schema.Resource{
-		CreateContext: resourceProjectCreate,
-		ReadContext:   resourceProjectRead,
-		UpdateContext: resourceProjectUpdate,
-		DeleteContext: resourceProjectDelete,
-		Schema: map[string]*schema.Schema{
-			"name": {
-				Type:        schema.TypeString,
-				Description: "The name of the project",
-				Required:    true,
-			},
-			"provisioning_type": {
-				Type:        schema.TypeString,
-				Description: "The provisioning type of the project",
-				Required:    true,
-			},
-			"description": {
-				Type:        schema.TypeString,
-				Description: "The description of the project",
-				Optional:    true,
-			},
-			"environment": {
-				Type:        schema.TypeString,
-				Description: "The name of the project",
-				Required:    true,
-			},
-			"tags": {
-				Type: schema.TypeList,
-				Elem: &schema.Schema{
-					Type: schema.TypeString,
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ resource.Resource = &ProjectResource{}
+var _ resource.ResourceWithImportState = &ProjectResource{}
+
+func NewProjectResource() resource.Resource {
+	return &ProjectResource{}
+}
+
+// ProjectResource defines the resource implementation.
+type ProjectResource struct {
+	client *latitudeshgosdk.Latitudesh
+}
+
+// ProjectResourceModel describes the resource data model.
+type ProjectResourceModel struct {
+	ID               types.String `tfsdk:"id"`
+	Name             types.String `tfsdk:"name"`
+	Description      types.String `tfsdk:"description"`
+	Environment      types.String `tfsdk:"environment"`
+	ProvisioningType types.String `tfsdk:"provisioning_type"`
+	Slug             types.String `tfsdk:"slug"`
+}
+
+func (r *ProjectResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_project"
+}
+
+func (r *ProjectResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		MarkdownDescription: "Project resource",
+
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				MarkdownDescription: "Project identifier",
+				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
-				Description: "List of project tags",
-				Optional:    true,
 			},
-			"created": {
-				Type:        schema.TypeString,
-				Description: "The timestamp for when the project was created",
-				Computed:    true,
+			"name": schema.StringAttribute{
+				MarkdownDescription: "The project name",
+				Required:            true,
 			},
-			"updated": {
-				Type:        schema.TypeString,
-				Description: "The timestamp for the last time the project was updated",
-				Computed:    true,
+			"description": schema.StringAttribute{
+				MarkdownDescription: "The project description",
+				Optional:            true,
 			},
-		},
-		Importer: &schema.ResourceImporter{
-			StateContext: schema.ImportStatePassthroughContext,
+			"environment": schema.StringAttribute{
+				MarkdownDescription: "The project environment (Production, Development, Staging)",
+				Optional:            true,
+			},
+			"provisioning_type": schema.StringAttribute{
+				MarkdownDescription: "The provisioning type (on_demand, reserved)",
+				Required:            true,
+			},
+			"slug": schema.StringAttribute{
+				MarkdownDescription: "Project slug",
+				Computed:            true,
+			},
 		},
 	}
 }
 
-func resourceProjectCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	var diags diag.Diagnostics
-	c := m.(*api.Client)
+func (r *ProjectResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	// Prevent panic if the provider has not been configured.
+	if req.ProviderData == nil {
+		return
+	}
 
-	createRequest := &api.ProjectCreateRequest{
-		Data: api.ProjectCreateData{
-			Type: "projects",
-			Attributes: api.ProjectCreateAttributes{
-				Name:             d.Get("name").(string),
-				ProvisioningType: d.Get("provisioning_type").(string),
-				Description:      d.Get("description").(string),
-				Environment:      d.Get("environment").(string),
-			},
+	client, ok := req.ProviderData.(*latitudeshgosdk.Latitudesh)
+
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			"Expected *latitudeshgosdk.Latitudesh, got: %T. Please report this issue to the provider developers.",
+		)
+
+		return
+	}
+
+	r.client = client
+}
+
+func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data ProjectResourceModel
+
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	name := data.Name.ValueString()
+	provisioningType := data.ProvisioningType.ValueString()
+
+	// Convert provisioning type string to enum
+	var provisioningEnum operations.CreateProjectProvisioningType
+	switch provisioningType {
+	case "reserved":
+		provisioningEnum = operations.CreateProjectProvisioningTypeReserved
+	case "on_demand":
+		provisioningEnum = operations.CreateProjectProvisioningTypeOnDemand
+	default:
+		provisioningEnum = operations.CreateProjectProvisioningTypeOnDemand // default
+	}
+
+	attrs := &operations.CreateProjectProjectsAttributes{
+		Name:             name,
+		ProvisioningType: provisioningEnum,
+	}
+
+	// Add optional description
+	if !data.Description.IsNull() {
+		desc := data.Description.ValueString()
+		attrs.Description = &desc
+	}
+
+	// Add optional environment
+	if !data.Environment.IsNull() {
+		env := data.Environment.ValueString()
+		var envEnum operations.CreateProjectEnvironment
+		switch env {
+		case "Production":
+			envEnum = operations.CreateProjectEnvironmentProduction
+		case "Development":
+			envEnum = operations.CreateProjectEnvironmentDevelopment
+		case "Staging":
+			envEnum = operations.CreateProjectEnvironmentStaging
+		default:
+			envEnum = operations.CreateProjectEnvironmentDevelopment // default
+		}
+		attrs.Environment = &envEnum
+	}
+
+	createRequest := operations.CreateProjectProjectsRequestBody{
+		Data: &operations.CreateProjectProjectsData{
+			Type:       operations.CreateProjectProjectsTypeProjects,
+			Attributes: attrs,
 		},
 	}
 
-	project, _, err := c.Projects.Create(createRequest)
+	result, err := r.client.Projects.CreateProject(ctx, createRequest)
 	if err != nil {
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError("Client Error", "Unable to create project, got error: "+err.Error())
+		return
 	}
 
-	d.SetId(project.ID)
-
-	if d.Get("tags") != nil {
-		resourceProjectUpdate(ctx, d, m)
+	if result.Object == nil || result.Object.Data == nil || result.Object.Data.ID == nil {
+		resp.Diagnostics.AddError("API Error", "Failed to get project ID from response")
+		return
 	}
 
-	if err := d.Set("name", &project.Name); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("description", &project.Description); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("environment", &project.Environment); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("created", &project.CreatedAt); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("updated", &project.UpdatedAt); err != nil {
-		return diag.FromErr(err)
+	data.ID = types.StringValue(*result.Object.Data.ID)
+
+	// Read the resource to populate all attributes
+	r.readProject(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	if d.Get("tags") != nil {
-		resourceProjectUpdate(ctx, d, m)
-	}
-
-	return diags
+	// Save data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func resourceProjectRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*api.Client)
+func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data ProjectResourceModel
 
-	var diags diag.Diagnostics
+	// Read Terraform prior state data into the model
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 
-	projectID := d.Id()
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	project, resp, err := c.Projects.Get(projectID, nil)
+	r.readProject(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Save updated data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data ProjectResourceModel
+
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	projectID := data.ID.ValueString()
+	name := data.Name.ValueString()
+
+	attrs := &operations.UpdateProjectProjectsAttributes{
+		Name: &name,
+	}
+
+	// Add optional description
+	if !data.Description.IsNull() {
+		desc := data.Description.ValueString()
+		attrs.Description = &desc
+	}
+
+	// Add optional environment
+	if !data.Environment.IsNull() {
+		env := data.Environment.ValueString()
+		var envEnum operations.UpdateProjectProjectsEnvironment
+		switch env {
+		case "Production":
+			envEnum = operations.UpdateProjectProjectsEnvironmentProduction
+		case "Development":
+			envEnum = operations.UpdateProjectProjectsEnvironmentDevelopment
+		case "Staging":
+			envEnum = operations.UpdateProjectProjectsEnvironmentStaging
+		default:
+			envEnum = operations.UpdateProjectProjectsEnvironmentDevelopment // default
+		}
+		attrs.Environment = &envEnum
+	}
+
+	updateRequest := operations.UpdateProjectProjectsRequestBody{
+		Data: operations.UpdateProjectProjectsData{
+			ID:         &projectID,
+			Type:       operations.UpdateProjectProjectsTypeProjects,
+			Attributes: attrs,
+		},
+	}
+
+	_, err := r.client.Projects.UpdateProject(ctx, projectID, &updateRequest)
 	if err != nil {
-		if resp.StatusCode == http.StatusNotFound {
-			d.SetId("")
-			return diags
+		resp.Diagnostics.AddError("Client Error", "Unable to update project, got error: "+err.Error())
+		return
+	}
+
+	// Read the resource to populate all attributes
+	r.readProject(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Save updated data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *ProjectResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data ProjectResourceModel
+
+	// Read Terraform prior state data into the model
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	projectID := data.ID.ValueString()
+
+	_, err := r.client.Projects.DeleteProject(ctx, projectID)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Unable to delete project, got error: "+err.Error())
+		return
+	}
+}
+
+func (r *ProjectResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	var data ProjectResourceModel
+	data.ID = types.StringValue(req.ID)
+
+	r.readProject(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *ProjectResource) readProject(ctx context.Context, data *ProjectResourceModel, diags *diag.Diagnostics) {
+	projectID := data.ID.ValueString()
+
+	// Use GetProjects with filter to find the project since there's no GetProject method
+	response, err := r.client.Projects.GetProjects(ctx, operations.GetProjectsRequest{})
+	if err != nil {
+		diags.AddError("Client Error", "Unable to read projects, got error: "+err.Error())
+		return
+	}
+
+	if response.Projects == nil || response.Projects.Data == nil {
+		data.ID = types.StringNull()
+		return
+	}
+
+	var project *components.Project
+	for _, p := range response.Projects.Data {
+		if p.ID != nil && *p.ID == projectID {
+			project = &p
+			break
+		}
+	}
+
+	if project == nil {
+		data.ID = types.StringNull()
+		return
+	}
+
+	if project.Attributes != nil {
+		if project.Attributes.Name != nil {
+			data.Name = types.StringValue(*project.Attributes.Name)
 		}
 
-		return diag.FromErr(err)
+		if project.Attributes.Description != nil {
+			data.Description = types.StringValue(*project.Attributes.Description)
+		}
+
+		if project.Attributes.Environment != nil {
+			data.Environment = types.StringValue(string(*project.Attributes.Environment))
+		}
+
+		if project.Attributes.Slug != nil {
+			data.Slug = types.StringValue(*project.Attributes.Slug)
+		}
+
+		// Note: ProvisioningType is not available in the API response,
+		// so we keep the value from state (Terraform will maintain it)
 	}
-
-	if err := d.Set("name", &project.Name); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("description", &project.Description); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("environment", &project.Environment); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("created", &project.CreatedAt); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("updated", &project.UpdatedAt); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("tags", tagIDs(project.Tags)); err != nil {
-		return diag.FromErr(err)
-	}
-
-	return diags
-}
-
-func resourceProjectUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*api.Client)
-	var diags diag.Diagnostics
-
-	projectID := d.Id()
-	tags := parseTags(d)
-
-	updateRequest := &api.ProjectUpdateRequest{
-		Data: api.ProjectUpdateData{
-			Type: "projects",
-			ID:   projectID,
-			Attributes: api.ProjectUpdateAttributes{
-				Name:        d.Get("name").(string),
-				Description: d.Get("description").(string),
-				Environment: d.Get("environment").(string),
-				Tags:        tags,
-			},
-		},
-	}
-
-	project, _, err := c.Projects.Update(projectID, updateRequest)
-	if err != nil {
-		return diag.FromErr(err)
-	}
-
-	d.Set("updated", time.Now().Format(time.RFC850))
-
-	if err := d.Set("name", &project.Name); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("description", &project.Description); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("environment", &project.Environment); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("created", &project.CreatedAt); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("updated", &project.UpdatedAt); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("tags", tagIDs(project.Tags)); err != nil {
-		return diag.FromErr(err)
-	}
-
-	return diags
-}
-
-func resourceProjectDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*api.Client)
-
-	var diags diag.Diagnostics
-
-	projectID := d.Id()
-
-	_, err := c.Projects.Delete(projectID)
-	if err != nil {
-		return diag.FromErr(err)
-	}
-
-	d.SetId("")
-
-	return diags
-}
-
-func NestedResourceRestAPIImport(ctx context.Context, d *schema.ResourceData, m interface{}) ([]*schema.ResourceData, error) {
-	var err error
-	nestedResourceID := d.Id()
-
-	//extract projectID and nestedResourceID
-	splitIDs := strings.Split(nestedResourceID, ":")
-
-	if len(splitIDs) == 2 {
-		// Set the projectID and requested nestedResourceID
-		d.Set("project", splitIDs[0])
-		d.SetId(splitIDs[1])
-	} else {
-		err = errors.New("projectID and nestedResourceID not passed correctly. Please pass as projectID:nestedResourceID")
-	}
-
-	return []*schema.ResourceData{d}, err
 }
