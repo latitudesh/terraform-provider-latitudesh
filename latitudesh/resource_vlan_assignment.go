@@ -2,7 +2,6 @@ package latitudesh
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -109,14 +108,7 @@ func (r *VlanAssignmentResource) Create(ctx context.Context, req resource.Create
 	}
 
 	serverID := data.ServerID.ValueString()
-	vnetIDStr := data.VirtualNetworkID.ValueString()
-
-	// Convert virtual network ID to int64
-	vnetID, err := strconv.ParseInt(vnetIDStr, 10, 64)
-	if err != nil {
-		resp.Diagnostics.AddError("ID Conversion Error", "Unable to convert virtual network ID to integer: "+err.Error())
-		return
-	}
+	vnetID := data.VirtualNetworkID.ValueString()
 
 	// Create the assignment request
 	attrs := &operations.AssignServerVirtualNetworkPrivateNetworksAttributes{

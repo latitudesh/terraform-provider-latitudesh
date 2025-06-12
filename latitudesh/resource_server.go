@@ -426,10 +426,12 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 		}
 
 		if attrs.Plan != nil {
-			if attrs.Plan.Name != nil {
-				data.Plan = types.StringValue(*attrs.Plan.Name)
+			if attrs.Plan.Slug != nil {
+				data.Plan = types.StringValue(*attrs.Plan.Slug)
 			} else if attrs.Plan.ID != nil {
 				data.Plan = types.StringValue(*attrs.Plan.ID)
+			} else if attrs.Plan.Name != nil {
+				data.Plan = types.StringValue(*attrs.Plan.Name)
 			}
 		}
 

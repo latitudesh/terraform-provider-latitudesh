@@ -23,7 +23,7 @@ func TestAccPlan_Basic(t *testing.T) {
 				Config: testAccCheckPlanBasic(),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(
-						"data.latitudesh_plan.test", "name", testPlanName),
+						"data.latitudesh_plan.test", "slug", testPlanName),
 				),
 			},
 		},
@@ -33,7 +33,7 @@ func TestAccPlan_Basic(t *testing.T) {
 func testAccCheckPlanBasic() string {
 	return fmt.Sprintf(`
 data "latitudesh_plan" "test" {
-	name = "%s"
+	slug = "%s"
 }
 `,
 		testPlanName,

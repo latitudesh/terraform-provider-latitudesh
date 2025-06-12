@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -159,7 +160,22 @@ func (r *VirtualNetworkResource) Create(ctx context.Context, req resource.Create
 	}
 
 	if result.VirtualNetwork == nil || result.VirtualNetwork.ID == nil {
-		resp.Diagnostics.AddError("API Error", "Failed to get virtual network ID from response")
+		// Add debugging to see what we got
+		debugMsg := "Failed to get virtual network ID from response."
+		if result.VirtualNetwork != nil {
+			if result.VirtualNetwork.Type != nil {
+				debugMsg += " Type: " + string(*result.VirtualNetwork.Type)
+			}
+			if result.VirtualNetwork.Attributes != nil {
+				if result.VirtualNetwork.Attributes.Name != nil {
+					debugMsg += ", Name: " + *result.VirtualNetwork.Attributes.Name
+				}
+				if result.VirtualNetwork.Attributes.Vid != nil {
+					debugMsg += fmt.Sprintf(", VID: %d", *result.VirtualNetwork.Attributes.Vid)
+				}
+			}
+		}
+		resp.Diagnostics.AddError("API Error", debugMsg)
 		return
 	}
 

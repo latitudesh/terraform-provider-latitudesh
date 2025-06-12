@@ -1,7 +1,6 @@
 # Upgrading to Latitude.sh Terraform Provider v2.0.0
 
-Hey there! I'm excited to share that we've just released **Latitude.sh Terraform Provider v2.0.0**. A complete architectural upgrade that brings significant improvements while maintaining full backward compatibility for your configurations.
-
+Hey there! I'm excited to share that we've just released **Latitude.sh Terraform Provider v2.0.0**. A complete architectural upgrade that brings significant improvements while maintaining compatibility for most configurations.
 
 After months of work migrating from HashiCorp's Plugin SDK v2 to the modern **Plugin Framework v1.15.0** and our **new Go SDK**, here's what changed:
 
@@ -20,23 +19,35 @@ After months of work migrating from HashiCorp's Plugin SDK v2 to the modern **Pl
 - **Ready for Terraform 2.0** when it arrives
 - Modern patterns that make adding new features easier
 
-## Your configs stay the same
+## ⚠️ Breaking Changes
 
-**Zero breaking changes to your Terraform configurations.** All your existing `.tf` files will work exactly as before:
+While we've maintained compatibility for most resources, there are some important changes due to new API endpoints:
 
+### **SSH Keys & User Data - Now Team-Scoped**
+
+In v1.x, SSH keys and user data were project-scoped. In v2.0.0, they're **team-scoped** for better management:
+
+**v1.x (Old):**
 ```hcl
-# ✅ This works exactly the same in v2.0.0
-resource "latitudesh_project" "main" {
-  name             = "production-infrastructure"
-  description      = "Main production environment"
-  environment      = "Production"
-  provisioning_type = "on_demand"
+resource "latitudesh_ssh_key" "deploy" {
+  project    = latitudesh_project.main.id  # ❌ No longer needed
+  name       = "deployment-key"
+  public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5..."
 }
 
+resource "latitudesh_user_data" "setup" {
+  project     = latitudesh_project.main.id  # ❌ No longer needed
+  description = "Server initialization script"
+  content     = base64encode("#!/bin/bash\napt-get update")
+}
+```
+
+**v2.0.0 (New):**
+```hcl
 resource "latitudesh_ssh_key" "deploy" {
   name       = "deployment-key"
   public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5..."
-  tags       = ["deploy", "production"]
+  tags       = ["deploy", "production"]  # ✅ Better organization
 }
 
 resource "latitudesh_user_data" "setup" {
@@ -50,6 +61,26 @@ resource "latitudesh_user_data" "setup" {
   EOF
   )
 }
+```
+
+### **What This Means**
+- **SSH keys** are now shared across all projects in your team
+- **User data** scripts are team-wide and reusable across projects  
+- **No migration required** - existing resources will import correctly
+- **Better reusability** - create once, use in multiple projects
+
+## Your configs mostly stay the same
+
+**Most configurations work without changes.** Here's what stays the same:
+
+```hcl
+# ✅ These work exactly the same in v2.0.0
+resource "latitudesh_project" "main" {
+  name             = "production-infrastructure"
+  description      = "Main production environment"
+  environment      = "Production"
+  provisioning_type = "on_demand"
+}
 
 resource "latitudesh_server" "web" {
   project          = latitudesh_project.main.id
@@ -59,8 +90,8 @@ resource "latitudesh_server" "web" {
   operating_system = "ubuntu_20_04_x64_lts"
   billing          = "hourly"
   
-  user_data = latitudesh_user_data.setup.id
-  ssh_keys  = [latitudesh_ssh_key.deploy.id]
+  user_data = latitudesh_user_data.setup.id  # ✅ Still works
+  ssh_keys  = [latitudesh_ssh_key.deploy.id] # ✅ Still works
   
   tags = ["web", "production", "frontend"]
 }
@@ -76,7 +107,7 @@ provider "latitudesh" {
 ### 💻 **Core Infrastructure**
 - ✅ `latitudesh_server` - Full server lifecycle with enhanced update capabilities
 - ✅ `latitudesh_project` - Project management
-- ✅ `latitudesh_ssh_key` - SSH key management
+- ✅ `latitudesh_ssh_key` - SSH key management 
 
 ### 🌐 **Networking & Security**
 - ✅ `latitudesh_virtual_network` - Network infrastructure management
@@ -87,7 +118,7 @@ provider "latitudesh" {
 ### 👥 **Team & Organization**
 - ✅ `latitudesh_member` - Team member management
 - ✅ `latitudesh_tag` - Resource organization and tagging
-- ✅ `latitudesh_user_data` - Server initialization scripts
+- ✅ `latitudesh_user_data` - Server initialization scripts (now team-scoped)
 
 ### 📊 **Data Sources for Planning**
 - ✅ `data.latitudesh_plan` - Hardware specs, CPU, memory, GPU details
@@ -125,53 +156,80 @@ terraform {
 }
 ```
 
-### Step 3: Test in development first
+### Step 3: Update SSH key and user data resources
+
+Remove the `project` attribute from SSH keys and user data:
+
+```hcl
+resource "latitudesh_ssh_key" "deploy" {
+  # project = latitudesh_project.main.id  # ❌ Remove this line
+  name       = "deployment-key"
+  public_key = var.ssh_public_key
+}
+
+resource "latitudesh_user_data" "setup" {
+  # project = latitudesh_project.main.id  # ❌ Remove this line  
+  description = "Server setup"
+  content     = var.user_data_content
+}
+```
+
+### Step 4: Test in development first
 
 ```bash
 # 1. In your dev environment, upgrade the provider
 terraform init -upgrade
 
-# 2. Check what Terraform thinks will change (should be minimal!)
+# 2. Check what Terraform thinks will change
 terraform plan
 
-# 3. Look for any unexpected changes - there shouldn't be many
-# Most changes will be cosmetic (like computed field updates)
+# 3. Look for the expected changes:
+# - SSH keys and user data will show attribute removals
+# - Servers should show no changes (they still reference the same resources)
 ```
 
-### Step 4: Validate Everything Works 🔍
-
-Run a quick validation to ensure everything is working:
+### Step 5: Apply the changes
 
 ```bash
-# This should show no changes needed
-terraform plan  
+# Apply the changes
+terraform apply
 
-# Import tests for existing resources (optional but recommended)
-terraform show | grep -E "resource.*latitudesh_"
+# Validate everything works
+terraform plan  # Should show no further changes
 ```
 
 ## What you'll see during upgrade
 
-During your first `terraform plan` after upgrading, you might see some cosmetic changes:
+During your first `terraform plan` after upgrading, you'll see changes like:
 
 ```diff
-# latitudesh_server.web will be updated in-place
-~ resource "latitudesh_server" "web" {
-    # Some computed fields might show as changing
-    ~ created_at  = "2024-01-15T10:30:00Z" -> (known after apply)
-    ~ region      = "us-east-1" -> (known after apply)
-    ~ fingerprint = "SHA256:abc123..." -> (known after apply)
-    # This is normal and expected - just more accurate data
+# latitudesh_ssh_key.deploy will be updated in-place
+~ resource "latitudesh_ssh_key" "deploy" {
+    ~ project = "project-123" -> null
+    # Other attributes unchanged
 }
+
+# latitudesh_user_data.setup will be updated in-place  
+~ resource "latitudesh_user_data" "setup" {
+    ~ project = "project-123" -> null
+    # Other attributes unchanged
+}
+
+# latitudesh_server.web - no changes needed
+  resource "latitudesh_server" "web" {
+    # Server references still work perfectly
+    user_data = latitudesh_user_data.setup.id
+    ssh_keys  = [latitudesh_ssh_key.deploy.id]
+  }
 ```
 
-**Don't worry!** These are just computed fields being refreshed with better precision. Your actual infrastructure won't be touched.
+**This is expected!** Your SSH keys and user data become team-scoped, which actually makes them more reusable.
 
 ## Troubleshooting
 
 ### If Something Goes Wrong
 
-1. **Check the error messages**
+1. **Check the error messages** - they're much clearer in v2.0.0
 2. **Restore your state backup**:
    ```bash
    cp terraform.tfstate.backup-v1 terraform.tfstate
@@ -191,18 +249,29 @@ During your first `terraform plan` after upgrading, you might see some cosmetic 
 
 ### Common migration issues & solutions
 
-**Q: "terraform plan shows unexpected changes"**
-A: Most likely computed field refreshes. They won't affect your actual resources.
+**Q: "terraform plan shows SSH key/user data changes"**
+A: Expected! Remove the `project` attribute from these resources. They're now team-scoped.
 
-**Q: "I get authentication errors after upgrading"**  
+**Q: "My servers can't find SSH keys or user data"**  
+A: Check that the resource references (`.id`) are correct. The resources still work, just without project scoping.
+
+**Q: "I get authentication errors after upgrading"**
 A: The provider authentication hasn't changed. Double-check your `auth_token` is correctly set.
 
-**Q: "Some attributes seem to have different values"**
-A: v2.0.0 has more accurate data retrieval. These changes reflect actual API values.
+### Migration Benefits
 
+The team-scoped approach brings several advantages:
+
+- **Reusability**: SSH keys work across all projects
+- **Simplified management**: No need to recreate keys per project  
+- **Better organization**: Use tags instead of project boundaries
+- **Reduced duplication**: One user data script for multiple projects
+
+## Need help?
 
 - **Email**: [support@latitude.sh](mailto:support@latitude.sh) 
 - **Community**: [latitude.sh/community](https://latitude.sh/community)
+- **GitHub Issues**: [Create an issue](https://github.com/latitudesh/terraform-provider-latitudesh/issues) with the `migration-v2` label
 
 ---
 
@@ -210,4 +279,4 @@ A: v2.0.0 has more accurate data retrieval. These changes reflect actual API val
 
 **— The Latitude.sh Team**
 
-*Last updated: June 2025* 
+*Last updated: January 2025* 

@@ -177,12 +177,41 @@ func (r *FirewallResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	if result.Firewall == nil || result.Firewall.ID == nil {
-		resp.Diagnostics.AddError("API Error", "Failed to get firewall ID from response")
+	// Add debug information about the response structure
+	if result == nil {
+		resp.Diagnostics.AddError("API Error", "CreateFirewall returned nil result")
 		return
 	}
 
-	data.ID = types.StringValue(*result.Firewall.ID)
+	if result.Firewall == nil {
+		resp.Diagnostics.AddError("API Error", "CreateFirewall response.Firewall is nil")
+		return
+	}
+
+	if result.Firewall.ID == nil {
+		// Check if the ID is in the nested Data structure
+		if result.Firewall.Data != nil && result.Firewall.Data.ID != nil {
+			data.ID = types.StringValue(*result.Firewall.Data.ID)
+		} else {
+			// Add more debugging to see what we actually got
+			debugMsg := "CreateFirewall response.Firewall.ID is nil and no ID found in Data."
+			if result.Firewall.Type != nil {
+				debugMsg += " Type: " + string(*result.Firewall.Type)
+			}
+			if result.Firewall.Attributes != nil {
+				if result.Firewall.Attributes.Name != nil {
+					debugMsg += ", Name: " + *result.Firewall.Attributes.Name
+				}
+				if result.Firewall.Attributes.Project != nil && result.Firewall.Attributes.Project.ID != nil {
+					debugMsg += ", Project ID: " + *result.Firewall.Attributes.Project.ID
+				}
+			}
+			resp.Diagnostics.AddError("API Error", debugMsg)
+			return
+		}
+	} else {
+		data.ID = types.StringValue(*result.Firewall.ID)
+	}
 
 	// Read the resource to populate all attributes
 	r.readFirewall(ctx, &data, &resp.Diagnostics)
@@ -330,18 +359,55 @@ func (r *FirewallResource) readFirewall(ctx context.Context, data *FirewallResou
 	}
 
 	firewall := result.Firewall
+
+	// Handle either direct attributes OR nested data structure, not both
+	var attributes *components.FirewallAttributes
 	if firewall.Attributes != nil {
-		if firewall.Attributes.Name != nil {
-			data.Name = types.StringValue(*firewall.Attributes.Name)
+		// Use direct attributes if available
+		attributes = firewall.Attributes
+	} else if firewall.Data != nil && firewall.Data.Attributes != nil {
+		// Only fall back to nested data if direct attributes are not available
+		dataAttrs := firewall.Data.Attributes
+		attributes = &components.FirewallAttributes{
+			Name: dataAttrs.Name,
 		}
 
-		if firewall.Attributes.Project != nil && firewall.Attributes.Project.ID != nil {
-			data.Project = types.StringValue(*firewall.Attributes.Project.ID)
+		// Convert project if it exists
+		if dataAttrs.Project != nil {
+			attributes.Project = &components.FirewallProject{
+				ID:   dataAttrs.Project.ID,
+				Slug: dataAttrs.Project.Slug,
+				Name: dataAttrs.Project.Name,
+			}
+		}
+
+		// Convert rules
+		if dataAttrs.Rules != nil {
+			var rules []components.Rules
+			for _, rule := range dataAttrs.Rules {
+				rules = append(rules, components.Rules{
+					From:     rule.From,
+					To:       rule.To,
+					Port:     rule.Port,
+					Protocol: rule.Protocol,
+				})
+			}
+			attributes.Rules = rules
+		}
+	}
+
+	if attributes != nil {
+		if attributes.Name != nil {
+			data.Name = types.StringValue(*attributes.Name)
+		}
+
+		if attributes.Project != nil && attributes.Project.ID != nil {
+			data.Project = types.StringValue(*attributes.Project.ID)
 		}
 
 		// Convert rules
 		var rules []FirewallRuleModel
-		for _, rule := range firewall.Attributes.Rules {
+		for _, rule := range attributes.Rules {
 			ruleModel := FirewallRuleModel{}
 			if rule.From != nil {
 				ruleModel.From = types.StringValue(*rule.From)
