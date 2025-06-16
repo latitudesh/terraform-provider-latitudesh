@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
@@ -54,24 +53,30 @@ func testAccCheckFirewallAssignmentDestroy(s *terraform.State) error {
 			continue
 		}
 
-		// Parse the composite ID: firewallID:serverID
-		idParts := strings.Split(rs.Primary.ID, ":")
-		if len(idParts) != 2 {
+		// Get the firewall ID from the resource attributes
+		firewallID := rs.Primary.Attributes["firewall_id"]
+		if firewallID == "" {
 			continue
 		}
 
-		firewallID := idParts[0]
-
 		// Check if the firewall assignment still exists
-		response, err := client.Firewalls.GetFirewallAssignments(context.Background(), firewallID, nil, nil)
+		response, err := client.Firewalls.ListAssignments(context.Background(), firewallID, nil, nil)
 		if err != nil {
 			// If we get an error, assume it's deleted
 			continue
 		}
 
-		if response.FirewallServer != nil {
-			return fmt.Errorf("Firewall assignment still exists")
+		// Check if our assignment ID is still in the response
+		assignmentID := rs.Primary.ID
+		if response.FirewallAssignments != nil && response.FirewallAssignments.Data != nil {
+			for _, assignment := range response.FirewallAssignments.Data {
+				if assignment.ID != nil && *assignment.ID == assignmentID {
+					return fmt.Errorf("firewall assignment still exists")
+				}
+			}
 		}
+
+		// If not found in the data array, it's deleted
 	}
 
 	return nil

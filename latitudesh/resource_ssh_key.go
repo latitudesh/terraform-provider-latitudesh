@@ -130,7 +130,7 @@ func (r *SSHKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 		},
 	}
 
-	result, err := r.client.SSHKeys.PostSSHKey(ctx, createRequest)
+	result, err := r.client.SSHKeys.Create(ctx, createRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to create SSH key, got error: "+err.Error())
 		return
@@ -217,7 +217,7 @@ func (r *SSHKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 	keyID := data.ID.ValueString()
 
-	_, err := r.client.SSHKeys.DeleteSSHKey(ctx, keyID)
+	_, err := r.client.SSHKeys.Delete(ctx, keyID)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to delete SSH key, got error: "+err.Error())
 		return
@@ -239,7 +239,7 @@ func (r *SSHKeyResource) ImportState(ctx context.Context, req resource.ImportSta
 func (r *SSHKeyResource) readSSHKey(ctx context.Context, data *SSHKeyResourceModel, diags *diag.Diagnostics) {
 	keyID := data.ID.ValueString()
 
-	result, err := r.client.SSHKeys.GetSSHKey(ctx, keyID)
+	result, err := r.client.SSHKeys.Retrieve(ctx, keyID)
 	if err != nil {
 		// Check if the SSH key was deleted
 		if apiErr, ok := err.(*components.APIError); ok && apiErr.StatusCode == http.StatusNotFound {
@@ -301,7 +301,7 @@ func (r *SSHKeyResource) updateSSHKey(ctx context.Context, data *SSHKeyResourceM
 		},
 	}
 
-	_, err := r.client.SSHKeys.PutSSHKey(ctx, keyID, updateRequest)
+	_, err := r.client.SSHKeys.Update(ctx, keyID, updateRequest)
 	if err != nil {
 		diags.AddError("Client Error", "Unable to update SSH key, got error: "+err.Error())
 		return

@@ -156,7 +156,7 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		},
 	}
 
-	result, err := r.client.Projects.CreateProject(ctx, createRequest)
+	result, err := r.client.Projects.Create(ctx, createRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to create project, got error: "+err.Error())
 		return
@@ -246,7 +246,7 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 		},
 	}
 
-	_, err := r.client.Projects.UpdateProject(ctx, projectID, &updateRequest)
+	_, err := r.client.Projects.Update(ctx, projectID, &updateRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to update project, got error: "+err.Error())
 		return
@@ -274,7 +274,7 @@ func (r *ProjectResource) Delete(ctx context.Context, req resource.DeleteRequest
 
 	projectID := data.ID.ValueString()
 
-	_, err := r.client.Projects.DeleteProject(ctx, projectID)
+	_, err := r.client.Projects.Delete(ctx, projectID)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to delete project, got error: "+err.Error())
 		return
@@ -296,8 +296,8 @@ func (r *ProjectResource) ImportState(ctx context.Context, req resource.ImportSt
 func (r *ProjectResource) readProject(ctx context.Context, data *ProjectResourceModel, diags *diag.Diagnostics) {
 	projectID := data.ID.ValueString()
 
-	// Use GetProjects with filter to find the project since there's no GetProject method
-	response, err := r.client.Projects.GetProjects(ctx, operations.GetProjectsRequest{})
+	// Use List with filter to find the project since there's no Get method
+	response, err := r.client.Projects.List(ctx, operations.GetProjectsRequest{})
 	if err != nil {
 		diags.AddError("Client Error", "Unable to read projects, got error: "+err.Error())
 		return

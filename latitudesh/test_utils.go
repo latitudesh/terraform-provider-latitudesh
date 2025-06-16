@@ -107,29 +107,25 @@ func createTestRecorder(t *testing.T) (*recorder.Recorder, func()) {
 	return testRecorder(name, mode)
 }
 
-// Helper functions for testing - these are placeholder implementations
-// since the actual API methods might not exist or work exactly as expected
+// createVCRClient creates a Latitude.sh SDK client with VCR recording/playback
+func createVCRClient(recorder *recorder.Recorder) *latitudeshgosdk.Latitudesh {
+	authToken := os.Getenv("LATITUDESH_AUTH_TOKEN")
+	if authToken == "" {
+		authToken = "test" // Use test token for VCR playback
+	}
 
-// Mock member type for testing
-type MockMember struct {
-	ID *string `json:"id"`
-}
+	if recorder != nil {
+		httpClient := *http.DefaultClient
+		httpClient.Transport = recorder
 
-// Mock tag type for testing
-type MockTag struct {
-	ID *string `json:"id"`
-}
+		return latitudeshgosdk.New(
+			latitudeshgosdk.WithSecurity(authToken),
+			latitudeshgosdk.WithClient(&httpClient),
+		)
+	}
 
-func GetMember(ctx context.Context, client *latitudeshgosdk.Latitudesh, memberID string) (*MockMember, error) {
-	// This is a placeholder function for testing
-	// In a real implementation, you would call the actual API method
-	// For now, we'll return a simple error to indicate the member doesn't exist
-	return nil, fmt.Errorf("member not found")
-}
-
-func GetTag(ctx context.Context, client *latitudeshgosdk.Latitudesh, tagID string) (*MockTag, error) {
-	// This is a placeholder function for testing
-	// In a real implementation, you would call the actual API method
-	// For now, we'll return a simple error to indicate the tag doesn't exist
-	return nil, fmt.Errorf("tag not found")
+	// Use default client when no recorder is provided
+	return latitudeshgosdk.New(
+		latitudeshgosdk.WithSecurity(authToken),
+	)
 }

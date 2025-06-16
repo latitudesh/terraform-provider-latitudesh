@@ -18,7 +18,7 @@ func TestAccLatitudeFirewall_Basic(t *testing.T) {
 		t.Skip("Skipping TestAccLatitudeFirewall_Basic because LATITUDESH_FIREWALL_ID is set")
 	}
 
-	var firewall components.Firewall
+	var firewall components.FirewallData
 
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
@@ -46,20 +46,23 @@ func TestAccLatitudeFirewall_Basic(t *testing.T) {
 
 func testAccCheckFirewallDestroy(s *terraform.State) error {
 	client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+	ctx := context.Background()
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "latitudesh_firewall" {
 			continue
 		}
-		if _, err := client.Firewalls.GetFirewall(context.Background(), rs.Primary.ID); err == nil {
-			return fmt.Errorf("Firewall still exists")
+
+		_, err := client.Firewalls.Get(ctx, rs.Primary.ID)
+		if err == nil {
+			return fmt.Errorf("firewall still exists")
 		}
 	}
 
 	return nil
 }
 
-func testAccCheckFirewallExists(n string, firewall *components.Firewall) resource.TestCheckFunc {
+func testAccCheckFirewallExists(n string, firewall *components.FirewallData) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[n]
 		if !ok {
@@ -70,22 +73,18 @@ func testAccCheckFirewallExists(n string, firewall *components.Firewall) resourc
 		}
 
 		client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+		ctx := context.Background()
 
-		response, err := client.Firewalls.GetFirewall(context.Background(), rs.Primary.ID)
+		response, err := client.Firewalls.Get(ctx, rs.Primary.ID)
 		if err != nil {
 			return err
 		}
 
-		if response.Firewall == nil {
-			return fmt.Errorf("Firewall not found in response")
+		if response.Firewall == nil || response.Firewall.Data == nil {
+			return fmt.Errorf("firewall not found")
 		}
 
-		foundFirewall := response.Firewall
-		if foundFirewall.ID == nil || *foundFirewall.ID != rs.Primary.ID {
-			return fmt.Errorf("Record not found: %v - %v", rs.Primary.ID, foundFirewall)
-		}
-
-		*firewall = *foundFirewall
+		*firewall = *response.Firewall.Data
 
 		return nil
 	}

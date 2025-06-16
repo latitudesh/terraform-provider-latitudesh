@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -13,7 +14,6 @@ import (
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
-// Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &ServerResource{}
 var _ resource.ResourceWithImportState = &ServerResource{}
 
@@ -38,12 +38,11 @@ type ServerResourceModel struct {
 	Ipxe            types.String `tfsdk:"ipxe"`
 	Billing         types.String `tfsdk:"billing"`
 	Tags            types.List   `tfsdk:"tags"`
-	// Computed fields
-	PrimaryIpv4 types.String `tfsdk:"primary_ipv4"`
-	Status      types.String `tfsdk:"status"`
-	Locked      types.Bool   `tfsdk:"locked"`
-	CreatedAt   types.String `tfsdk:"created_at"`
-	Region      types.String `tfsdk:"region"`
+	PrimaryIpv4     types.String `tfsdk:"primary_ipv4"`
+	Status          types.String `tfsdk:"status"`
+	Locked          types.Bool   `tfsdk:"locked"`
+	CreatedAt       types.String `tfsdk:"created_at"`
+	Region          types.String `tfsdk:"region"`
 }
 
 func (r *ServerResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -98,10 +97,6 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "SSH Keys to set on the server",
 				ElementType:         types.StringType,
 				Optional:            true,
-				PlanModifiers:       []planmodifier.List{
-					// SSH keys require reinstall, so replace
-					// TODO: Add support for allow_reinstall configuration
-				},
 			},
 			"user_data": schema.StringAttribute{
 				MarkdownDescription: "User data to set on the server",
@@ -130,11 +125,10 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Computed:            true,
 			},
 			"tags": schema.ListAttribute{
-				MarkdownDescription: "List of server tags",
+				MarkdownDescription: "List of server tag IDs",
 				ElementType:         types.StringType,
 				Optional:            true,
 			},
-			// Computed attributes
 			"primary_ipv4": schema.StringAttribute{
 				MarkdownDescription: "Primary IPv4 address of the server",
 				Computed:            true,
@@ -185,10 +179,8 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	// Convert string values to SDK enums
 	attrs := &operations.CreateServerServersAttributes{}
 
-	// Required fields
 	if !data.Project.IsNull() {
 		project := data.Project.ValueString()
 		attrs.Project = &project
@@ -212,7 +204,6 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		attrs.OperatingSystem = &os
 	}
 
-	// Optional fields
 	if !data.Hostname.IsNull() {
 		hostname := data.Hostname.ValueString()
 		attrs.Hostname = &hostname
@@ -256,7 +247,7 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		},
 	}
 
-	result, err := r.client.Servers.CreateServer(ctx, createRequest)
+	result, err := r.client.Servers.Create(ctx, createRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to create server, got error: "+err.Error())
 		return
@@ -269,10 +260,66 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 
 	data.ID = types.StringValue(*result.Server.Data.ID)
 
-	// Read the resource to populate all attributes
+	// Apply tags if specified (server creation doesn't support tags)
+	if !data.Tags.IsNull() && !data.Tags.IsUnknown() {
+		var tagIDs []string
+		resp.Diagnostics.Append(data.Tags.ElementsAs(ctx, &tagIDs, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+
+		if len(tagIDs) > 0 {
+			err := r.validateTagIDs(ctx, tagIDs)
+			if err != nil {
+				resp.Diagnostics.AddError("Tag Validation Error", "Unable to validate tag IDs: "+err.Error())
+				return
+			}
+
+			err = r.updateServerTags(ctx, data.ID.ValueString(), tagIDs)
+			if err != nil {
+				resp.Diagnostics.AddError("Tag Update Error", "Unable to update server with tags: "+err.Error())
+				return
+			}
+		}
+	}
+
+	// Store the planned values that we want to preserve
+	plannedHostname := data.Hostname
+	plannedProject := data.Project
+	plannedSite := data.Site
+	plannedPlan := data.Plan
+	plannedOperatingSystem := data.OperatingSystem
+	plannedBilling := data.Billing
+	plannedTags := data.Tags
+
+	// Read server to get computed values
 	r.readServer(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// Restore the planned values for fields we set during creation
+	// This ensures consistency between plan and apply
+	if !plannedHostname.IsNull() {
+		data.Hostname = plannedHostname
+	}
+	if !plannedProject.IsNull() {
+		data.Project = plannedProject
+	}
+	if !plannedSite.IsNull() {
+		data.Site = plannedSite
+	}
+	if !plannedPlan.IsNull() {
+		data.Plan = plannedPlan
+	}
+	if !plannedOperatingSystem.IsNull() {
+		data.OperatingSystem = plannedOperatingSystem
+	}
+	if !plannedBilling.IsNull() {
+		data.Billing = plannedBilling
+	}
+	if !plannedTags.IsNull() {
+		data.Tags = plannedTags
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -303,9 +350,7 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 	}
 
 	serverID := data.ID.ValueString()
-
-	// Prepare update request (only certain fields can be updated)
-	attrs := &operations.UpdateServerServersAttributes{}
+	attrs := &operations.UpdateServerServersRequestApplicationJSONAttributes{}
 
 	if !data.Hostname.IsNull() {
 		hostname := data.Hostname.ValueString()
@@ -314,17 +359,23 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 
 	if !data.Billing.IsNull() {
 		billingValue := data.Billing.ValueString()
-		billing := operations.UpdateServerServersBilling(billingValue)
+		billing := operations.UpdateServerServersRequestApplicationJSONBilling(billingValue)
 		attrs.Billing = &billing
 	}
 
 	if !data.Tags.IsNull() && !data.Tags.IsUnknown() {
-		var tags []string
-		resp.Diagnostics.Append(data.Tags.ElementsAs(ctx, &tags, false)...)
+		var tagIDs []string
+		resp.Diagnostics.Append(data.Tags.ElementsAs(ctx, &tagIDs, false)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		attrs.Tags = tags
+
+		err := r.validateTagIDs(ctx, tagIDs)
+		if err != nil {
+			resp.Diagnostics.AddError("Tag Validation Error", "Unable to validate tag IDs: "+err.Error())
+			return
+		}
+		attrs.Tags = tagIDs
 	}
 
 	if !data.Project.IsNull() {
@@ -332,23 +383,56 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		attrs.Project = &project
 	}
 
-	updateType := operations.UpdateServerServersTypeServers
+	updateType := operations.UpdateServerServersRequestApplicationJSONTypeServers
 	updateRequest := operations.UpdateServerServersRequestBody{
-		ID:         &serverID,
-		Type:       &updateType,
-		Attributes: attrs,
+		Data: &operations.UpdateServerServersData{
+			ID:         &serverID,
+			Type:       &updateType,
+			Attributes: attrs,
+		},
 	}
 
-	_, err := r.client.Servers.UpdateServer(ctx, serverID, updateRequest)
+	result, err := r.client.Servers.Update(ctx, serverID, updateRequest)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", "Unable to update server, got error: "+err.Error())
-		return
+		if err.Error() != "{}" {
+			resp.Diagnostics.AddError("Client Error", "Unable to update server, got error: "+err.Error())
+			return
+		}
 	}
 
-	// Read the resource to populate all attributes
+	if result != nil && result.HTTPMeta.Response != nil {
+		statusCode := result.HTTPMeta.Response.StatusCode
+		if statusCode >= 400 {
+			resp.Diagnostics.AddError("API Error", "Server update failed with status code: "+string(rune(statusCode)))
+			return
+		}
+	}
+
+	// Store the planned values that we want to preserve
+	plannedHostname := data.Hostname
+	plannedBilling := data.Billing
+	plannedTags := data.Tags
+	plannedProject := data.Project
+
+	// Read server to get updated computed values
 	r.readServer(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// Restore the planned values for fields we updated
+	// This ensures consistency between plan and apply
+	if !plannedHostname.IsNull() {
+		data.Hostname = plannedHostname
+	}
+	if !plannedBilling.IsNull() {
+		data.Billing = plannedBilling
+	}
+	if !plannedTags.IsNull() {
+		data.Tags = plannedTags
+	}
+	if !plannedProject.IsNull() {
+		data.Project = plannedProject
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -364,7 +448,7 @@ func (r *ServerResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 	serverID := data.ID.ValueString()
 
-	_, err := r.client.Servers.DestroyServer(ctx, serverID, nil)
+	_, err := r.client.Servers.Delete(ctx, serverID, nil)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to delete server, got error: "+err.Error())
 		return
@@ -386,7 +470,7 @@ func (r *ServerResource) ImportState(ctx context.Context, req resource.ImportSta
 func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) {
 	serverID := data.ID.ValueString()
 
-	response, err := r.client.Servers.GetServer(ctx, serverID, nil)
+	response, err := r.client.Servers.Get(ctx, serverID, nil)
 	if err != nil {
 		diags.AddError("Client Error", "Unable to read server, got error: "+err.Error())
 		return
@@ -447,4 +531,65 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 			data.Region = types.StringValue(*attrs.Region.Site.Slug)
 		}
 	}
+}
+
+func (r *ServerResource) validateTagIDs(ctx context.Context, tagIDs []string) error {
+	if len(tagIDs) == 0 {
+		return nil
+	}
+
+	response, err := r.client.Tags.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	if response.CustomTags == nil || response.CustomTags.Data == nil {
+		return fmt.Errorf("no tags found")
+	}
+
+	validTagIDs := make(map[string]bool)
+	for _, tag := range response.CustomTags.Data {
+		if tag.ID != nil {
+			validTagIDs[*tag.ID] = true
+		}
+	}
+
+	for _, tagID := range tagIDs {
+		if !validTagIDs[tagID] {
+			return fmt.Errorf("tag ID '%s' not found", tagID)
+		}
+	}
+
+	return nil
+}
+
+func (r *ServerResource) updateServerTags(ctx context.Context, serverID string, tagIDs []string) error {
+	attrs := &operations.UpdateServerServersRequestApplicationJSONAttributes{
+		Tags: tagIDs,
+	}
+
+	updateType := operations.UpdateServerServersRequestApplicationJSONTypeServers
+	updateRequest := operations.UpdateServerServersRequestBody{
+		Data: &operations.UpdateServerServersData{
+			ID:         &serverID,
+			Type:       &updateType,
+			Attributes: attrs,
+		},
+	}
+
+	result, err := r.client.Servers.Update(ctx, serverID, updateRequest)
+	if err != nil {
+		if err.Error() != "{}" {
+			return fmt.Errorf("unable to update server with tags: %w", err)
+		}
+	}
+
+	if result != nil && result.HTTPMeta.Response != nil {
+		statusCode := result.HTTPMeta.Response.StatusCode
+		if statusCode >= 400 {
+			return fmt.Errorf("server tag update failed with status code: %d", statusCode)
+		}
+	}
+
+	return nil
 }

@@ -106,7 +106,7 @@ func (r *UserDataResource) Create(ctx context.Context, req resource.CreateReques
 		},
 	}
 
-	result, err := r.client.UserData.PostUserData(ctx, createRequest)
+	result, err := r.client.UserData.CreateNew(ctx, createRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to create user data, got error: "+err.Error())
 		return
@@ -167,7 +167,7 @@ func (r *UserDataResource) Update(ctx context.Context, req resource.UpdateReques
 		},
 	}
 
-	_, err := r.client.UserData.PatchUserData(ctx, userDataID, updateRequest)
+	_, err := r.client.UserData.Update(ctx, userDataID, updateRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to update user data, got error: "+err.Error())
 		return
@@ -192,7 +192,7 @@ func (r *UserDataResource) Delete(ctx context.Context, req resource.DeleteReques
 
 	userDataID := data.ID.ValueString()
 
-	_, err := r.client.UserData.DeleteUserData(ctx, userDataID)
+	_, err := r.client.UserData.Delete(ctx, userDataID)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to delete user data, got error: "+err.Error())
 		return
@@ -216,7 +216,7 @@ func (r *UserDataResource) readUserData(ctx context.Context, data *UserDataResou
 
 	// Get decoded content for display
 	decodedContent := "decoded_content"
-	response, err := r.client.UserData.GetUserData(ctx, userDataID, &decodedContent)
+	response, err := r.client.UserData.Retrieve(ctx, userDataID, &decodedContent)
 	if err != nil {
 		diags.AddError("Client Error", "Unable to read user data, got error: "+err.Error())
 		return

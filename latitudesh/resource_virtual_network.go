@@ -3,7 +3,7 @@ package latitudesh
 import (
 	"context"
 	"fmt"
-	"strconv"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -12,10 +12,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
-// Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &VirtualNetworkResource{}
 var _ resource.ResourceWithImportState = &VirtualNetworkResource{}
 
@@ -35,7 +35,6 @@ type VirtualNetworkResourceModel struct {
 	Tags        types.List   `tfsdk:"tags"`
 	// Computed fields
 	Vid              types.Int64  `tfsdk:"vid"`
-	Name             types.String `tfsdk:"name"`
 	Region           types.String `tfsdk:"region"`
 	AssignmentsCount types.Int64  `tfsdk:"assignments_count"`
 }
@@ -73,6 +72,9 @@ func (r *VirtualNetworkResource) Schema(ctx context.Context, req resource.Schema
 				MarkdownDescription: "The virtual network description",
 				Optional:            true,
 				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"tags": schema.ListAttribute{
 				MarkdownDescription: "List of virtual network tags",
@@ -82,10 +84,6 @@ func (r *VirtualNetworkResource) Schema(ctx context.Context, req resource.Schema
 			// Computed attributes
 			"vid": schema.Int64Attribute{
 				MarkdownDescription: "VLAN ID of the virtual network",
-				Computed:            true,
-			},
-			"name": schema.StringAttribute{
-				MarkdownDescription: "Name of the virtual network",
 				Computed:            true,
 			},
 			"region": schema.StringAttribute{
@@ -153,38 +151,48 @@ func (r *VirtualNetworkResource) Create(ctx context.Context, req resource.Create
 		},
 	}
 
-	result, err := r.client.PrivateNetworks.CreateVirtualNetwork(ctx, createRequest)
+	result, err := r.client.PrivateNetworks.Create(ctx, createRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to create virtual network, got error: "+err.Error())
 		return
 	}
 
-	if result.VirtualNetwork == nil || result.VirtualNetwork.ID == nil {
-		// Add debugging to see what we got
-		debugMsg := "Failed to get virtual network ID from response."
-		if result.VirtualNetwork != nil {
-			if result.VirtualNetwork.Type != nil {
-				debugMsg += " Type: " + string(*result.VirtualNetwork.Type)
-			}
-			if result.VirtualNetwork.Attributes != nil {
-				if result.VirtualNetwork.Attributes.Name != nil {
-					debugMsg += ", Name: " + *result.VirtualNetwork.Attributes.Name
-				}
-				if result.VirtualNetwork.Attributes.Vid != nil {
-					debugMsg += fmt.Sprintf(", VID: %d", *result.VirtualNetwork.Attributes.Vid)
-				}
-			}
+	// Check for successful status codes
+	if result != nil {
+		httpStatus := result.HTTPMeta.Response.StatusCode
+		if httpStatus != 200 && httpStatus != 201 {
+			resp.Diagnostics.AddError("API Error", fmt.Sprintf("Create virtual network returned unexpected status code: %d", httpStatus))
+			return
 		}
-		resp.Diagnostics.AddError("API Error", debugMsg)
-		return
 	}
 
-	data.ID = types.StringValue(*result.VirtualNetwork.ID)
+	// Try to get ID from response first
+	if result.VirtualNetwork != nil && result.VirtualNetwork.ID != nil {
+		data.ID = types.StringValue(*result.VirtualNetwork.ID)
 
-	// Read the resource to populate all attributes
-	r.readVirtualNetwork(ctx, &data, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
+		// Read the resource to populate all attributes
+		r.readVirtualNetwork(ctx, &data, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	} else {
+		// If we can't get ID from response, use List endpoint to find it
+		resp.Diagnostics.AddWarning("Virtual Network ID Not in Response", "Virtual network was created but ID not returned in response. Using List endpoint to find it.")
+
+		// Use List endpoint to find the virtual network we just created
+		// This will populate all attributes including ID, name, vid, etc.
+		r.findVirtualNetworkByProject(ctx, &data, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+
+		if data.ID.IsNull() || data.ID.ValueString() == "" {
+			resp.Diagnostics.AddError("API Error", "Virtual network was created but could not determine its ID")
+			return
+		}
+
+		// No need to call readVirtualNetwork again since findVirtualNetworkByProject
+		// already populated all the attributes from the List response
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -207,53 +215,126 @@ func (r *VirtualNetworkResource) Read(ctx context.Context, req resource.ReadRequ
 }
 
 func (r *VirtualNetworkResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data VirtualNetworkResourceModel
+	// Virtual network updates are problematic with the current SDK
+	// Since description now requires replacement, updates should not happen
+	resp.Diagnostics.AddError("Update Not Supported",
+		"Virtual network updates are not supported due to SDK limitations. "+
+			"Changes to description require resource replacement. "+
+			"Tags can only be set during creation.")
+}
 
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
+// Helper function to find virtual network by project and other identifying attributes
+func (r *VirtualNetworkResource) findVirtualNetworkByProject(ctx context.Context, data *VirtualNetworkResourceModel, diags *diag.Diagnostics) {
+	project := data.Project.ValueString()
+	site := data.Site.ValueString()
+	currentID := data.ID.ValueString()
+	description := data.Description.ValueString()
+
+	// Create request to list virtual networks filtered by project
+	listRequest := operations.GetVirtualNetworksRequest{
+		FilterProject: &project,
 	}
 
-	vlanID := data.ID.ValueString()
-
-	// Prepare update request
-	attrs := &operations.UpdateVirtualNetworkPrivateNetworksAttributes{}
-
-	if !data.Description.IsNull() {
-		description := data.Description.ValueString()
-		attrs.Description = &description
-	}
-
-	if !data.Tags.IsNull() && !data.Tags.IsUnknown() {
-		var tags []string
-		resp.Diagnostics.Append(data.Tags.ElementsAs(ctx, &tags, false)...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		attrs.Tags = tags
-	}
-
-	updateRequest := operations.UpdateVirtualNetworkPrivateNetworksRequestBody{
-		ID: &vlanID,
-		Data: operations.UpdateVirtualNetworkPrivateNetworksData{
-			Type:       operations.UpdateVirtualNetworkPrivateNetworksTypeVirtualNetworks,
-			Attributes: attrs,
-		},
-	}
-
-	_, err := r.client.PrivateNetworks.UpdateVirtualNetwork(ctx, vlanID, updateRequest)
+	response, err := r.client.PrivateNetworks.List(ctx, listRequest)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", "Unable to update virtual network, got error: "+err.Error())
+		diags.AddError("Client Error", "Unable to list virtual networks to find network, got error: "+err.Error())
 		return
 	}
 
-	// Read the resource to populate all attributes
-	r.readVirtualNetwork(ctx, &data, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	// Check if we have virtual networks data
+	if response.VirtualNetworks == nil || response.VirtualNetworks.Data == nil {
+		diags.AddError("API Error", "No virtual networks found for project")
 		return
 	}
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	// Look for virtual network with matching attributes
+	var bestMatch *components.VirtualNetworkData
+	var bestScore int
+
+	for _, vnet := range response.VirtualNetworks.Data {
+		if vnet.ID != nil && vnet.Attributes != nil {
+			score := 0
+
+			// If we have a current ID, prioritize exact ID match
+			if currentID != "" && *vnet.ID == currentID {
+				score += 100
+			}
+
+			// Match by site (high priority for new resources)
+			if vnet.Attributes.Region != nil && vnet.Attributes.Region.Site != nil && vnet.Attributes.Region.Site.Slug != nil {
+				if *vnet.Attributes.Region.Site.Slug == site {
+					score += 50
+				}
+			}
+
+			// Match by description if provided
+			if description != "" && vnet.Attributes.Description != nil {
+				if *vnet.Attributes.Description == description {
+					score += 30
+				}
+			}
+
+			// For newly created resources without ID, prefer the most recently created one
+			// (this is a heuristic since we don't have creation timestamps)
+			if currentID == "" {
+				score += 10 // Small boost for resources when we're looking for new ones
+			}
+
+			// Update best match if this is better
+			if score > bestScore {
+				bestScore = score
+				bestMatch = &vnet
+			}
+		}
+	}
+
+	if bestMatch == nil || bestMatch.ID == nil {
+		diags.AddError("API Error", fmt.Sprintf("Could not find virtual network in project '%s' with site '%s'", project, site))
+		return
+	}
+
+	// Set the ID and populate computed attributes from the found virtual network
+	newID := *bestMatch.ID
+	if currentID != "" && newID != currentID {
+		diags.AddWarning("Virtual Network ID Changed", fmt.Sprintf("Virtual network ID changed from '%s' to '%s'", currentID, newID))
+	}
+
+	data.ID = types.StringValue(newID)
+
+	// Populate computed attributes from the found virtual network
+	if bestMatch.Attributes != nil {
+		attrs := bestMatch.Attributes
+
+		if attrs.Vid != nil {
+			data.Vid = types.Int64Value(*attrs.Vid)
+		} else {
+			data.Vid = types.Int64Null()
+		}
+
+		if attrs.Description != nil {
+			data.Description = types.StringValue(*attrs.Description)
+		} else {
+			data.Description = types.StringNull()
+		}
+
+		if attrs.AssignmentsCount != nil {
+			data.AssignmentsCount = types.Int64Value(*attrs.AssignmentsCount)
+		} else {
+			data.AssignmentsCount = types.Int64Null()
+		}
+
+		if attrs.Region != nil && attrs.Region.Site != nil && attrs.Region.Site.Slug != nil {
+			data.Region = types.StringValue(*attrs.Region.Site.Slug)
+		} else {
+			data.Region = types.StringNull()
+		}
+	} else {
+		// If attributes are nil, set all computed fields to null
+		data.Vid = types.Int64Null()
+		data.Description = types.StringNull()
+		data.AssignmentsCount = types.Int64Null()
+		data.Region = types.StringNull()
+	}
 }
 
 func (r *VirtualNetworkResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -264,17 +345,45 @@ func (r *VirtualNetworkResource) Delete(ctx context.Context, req resource.Delete
 		return
 	}
 
+	// First, try to read the virtual network to see if it still exists
+	// and to get the VID (numeric VLAN ID)
 	vlanID := data.ID.ValueString()
 
-	// Convert string ID to int64 for the delete operation
-	vlanIDInt, err := strconv.ParseInt(vlanID, 10, 64)
+	// Check if the virtual network still exists
+	response, err := r.client.PrivateNetworks.Get(ctx, vlanID)
 	if err != nil {
-		resp.Diagnostics.AddError("ID Conversion Error", "Unable to convert virtual network ID to integer: "+err.Error())
+		// If we get a 404, the resource is already deleted
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not_found") {
+			resp.Diagnostics.AddWarning("Virtual Network Already Deleted", "Virtual network appears to have been deleted outside of Terraform")
+			return
+		}
+		resp.Diagnostics.AddError("Client Error", "Unable to read virtual network before deletion, got error: "+err.Error())
 		return
 	}
 
-	_, err = r.client.VirtualNetworks.Delete(ctx, vlanIDInt)
+	// If the response is empty, the resource doesn't exist
+	if response.Object == nil || response.Object.Data == nil {
+		resp.Diagnostics.AddWarning("Virtual Network Not Found", "Virtual network not found, may have been deleted outside of Terraform")
+		return
+	}
+
+	// Get the VID from the response
+	var vid int64
+	if response.Object.Data.Attributes != nil && response.Object.Data.Attributes.Vid != nil {
+		vid = *response.Object.Data.Attributes.Vid
+	} else {
+		resp.Diagnostics.AddError("Missing VID", "Unable to determine VID (numeric VLAN ID) for virtual network deletion")
+		return
+	}
+
+	// Attempt to delete using the VID
+	_, err = r.client.VirtualNetworks.Delete(ctx, vid)
 	if err != nil {
+		// If we get a 404, the resource was already deleted
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not_found") {
+			resp.Diagnostics.AddWarning("Virtual Network Already Deleted", "Virtual network was already deleted")
+			return
+		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete virtual network, got error: "+err.Error())
 		return
 	}
@@ -295,7 +404,7 @@ func (r *VirtualNetworkResource) ImportState(ctx context.Context, req resource.I
 func (r *VirtualNetworkResource) readVirtualNetwork(ctx context.Context, data *VirtualNetworkResourceModel, diags *diag.Diagnostics) {
 	vlanID := data.ID.ValueString()
 
-	response, err := r.client.PrivateNetworks.GetVirtualNetwork(ctx, vlanID)
+	response, err := r.client.PrivateNetworks.Get(ctx, vlanID)
 	if err != nil {
 		diags.AddError("Client Error", "Unable to read virtual network, got error: "+err.Error())
 		return
@@ -312,10 +421,6 @@ func (r *VirtualNetworkResource) readVirtualNetwork(ctx context.Context, data *V
 
 		if attrs.Vid != nil {
 			data.Vid = types.Int64Value(*attrs.Vid)
-		}
-
-		if attrs.Name != nil {
-			data.Name = types.StringValue(*attrs.Name)
 		}
 
 		if attrs.Description != nil {

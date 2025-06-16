@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -10,7 +11,6 @@ import (
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 )
 
-// Ensure provider defined types fully satisfy framework interfaces.
 var _ datasource.DataSource = &RegionDataSource{}
 
 func NewRegionDataSource() datasource.DataSource {
@@ -94,95 +94,72 @@ func (d *RegionDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
-	// If a specific region ID is provided, get that region
-	if !data.ID.IsNull() && !data.ID.IsUnknown() {
+	// Check that either ID or slug is provided
+	if data.ID.IsNull() && data.Slug.IsNull() {
+		resp.Diagnostics.AddError(
+			"Missing Required Attribute",
+			"Either 'id' or 'slug' must be provided to look up a region.",
+		)
+		return
+	}
+
+	var region *components.RegionData
+
+	if !data.ID.IsNull() {
+		// Look up by ID
 		regionID := data.ID.ValueString()
-		response, err := d.client.Regions.GetRegion(ctx, regionID)
+		result, err := d.client.Regions.Fetch(ctx, regionID)
 		if err != nil {
-			resp.Diagnostics.AddError("Client Error", "Unable to read region, got error: "+err.Error())
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read region %s, got error: %s", regionID, err.Error()))
 			return
 		}
-
-		if response.Region == nil || response.Region.Data == nil {
-			resp.Diagnostics.AddError("API Error", "Region not found")
-			return
+		if result.Region != nil && result.Region.Data != nil {
+			region = result.Region.Data
 		}
-
-		d.mapRegionDataToModel(response.Region.Data, &data)
 	} else {
-		// Get all regions and find the one matching the criteria
-		response, err := d.client.Regions.GetRegions(ctx, nil, nil)
+		// Look up by slug - get all regions and find matching slug
+		slug := data.Slug.ValueString()
+		result, err := d.client.Regions.Get(ctx, nil, nil)
 		if err != nil {
-			resp.Diagnostics.AddError("Client Error", "Unable to read regions, got error: "+err.Error())
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to search for region with slug %s, got error: %s", slug, err.Error()))
 			return
 		}
-
-		if response.Regions == nil || response.Regions.Data == nil {
-			resp.Diagnostics.AddError("API Error", "No regions found")
-			return
-		}
-
-		var matchedRegion *components.RegionsData
-		for _, region := range response.Regions.Data {
-			if d.regionMatches(&region, &data) {
-				matchedRegion = &region
-				break
+		if result.Regions != nil && result.Regions.Data != nil {
+			for _, r := range result.Regions.Data {
+				if r.Attributes != nil && r.Attributes.Slug != nil && *r.Attributes.Slug == slug {
+					// Convert RegionsData to RegionData format
+					var regionCountry *components.RegionCountry
+					if r.Attributes.Country != nil {
+						regionCountry = &components.RegionCountry{
+							Name: r.Attributes.Country.Name,
+							Slug: r.Attributes.Country.Slug,
+						}
+					}
+					region = &components.RegionData{
+						ID: r.ID,
+						Attributes: &components.RegionAttributes{
+							Name:    r.Attributes.Name,
+							Slug:    r.Attributes.Slug,
+							Country: regionCountry,
+						},
+					}
+					break
+				}
 			}
 		}
-
-		if matchedRegion == nil {
-			resp.Diagnostics.AddError("Not Found", "No region found matching the specified criteria")
-			return
-		}
-
-		d.mapRegionsDataToModel(matchedRegion, &data)
 	}
+
+	if region == nil {
+		resp.Diagnostics.AddError("Not Found", "No region found matching the specified criteria")
+		return
+	}
+
+	d.mapRegionDataToModel(region, &data)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (d *RegionDataSource) regionMatches(region *components.RegionsData, data *RegionDataSourceModel) bool {
-	if !data.Name.IsNull() && !data.Name.IsUnknown() {
-		if region.Attributes == nil || region.Attributes.Name == nil || *region.Attributes.Name != data.Name.ValueString() {
-			return false
-		}
-	}
-
-	if !data.Slug.IsNull() && !data.Slug.IsUnknown() {
-		if region.Attributes == nil || region.Attributes.Slug == nil || *region.Attributes.Slug != data.Slug.ValueString() {
-			return false
-		}
-	}
-
-	return true
-}
-
 func (d *RegionDataSource) mapRegionDataToModel(region *components.RegionData, data *RegionDataSourceModel) {
-	if region.ID != nil {
-		data.ID = types.StringValue(*region.ID)
-	}
-
-	if region.Attributes != nil {
-		if region.Attributes.Name != nil {
-			data.Name = types.StringValue(*region.Attributes.Name)
-		}
-
-		if region.Attributes.Slug != nil {
-			data.Slug = types.StringValue(*region.Attributes.Slug)
-		}
-
-		if region.Attributes.Country != nil {
-			if region.Attributes.Country.Name != nil {
-				data.Country = types.StringValue(*region.Attributes.Country.Name)
-			}
-			if region.Attributes.Country.Slug != nil {
-				data.CountryCode = types.StringValue(*region.Attributes.Country.Slug)
-			}
-		}
-	}
-}
-
-func (d *RegionDataSource) mapRegionsDataToModel(region *components.RegionsData, data *RegionDataSourceModel) {
 	if region.ID != nil {
 		data.ID = types.StringValue(*region.ID)
 	}

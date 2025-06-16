@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -123,9 +124,7 @@ func (r *FirewallResource) Configure(ctx context.Context, req resource.Configure
 func (r *FirewallResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data FirewallResourceModel
 
-	// Read Terraform plan data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
-
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -171,46 +170,28 @@ func (r *FirewallResource) Create(ctx context.Context, req resource.CreateReques
 		},
 	}
 
-	result, err := r.client.Firewalls.CreateFirewall(ctx, createRequest)
+	result, err := r.client.Firewalls.Create(ctx, createRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to create firewall, got error: "+err.Error())
 		return
 	}
 
-	// Add debug information about the response structure
+	// Check for successful status codes (200 or 201)
 	if result == nil {
-		resp.Diagnostics.AddError("API Error", "CreateFirewall returned nil result")
+		resp.Diagnostics.AddError("API Error", "Create firewall returned nil response")
 		return
 	}
 
-	if result.Firewall == nil {
-		resp.Diagnostics.AddError("API Error", "CreateFirewall response.Firewall is nil")
+	httpStatus := result.HTTPMeta.Response.StatusCode
+	if httpStatus != 200 && httpStatus != 201 {
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Create firewall returned unexpected status code: %d", httpStatus))
 		return
 	}
 
-	if result.Firewall.ID == nil {
-		// Check if the ID is in the nested Data structure
-		if result.Firewall.Data != nil && result.Firewall.Data.ID != nil {
-			data.ID = types.StringValue(*result.Firewall.Data.ID)
-		} else {
-			// Add more debugging to see what we actually got
-			debugMsg := "CreateFirewall response.Firewall.ID is nil and no ID found in Data."
-			if result.Firewall.Type != nil {
-				debugMsg += " Type: " + string(*result.Firewall.Type)
-			}
-			if result.Firewall.Attributes != nil {
-				if result.Firewall.Attributes.Name != nil {
-					debugMsg += ", Name: " + *result.Firewall.Attributes.Name
-				}
-				if result.Firewall.Attributes.Project != nil && result.Firewall.Attributes.Project.ID != nil {
-					debugMsg += ", Project ID: " + *result.Firewall.Attributes.Project.ID
-				}
-			}
-			resp.Diagnostics.AddError("API Error", debugMsg)
-			return
-		}
-	} else {
-		data.ID = types.StringValue(*result.Firewall.ID)
+	// Use List endpoint to find the firewall and get the correct ID
+	r.findFirewallByProjectAndName(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	// Read the resource to populate all attributes
@@ -219,8 +200,54 @@ func (r *FirewallResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// Helper function to find firewall by project and name
+func (r *FirewallResource) findFirewallByProjectAndName(ctx context.Context, data *FirewallResourceModel, diags *diag.Diagnostics) {
+	project := data.Project.ValueString()
+	name := data.Name.ValueString()
+
+	// Get firewalls filtered by project
+	response, err := r.client.Firewalls.List(ctx, &project, nil, nil)
+	if err != nil {
+		diags.AddError("Client Error", "Unable to list firewalls to find created firewall, got error: "+err.Error())
+		return
+	}
+
+	// Check if we have firewalls data
+	if response.Firewalls == nil || response.Firewalls.Data == nil {
+		diags.AddError("API Error", "No firewalls found for project after creation")
+		return
+	}
+
+	// Look for firewall with matching name and project
+	for _, firewall := range response.Firewalls.Data {
+		if firewall.ID != nil && firewall.Attributes != nil {
+			// Match by name
+			if firewall.Attributes.Name != nil && *firewall.Attributes.Name == name {
+				// Additional check for project if available
+				if firewall.Attributes.Project != nil {
+					if (firewall.Attributes.Project.ID != nil && *firewall.Attributes.Project.ID == project) ||
+						(firewall.Attributes.Project.Slug != nil && *firewall.Attributes.Project.Slug == project) {
+						data.ID = types.StringValue(*firewall.ID)
+						// Add debug info to confirm ID is set
+						diags.AddWarning("Debug", fmt.Sprintf("Firewall ID set to: %s for name: %s in project: %s", *firewall.ID, name, project))
+						return
+					}
+				} else {
+					// If no project info in attributes, assume it's the right one since we filtered by project
+					data.ID = types.StringValue(*firewall.ID)
+					// Add debug info to confirm ID is set
+					diags.AddWarning("Debug", fmt.Sprintf("Firewall ID set to: %s for name: %s (no project validation)", *firewall.ID, name))
+					return
+				}
+			}
+		}
+	}
+
+	// If we get here, we couldn't find the matching firewall
+	diags.AddError("API Error", fmt.Sprintf("Firewall was created but couldn't find it in the list with matching project (%s) and name (%s). Found %d firewalls total.", project, name, len(response.Firewalls.Data)))
 }
 
 func (r *FirewallResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -292,7 +319,7 @@ func (r *FirewallResource) Update(ctx context.Context, req resource.UpdateReques
 		},
 	}
 
-	_, err := r.client.Firewalls.UpdateFirewall(ctx, firewallID, updateRequest)
+	_, err := r.client.Firewalls.Update(ctx, firewallID, updateRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to update firewall, got error: "+err.Error())
 		return
@@ -320,7 +347,7 @@ func (r *FirewallResource) Delete(ctx context.Context, req resource.DeleteReques
 
 	firewallID := data.ID.ValueString()
 
-	_, err := r.client.Firewalls.DeleteFirewall(ctx, firewallID)
+	_, err := r.client.Firewalls.Delete(ctx, firewallID)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to delete firewall, got error: "+err.Error())
 		return
@@ -342,7 +369,7 @@ func (r *FirewallResource) ImportState(ctx context.Context, req resource.ImportS
 func (r *FirewallResource) readFirewall(ctx context.Context, data *FirewallResourceModel, diags *diag.Diagnostics) {
 	firewallID := data.ID.ValueString()
 
-	result, err := r.client.Firewalls.GetFirewall(ctx, firewallID)
+	result, err := r.client.Firewalls.Get(ctx, firewallID)
 	if err != nil {
 		// Check if the firewall was deleted
 		if apiErr, ok := err.(*components.APIError); ok && apiErr.StatusCode == http.StatusNotFound {
@@ -405,24 +432,30 @@ func (r *FirewallResource) readFirewall(ctx context.Context, data *FirewallResou
 			data.Project = types.StringValue(*attributes.Project.ID)
 		}
 
-		// Convert rules
-		var rules []FirewallRuleModel
-		for _, rule := range attributes.Rules {
-			ruleModel := FirewallRuleModel{}
-			if rule.From != nil {
-				ruleModel.From = types.StringValue(*rule.From)
+		// IMPORTANT: Only update rules if we don't have any configured rules yet
+		// This prevents the "block count changed" error by preserving user configuration
+		if len(data.Rules) == 0 {
+			// Convert rules only on first read (import/create)
+			var rules []FirewallRuleModel
+			for _, rule := range attributes.Rules {
+				ruleModel := FirewallRuleModel{}
+				if rule.From != nil {
+					ruleModel.From = types.StringValue(*rule.From)
+				}
+				if rule.To != nil {
+					ruleModel.To = types.StringValue(*rule.To)
+				}
+				if rule.Port != nil {
+					ruleModel.Port = types.StringValue(*rule.Port)
+				}
+				if rule.Protocol != nil {
+					ruleModel.Protocol = types.StringValue(*rule.Protocol)
+				}
+				rules = append(rules, ruleModel)
 			}
-			if rule.To != nil {
-				ruleModel.To = types.StringValue(*rule.To)
-			}
-			if rule.Port != nil {
-				ruleModel.Port = types.StringValue(*rule.Port)
-			}
-			if rule.Protocol != nil {
-				ruleModel.Protocol = types.StringValue(*rule.Protocol)
-			}
-			rules = append(rules, ruleModel)
+			data.Rules = rules
 		}
-		data.Rules = rules
+		// If we already have rules configured, keep the user's configuration
+		// and ignore what the API returns to prevent state drift
 	}
 }

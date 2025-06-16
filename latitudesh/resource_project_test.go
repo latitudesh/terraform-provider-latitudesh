@@ -40,24 +40,24 @@ func TestAccProject_Basic(t *testing.T) {
 
 func testAccCheckProjectDestroy(s *terraform.State) error {
 	client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+	ctx := context.Background()
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "latitudesh_project" {
 			continue
 		}
 
-		// Use GetProjects with FilterSlug to check if project exists
-		request := operations.GetProjectsRequest{
-			FilterSlug: &rs.Primary.ID,
-		}
-		response, err := client.Projects.GetProjects(context.Background(), request)
+		response, err := client.Projects.List(ctx, operations.GetProjectsRequest{})
 		if err != nil {
-			// If we get an error, assume it doesn't exist
 			continue
 		}
 
-		if response.Projects != nil && response.Projects.Data != nil && len(response.Projects.Data) > 0 {
-			return fmt.Errorf("Project still exists")
+		if response.Projects != nil && response.Projects.Data != nil {
+			for _, p := range response.Projects.Data {
+				if p.ID != nil && *p.ID == rs.Primary.ID {
+					return fmt.Errorf("project still exists")
+				}
+			}
 		}
 	}
 
@@ -75,29 +75,26 @@ func testAccCheckProjectExists(n string, project *components.Project) resource.T
 		}
 
 		client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+		ctx := context.Background()
 
-		// Use GetProjects with FilterSlug to find the project
-		request := operations.GetProjectsRequest{
-			FilterSlug: &rs.Primary.ID,
-		}
-		response, err := client.Projects.GetProjects(context.Background(), request)
+		response, err := client.Projects.List(ctx, operations.GetProjectsRequest{})
 		if err != nil {
 			return err
 		}
 
-		if response.Projects == nil || response.Projects.Data == nil || len(response.Projects.Data) == 0 {
-			return fmt.Errorf("Project not found: %v", rs.Primary.ID)
+		if response.Projects == nil || response.Projects.Data == nil {
+			return fmt.Errorf("project not found")
 		}
 
-		foundProject := &response.Projects.Data[0]
-
-		if foundProject.ID == nil || *foundProject.ID != rs.Primary.ID {
-			return fmt.Errorf("Record not found: %v - %v", rs.Primary.ID, foundProject)
+		// Find our project
+		for _, p := range response.Projects.Data {
+			if p.ID != nil && *p.ID == rs.Primary.ID {
+				*project = p
+				return nil
+			}
 		}
 
-		*project = *foundProject
-
-		return nil
+		return fmt.Errorf("project not found")
 	}
 }
 

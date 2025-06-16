@@ -11,7 +11,6 @@ import (
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 )
 
-// Ensure provider defined types fully satisfy framework interfaces.
 var _ datasource.DataSource = &RoleDataSource{}
 
 func NewRoleDataSource() datasource.DataSource {
@@ -33,14 +32,15 @@ func (d *RoleDataSource) Metadata(ctx context.Context, req datasource.MetadataRe
 
 func (d *RoleDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Role data source - retrieve role information",
+		MarkdownDescription: "Role data source",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				MarkdownDescription: "Role ID to look up",
+				MarkdownDescription: "Role identifier",
 				Optional:            true,
+				Computed:            true,
 			},
 			"name": schema.StringAttribute{
-				MarkdownDescription: "Role name (can be used for lookup or is computed)",
+				MarkdownDescription: "Role name",
 				Optional:            true,
 				Computed:            true,
 			},
@@ -52,6 +52,7 @@ func (d *RoleDataSource) Configure(ctx context.Context, req datasource.Configure
 	if req.ProviderData == nil {
 		return
 	}
+
 	client, ok := req.ProviderData.(*latitudeshgosdk.Latitudesh)
 	if !ok {
 		resp.Diagnostics.AddError(
@@ -60,6 +61,7 @@ func (d *RoleDataSource) Configure(ctx context.Context, req datasource.Configure
 		)
 		return
 	}
+
 	d.client = client
 }
 
@@ -80,53 +82,50 @@ func (d *RoleDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		return
 	}
 
+	var role *components.RoleData
+
 	if !data.ID.IsNull() {
 		// Look up by ID
 		roleID := data.ID.ValueString()
-		result, err := d.client.Roles.GetRoleID(ctx, roleID)
+		result, err := d.client.Roles.Get(ctx, roleID)
 		if err != nil {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read role %s, got error: %s", roleID, err.Error()))
 			return
 		}
-
 		if result.Role != nil && result.Role.Data != nil {
-			role := result.Role.Data
-			if role.ID != nil {
-				data.ID = types.StringValue(*role.ID)
-			}
-			if role.Attributes != nil && role.Attributes.Name != nil {
-				data.Name = types.StringValue(*role.Attributes.Name)
-			}
+			role = result.Role.Data
 		}
 	} else {
-		// Look up by name
-		targetName := data.Name.ValueString()
-		result, err := d.client.Roles.GetRoles(ctx, nil, nil)
+		// Look up by name - get all roles and find matching name
+		name := data.Name.ValueString()
+		result, err := d.client.Roles.List(ctx, nil, nil)
 		if err != nil {
-			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to search for role with name %s, got error: %s", targetName, err.Error()))
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to search for role with name %s, got error: %s", name, err.Error()))
 			return
 		}
-
-		var foundRole *components.RoleData
 		if result.Object != nil && result.Object.Data != nil {
-			for _, role := range result.Object.Data {
-				if role.Attributes != nil && role.Attributes.Name != nil && *role.Attributes.Name == targetName {
-					foundRole = &role
+			for _, r := range result.Object.Data {
+				if r.Attributes != nil && r.Attributes.Name != nil && *r.Attributes.Name == name {
+					role = &r
 					break
 				}
 			}
 		}
+	}
 
-		if foundRole == nil {
-			resp.Diagnostics.AddError("Role Not Found", fmt.Sprintf("No role found with name: %s", targetName))
-			return
-		}
+	if role == nil {
+		resp.Diagnostics.AddError("Role Not Found", "The specified role was not found.")
+		return
+	}
 
-		if foundRole.ID != nil {
-			data.ID = types.StringValue(*foundRole.ID)
-		}
-		if foundRole.Attributes != nil && foundRole.Attributes.Name != nil {
-			data.Name = types.StringValue(*foundRole.Attributes.Name)
+	// Populate the data model
+	if role.ID != nil {
+		data.ID = types.StringValue(*role.ID)
+	}
+
+	if role.Attributes != nil {
+		if role.Attributes.Name != nil {
+			data.Name = types.StringValue(*role.Attributes.Name)
 		}
 	}
 

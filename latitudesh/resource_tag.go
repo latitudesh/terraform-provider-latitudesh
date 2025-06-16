@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -10,10 +11,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
-// Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &TagResource{}
 var _ resource.ResourceWithImportState = &TagResource{}
 
@@ -119,18 +120,25 @@ func (r *TagResource) Create(ctx context.Context, req resource.CreateRequest, re
 		},
 	}
 
-	result, err := r.client.Tags.CreateTag(ctx, createRequest)
+	result, err := r.client.Tags.Create(ctx, createRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to create tag, got error: "+err.Error())
 		return
 	}
 
-	if result.CustomTag == nil || result.CustomTag.ID == nil {
-		resp.Diagnostics.AddError("API Error", "Failed to get tag ID from response")
-		return
+	// Try to get ID from response first
+	if result.CustomTag != nil && result.CustomTag.ID != nil {
+		data.ID = types.StringValue(*result.CustomTag.ID)
+	} else {
+		// Fallback: API might have created the tag but not returned the ID
+		// Use List to find the tag by name
+		tagID, err := r.findTagByName(ctx, name)
+		if err != nil {
+			resp.Diagnostics.AddError("API Error", "Failed to get tag ID from response and unable to find created tag: "+err.Error())
+			return
+		}
+		data.ID = types.StringValue(tagID)
 	}
-
-	data.ID = types.StringValue(*result.CustomTag.ID)
 
 	// Read the resource to populate all attributes
 	r.readTag(ctx, &data, &resp.Diagnostics)
@@ -193,7 +201,7 @@ func (r *TagResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		},
 	}
 
-	_, err := r.client.Tags.UpdateTag(ctx, tagID, updateRequest)
+	_, err := r.client.Tags.Update(ctx, tagID, updateRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to update tag, got error: "+err.Error())
 		return
@@ -218,7 +226,7 @@ func (r *TagResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 
 	tagID := data.ID.ValueString()
 
-	_, err := r.client.Tags.DestroyTag(ctx, tagID)
+	_, err := r.client.Tags.Delete(ctx, tagID)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to delete tag, got error: "+err.Error())
 		return
@@ -240,40 +248,68 @@ func (r *TagResource) ImportState(ctx context.Context, req resource.ImportStateR
 func (r *TagResource) readTag(ctx context.Context, data *TagResourceModel, diags *diag.Diagnostics) {
 	tagID := data.ID.ValueString()
 
-	// Use GetTags to find the specific tag since there's no GetTag method
-	response, err := r.client.Tags.GetTags(ctx)
+	// Use List to find the specific tag since there's no Get method
+	response, err := r.client.Tags.List(ctx)
 	if err != nil {
 		diags.AddError("Client Error", "Unable to read tags, got error: "+err.Error())
 		return
 	}
 
-	if response.CustomTag == nil {
+	if response.CustomTags == nil || response.CustomTags.Data == nil {
 		data.ID = types.StringNull()
 		return
 	}
 
-	// The GetTags response appears to return a single CustomTag, not a list
-	// If the ID matches, use it; otherwise the tag doesn't exist
-	if response.CustomTag.ID != nil && *response.CustomTag.ID == tagID {
-		if response.CustomTag.Attributes != nil {
-			if response.CustomTag.Attributes.Name != nil {
-				data.Name = types.StringValue(*response.CustomTag.Attributes.Name)
-			}
-
-			if response.CustomTag.Attributes.Description != nil {
-				data.Description = types.StringValue(*response.CustomTag.Attributes.Description)
-			}
-
-			if response.CustomTag.Attributes.Color != nil {
-				data.Color = types.StringValue(*response.CustomTag.Attributes.Color)
-			}
-
-			if response.CustomTag.Attributes.Slug != nil {
-				data.Slug = types.StringValue(*response.CustomTag.Attributes.Slug)
-			}
+	// Find our tag in the list
+	var foundTag *components.CustomTagData
+	for _, tag := range response.CustomTags.Data {
+		if tag.ID != nil && *tag.ID == tagID {
+			foundTag = &tag
+			break
 		}
-	} else {
+	}
+
+	if foundTag == nil {
 		data.ID = types.StringNull()
 		return
 	}
+
+	if foundTag.Attributes != nil {
+		if foundTag.Attributes.Name != nil {
+			data.Name = types.StringValue(*foundTag.Attributes.Name)
+		}
+
+		if foundTag.Attributes.Description != nil {
+			data.Description = types.StringValue(*foundTag.Attributes.Description)
+		}
+
+		if foundTag.Attributes.Color != nil {
+			data.Color = types.StringValue(*foundTag.Attributes.Color)
+		}
+
+		if foundTag.Attributes.Slug != nil {
+			data.Slug = types.StringValue(*foundTag.Attributes.Slug)
+		}
+	}
+}
+
+// findTagByName finds a tag by name and returns its ID
+func (r *TagResource) findTagByName(ctx context.Context, name string) (string, error) {
+	response, err := r.client.Tags.List(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	if response.CustomTags == nil || response.CustomTags.Data == nil {
+		return "", fmt.Errorf("no tags found")
+	}
+
+	// Find the tag by name
+	for _, tag := range response.CustomTags.Data {
+		if tag.ID != nil && tag.Attributes != nil && tag.Attributes.Name != nil && *tag.Attributes.Name == name {
+			return *tag.ID, nil
+		}
+	}
+
+	return "", fmt.Errorf("tag with name '%s' not found", name)
 }

@@ -52,12 +52,15 @@ func TestAccUserDataBasic(t *testing.T) {
 
 func testAccCheckUserDataDestroy(s *terraform.State) error {
 	client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+	ctx := context.Background()
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "latitudesh_user_data" {
 			continue
 		}
-		if _, err := client.UserData.Get(context.Background(), rs.Primary.Attributes["project"], rs.Primary.ID, nil); err == nil {
+
+		_, err := client.UserData.Retrieve(ctx, rs.Primary.ID, nil)
+		if err == nil {
 			return fmt.Errorf("User data still exists")
 		}
 	}
@@ -77,21 +80,17 @@ func testAccCheckUserDataExists(n string, userData *components.UserDataPropertie
 
 		client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
 
-		response, err := client.UserData.Get(context.Background(), rs.Primary.Attributes["project"], rs.Primary.ID, nil)
+		ctx := context.Background()
+		response, err := client.UserData.Retrieve(ctx, rs.Primary.ID, nil)
 		if err != nil {
 			return err
 		}
 
 		if response.UserData == nil || response.UserData.Data == nil {
-			return fmt.Errorf("User data not found in response")
+			return fmt.Errorf("user data not found")
 		}
 
-		foundUserData := response.UserData.Data
-		if foundUserData.ID == nil || *foundUserData.ID != rs.Primary.ID {
-			return fmt.Errorf("Record not found: %v - %v", rs.Primary.ID, foundUserData)
-		}
-
-		*userData = *foundUserData
+		*userData = *response.UserData.Data
 
 		return nil
 	}

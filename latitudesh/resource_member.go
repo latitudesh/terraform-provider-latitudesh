@@ -191,7 +191,7 @@ func (r *MemberResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 	memberID := data.ID.ValueString()
 
-	_, err := r.client.TeamsMembers.DestroyTeamMember(ctx, memberID)
+	_, err := r.client.TeamMembers.Delete(ctx, memberID)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to delete team member, got error: "+err.Error())
 		return

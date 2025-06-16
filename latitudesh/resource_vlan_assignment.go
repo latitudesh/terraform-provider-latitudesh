@@ -2,6 +2,8 @@ package latitudesh
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -14,7 +16,6 @@ import (
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
-// Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &VlanAssignmentResource{}
 var _ resource.ResourceWithImportState = &VlanAssignmentResource{}
 
@@ -30,10 +31,9 @@ type VlanAssignmentResourceModel struct {
 	ID               types.String `tfsdk:"id"`
 	ServerID         types.String `tfsdk:"server_id"`
 	VirtualNetworkID types.String `tfsdk:"virtual_network_id"`
-	// Computed fields
-	Vid         types.Int64  `tfsdk:"vid"`
-	Description types.String `tfsdk:"description"`
-	Status      types.String `tfsdk:"status"`
+	Vid              types.Int64  `tfsdk:"vid"`
+	Description      types.String `tfsdk:"description"`
+	Status           types.String `tfsdk:"status"`
 }
 
 func (r *VlanAssignmentResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -123,18 +123,42 @@ func (r *VlanAssignmentResource) Create(ctx context.Context, req resource.Create
 		},
 	}
 
-	result, err := r.client.PrivateNetworks.AssignServerVirtualNetwork(ctx, createRequest)
+	result, err := r.client.PrivateNetworks.Assign(ctx, createRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to create virtual network assignment, got error: "+err.Error())
 		return
 	}
 
-	if result.VirtualNetworkAssignment == nil || result.VirtualNetworkAssignment.ID == nil {
-		resp.Diagnostics.AddError("API Error", "Failed to get virtual network assignment ID from response")
-		return
+	// Check for successful status codes
+	if result != nil {
+		httpStatus := result.HTTPMeta.Response.StatusCode
+		if httpStatus != 200 && httpStatus != 201 {
+			resp.Diagnostics.AddError("API Error", fmt.Sprintf("Create virtual network assignment returned unexpected status code: %d", httpStatus))
+			return
+		}
 	}
 
-	data.ID = types.StringValue(*result.VirtualNetworkAssignment.ID)
+	// Try to get ID from response first
+	if result.VirtualNetworkAssignment != nil && result.VirtualNetworkAssignment.ID != nil {
+		data.ID = types.StringValue(*result.VirtualNetworkAssignment.ID)
+	} else {
+		// If we can't get ID from response, use List endpoint to find it
+		resp.Diagnostics.AddWarning("Assignment ID Not in Response", "Virtual network assignment was created but ID not returned in response. Using List endpoint to find it.")
+
+		// Wait a moment for the assignment to be processed
+		time.Sleep(2 * time.Second)
+
+		// Use List endpoint to find the assignment we just created
+		r.findAssignmentByServerAndVNet(ctx, &data, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+
+		if data.ID.IsNull() || data.ID.ValueString() == "" {
+			resp.Diagnostics.AddError("API Error", "Virtual network assignment was created but could not determine its ID")
+			return
+		}
+	}
 
 	// Read the resource to populate all attributes
 	r.readVlanAssignment(ctx, &data, &resp.Diagnostics)
@@ -176,7 +200,7 @@ func (r *VlanAssignmentResource) Delete(ctx context.Context, req resource.Delete
 
 	assignmentID := data.ID.ValueString()
 
-	_, err := r.client.PrivateNetworks.DeleteVirtualNetworksAssignments(ctx, assignmentID)
+	_, err := r.client.PrivateNetworks.DeleteAssignment(ctx, assignmentID)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to delete virtual network assignment, got error: "+err.Error())
 		return
@@ -199,7 +223,7 @@ func (r *VlanAssignmentResource) readVlanAssignment(ctx context.Context, data *V
 	assignmentID := data.ID.ValueString()
 
 	// Get all virtual network assignments and find ours
-	response, err := r.client.PrivateNetworks.GetVirtualNetworksAssignments(ctx, operations.GetVirtualNetworksAssignmentsRequest{})
+	response, err := r.client.PrivateNetworks.ListAssignments(ctx, operations.GetVirtualNetworksAssignmentsRequest{})
 	if err != nil {
 		diags.AddError("Client Error", "Unable to read virtual network assignments, got error: "+err.Error())
 		return
@@ -211,7 +235,7 @@ func (r *VlanAssignmentResource) readVlanAssignment(ctx context.Context, data *V
 	}
 
 	// Find our assignment
-	var assignment *components.VirtualNetworkAssignment
+	var assignment *components.VirtualNetworkAssignmentData
 	for _, a := range response.VirtualNetworkAssignments.Data {
 		if a.ID != nil && *a.ID == assignmentID {
 			assignment = &a
@@ -227,8 +251,118 @@ func (r *VlanAssignmentResource) readVlanAssignment(ctx context.Context, data *V
 	if assignment.Attributes != nil {
 		attrs := assignment.Attributes
 
+		// Set server ID from the appropriate field
 		if attrs.ServerID != nil {
 			data.ServerID = types.StringValue(*attrs.ServerID)
+		} else if attrs.Server != nil && attrs.Server.ID != nil {
+			data.ServerID = types.StringValue(*attrs.Server.ID)
+		}
+
+		if attrs.VirtualNetworkID != nil {
+			data.VirtualNetworkID = types.StringValue(*attrs.VirtualNetworkID)
+		}
+
+		if attrs.Vid != nil {
+			data.Vid = types.Int64Value(*attrs.Vid)
+		}
+
+		if attrs.Description != nil {
+			data.Description = types.StringValue(*attrs.Description)
+		}
+
+		if attrs.Status != nil {
+			data.Status = types.StringValue(*attrs.Status)
+		}
+	}
+}
+
+func (r *VlanAssignmentResource) findAssignmentByServerAndVNet(ctx context.Context, data *VlanAssignmentResourceModel, diags *diag.Diagnostics) {
+	serverID := data.ServerID.ValueString()
+	vnetID := data.VirtualNetworkID.ValueString()
+
+	// Get all virtual network assignments and find ours
+	response, err := r.client.PrivateNetworks.ListAssignments(ctx, operations.GetVirtualNetworksAssignmentsRequest{})
+	if err != nil {
+		diags.AddError("Client Error", "Unable to read virtual network assignments, got error: "+err.Error())
+		return
+	}
+
+	if response.VirtualNetworkAssignments == nil || response.VirtualNetworkAssignments.Data == nil {
+		diags.AddError("API Error", "No virtual network assignments found in response")
+		return
+	}
+
+	// Find our assignment
+	var assignment *components.VirtualNetworkAssignmentData
+	for _, a := range response.VirtualNetworkAssignments.Data {
+		if a.Attributes != nil {
+			attrs := a.Attributes
+
+			// Check virtual network ID first
+			if attrs.VirtualNetworkID != nil && *attrs.VirtualNetworkID == vnetID {
+				// Check server ID - try both ServerID field and nested Server.ID
+				var assignmentServerID string
+				if attrs.ServerID != nil {
+					assignmentServerID = *attrs.ServerID
+				} else if attrs.Server != nil && attrs.Server.ID != nil {
+					assignmentServerID = *attrs.Server.ID
+				}
+
+				if assignmentServerID == serverID {
+					assignment = &a
+					break
+				}
+			}
+		}
+	}
+
+	if assignment == nil {
+		// Add more detailed debugging information
+		var foundAssignments []string
+		for _, a := range response.VirtualNetworkAssignments.Data {
+			if a.Attributes != nil && a.ID != nil {
+				attrs := a.Attributes
+				serverIDStr := "nil"
+				vnetIDStr := "nil"
+
+				// Try to get server ID from both possible locations
+				if attrs.ServerID != nil {
+					serverIDStr = *attrs.ServerID
+				} else if attrs.Server != nil && attrs.Server.ID != nil {
+					serverIDStr = *attrs.Server.ID
+				}
+
+				if attrs.VirtualNetworkID != nil {
+					vnetIDStr = *attrs.VirtualNetworkID
+				}
+				foundAssignments = append(foundAssignments, fmt.Sprintf("ID: %s, Server: %s, VNet: %s", *a.ID, serverIDStr, vnetIDStr))
+			}
+		}
+
+		errorMsg := fmt.Sprintf("Could not find virtual network assignment for server '%s' and virtual network '%s'", serverID, vnetID)
+		if len(foundAssignments) > 0 {
+			errorMsg += fmt.Sprintf(". Found assignments: %v", foundAssignments)
+		} else {
+			errorMsg += ". No assignments found in response."
+		}
+
+		diags.AddError("API Error", errorMsg)
+		return
+	}
+
+	// Set the ID
+	if assignment.ID != nil {
+		data.ID = types.StringValue(*assignment.ID)
+	}
+
+	if assignment.Attributes != nil {
+		attrs := assignment.Attributes
+
+		// Set server ID from the appropriate field
+		if attrs.ServerID != nil {
+			data.ServerID = types.StringValue(*attrs.ServerID)
+		} else if attrs.Server != nil && attrs.Server.ID != nil {
+			data.ServerID = types.StringValue(*attrs.Server.ID)
 		}
 
 		if attrs.VirtualNetworkID != nil {

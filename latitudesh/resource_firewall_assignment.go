@@ -3,8 +3,6 @@ package latitudesh
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -17,7 +15,6 @@ import (
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
-// Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &FirewallAssignmentResource{}
 var _ resource.ResourceWithImportState = &FirewallAssignmentResource{}
 
@@ -25,12 +22,10 @@ func NewFirewallAssignmentResource() resource.Resource {
 	return &FirewallAssignmentResource{}
 }
 
-// FirewallAssignmentResource defines the resource implementation.
 type FirewallAssignmentResource struct {
 	client *latitudeshgosdk.Latitudesh
 }
 
-// FirewallAssignmentResourceModel describes the resource data model.
 type FirewallAssignmentResourceModel struct {
 	ID         types.String `tfsdk:"id"`
 	FirewallID types.String `tfsdk:"firewall_id"`
@@ -94,15 +89,24 @@ func (r *FirewallAssignmentResource) Configure(ctx context.Context, req resource
 func (r *FirewallAssignmentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data FirewallAssignmentResourceModel
 
-	// Read Terraform plan data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
-
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	firewallID := data.FirewallID.ValueString()
 	serverID := data.ServerID.ValueString()
+
+	// Validate that we have the required IDs
+	if firewallID == "" {
+		resp.Diagnostics.AddError("Configuration Error", "firewall_id is required but was empty. Make sure the firewall resource is created successfully first.")
+		return
+	}
+
+	if serverID == "" {
+		resp.Diagnostics.AddError("Configuration Error", "server_id is required but was empty.")
+		return
+	}
 
 	createRequest := operations.CreateFirewallAssignmentFirewallsAssignmentsRequestBody{
 		Data: operations.CreateFirewallAssignmentFirewallsAssignmentsData{
@@ -113,37 +117,89 @@ func (r *FirewallAssignmentResource) Create(ctx context.Context, req resource.Cr
 		},
 	}
 
-	response, err := r.client.Firewalls.Assignments.Create(ctx, firewallID, createRequest)
+	result, err := r.client.Firewalls.Assignments.Create(ctx, firewallID, createRequest)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", "Unable to create firewall assignment, got error: "+err.Error())
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create firewall assignment for firewall %s and server %s, got error: %s", firewallID, serverID, err.Error()))
 		return
 	}
 
-	if response.FirewallServer == nil {
-		resp.Diagnostics.AddError("API Error", "Unexpected response structure from API")
+	// Check for successful status codes (200 or 201)
+	if result == nil {
+		resp.Diagnostics.AddError("API Error", "Create firewall assignment returned nil response")
 		return
 	}
 
-	assignment := response.FirewallServer
-	if assignment.ID == nil {
-		resp.Diagnostics.AddError("API Error", "Firewall assignment ID not returned from API")
+	httpStatus := result.HTTPMeta.Response.StatusCode
+	if httpStatus != 200 && httpStatus != 201 {
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Create firewall assignment returned unexpected status code: %d", httpStatus))
 		return
 	}
 
-	// Create a composite ID for the assignment: firewallID:assignmentID
-	data.ID = types.StringValue(fmt.Sprintf("%s:%s", firewallID, *assignment.ID))
-
-	if assignment.Attributes != nil {
-		if assignment.Attributes.FirewallID != nil {
-			data.FirewallID = types.StringValue(*assignment.Attributes.FirewallID)
-		}
-		if assignment.Attributes.Server != nil && assignment.Attributes.Server.ID != nil {
-			data.ServerID = types.StringValue(*assignment.Attributes.Server.ID)
-		}
+	// Always find the assignment ID through the List endpoint
+	r.findAssignmentByServerAndFirewall(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	// Save data into Terraform state
+	// Verify we got an ID
+	if data.ID.IsNull() || data.ID.ValueString() == "" {
+		resp.Diagnostics.AddError("API Error", "Failed to get assignment ID after creation")
+		return
+	}
+
+	// Read the resource to populate all attributes
+	r.readFirewallAssignment(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// Helper function to find assignment ID by filtering server_id and firewall_id
+func (r *FirewallAssignmentResource) findAssignmentByServerAndFirewall(ctx context.Context, data *FirewallAssignmentResourceModel, diags *diag.Diagnostics) {
+	firewallID := data.FirewallID.ValueString()
+	serverID := data.ServerID.ValueString()
+
+	// Get assignments for this firewall
+	response, err := r.client.Firewalls.ListAssignments(ctx, firewallID, nil, nil)
+	if err != nil {
+		diags.AddError("Client Error", "Unable to list firewall assignments to find assignment ID, got error: "+err.Error())
+		return
+	}
+
+	// Check if we have assignments data
+	if response.FirewallAssignments == nil || response.FirewallAssignments.Data == nil {
+		diags.AddError("API Error", "No assignments found for firewall after creation")
+		return
+	}
+
+	// Look for assignment with matching server ID and firewall ID
+	for _, assignment := range response.FirewallAssignments.Data {
+		if assignment.Attributes != nil && assignment.ID != nil {
+			var assignmentServerID string
+			var assignmentFirewallID string
+
+			// Get server ID from assignment
+			if assignment.Attributes.Server != nil && assignment.Attributes.Server.ID != nil {
+				assignmentServerID = *assignment.Attributes.Server.ID
+			}
+
+			// Get firewall ID from assignment
+			if assignment.Attributes.FirewallID != nil {
+				assignmentFirewallID = *assignment.Attributes.FirewallID
+			}
+
+			// If we found a matching server ID and firewall ID, use this assignment
+			if assignmentServerID == serverID && assignmentFirewallID == firewallID {
+				data.ID = types.StringValue(*assignment.ID)
+				return
+			}
+		}
+	}
+
+	// If we get here, we couldn't find the matching assignment
+	diags.AddError("API Error", "Assignment was created but couldn't find it in the list with matching server_id and firewall_id")
 }
 
 func (r *FirewallAssignmentResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -173,35 +229,28 @@ func (r *FirewallAssignmentResource) Update(ctx context.Context, req resource.Up
 func (r *FirewallAssignmentResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var data FirewallAssignmentResourceModel
 
-	// Read Terraform prior state data into the model
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
-
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// Parse the composite ID: firewallID:assignmentID
-	idParts := strings.Split(data.ID.ValueString(), ":")
-	if len(idParts) != 2 {
-		resp.Diagnostics.AddError("ID Parse Error", "Invalid resource ID format, expected firewallID:assignmentID")
+	assignmentID := data.ID.ValueString()
+	firewallID := data.FirewallID.ValueString()
+
+	if assignmentID == "" {
+		resp.Diagnostics.AddError("Invalid ID", "Assignment ID is empty")
 		return
 	}
 
-	firewallID := idParts[0]
+	if firewallID == "" {
+		resp.Diagnostics.AddError("Invalid Firewall ID", "Firewall ID is empty")
+		return
+	}
 
-	response, err := r.client.Firewalls.GetFirewallAssignments(ctx, firewallID, nil, nil)
+	_, err := r.client.Firewalls.DeleteAssignment(ctx, firewallID, assignmentID)
 	if err != nil {
-		// If we can't find it, assume it's already deleted
+		resp.Diagnostics.AddError("Client Error", "Unable to delete firewall assignment, got error: "+err.Error())
 		return
-	}
-
-	if response.FirewallServer != nil && response.FirewallServer.ID != nil {
-		assignmentID := *response.FirewallServer.ID
-		_, err := r.client.Firewalls.DeleteFirewallAssignment(ctx, firewallID, assignmentID)
-		if err != nil {
-			resp.Diagnostics.AddError("Client Error", "Unable to delete firewall assignment, got error: "+err.Error())
-			return
-		}
 	}
 }
 
@@ -218,43 +267,56 @@ func (r *FirewallAssignmentResource) ImportState(ctx context.Context, req resour
 }
 
 func (r *FirewallAssignmentResource) readFirewallAssignment(ctx context.Context, data *FirewallAssignmentResourceModel, diags *diag.Diagnostics) {
-	// Parse the composite ID: firewallID:assignmentID
-	idParts := strings.Split(data.ID.ValueString(), ":")
-	if len(idParts) != 2 {
-		diags.AddError("ID Parse Error", "Invalid resource ID format, expected firewallID:assignmentID")
+	assignmentID := data.ID.ValueString()
+	if assignmentID == "" {
+		diags.AddError("Invalid ID", "Assignment ID is empty")
 		return
 	}
 
-	firewallID := idParts[0]
-	assignmentID := idParts[1]
+	// We need the firewall ID to call ListAssignments
+	firewallID := data.FirewallID.ValueString()
+	if firewallID == "" {
+		diags.AddError("Invalid Firewall ID", "Firewall ID is required to read assignment")
+		return
+	}
 
-	// Get firewall assignments to find our specific assignment
-	response, err := r.client.Firewalls.GetFirewallAssignments(ctx, firewallID, nil, nil)
+	// Get the first page of assignments for this firewall
+	// Based on the API response, there's typically only one assignment per firewall
+	response, err := r.client.Firewalls.ListAssignments(ctx, firewallID, nil, nil)
 	if err != nil {
-		if apiErr, ok := err.(*components.APIError); ok && apiErr.StatusCode == http.StatusNotFound {
-			data.ID = types.StringNull()
+		diags.AddError("Client Error", "Unable to read firewall assignments, got error: "+err.Error())
+		return
+	}
+
+	// Check if we have assignments data
+	if response.FirewallAssignments == nil || response.FirewallAssignments.Data == nil {
+		// No assignments found, the assignment was likely deleted
+		data.ID = types.StringNull()
+		return
+	}
+
+	// Look for our specific assignment in the data array
+	for _, assignment := range response.FirewallAssignments.Data {
+		if assignment.ID != nil && *assignment.ID == assignmentID {
+			// Found it! Populate the data model
+			r.populateAssignmentData(data, &assignment)
 			return
 		}
-		diags.AddError("Client Error", "Unable to read firewall assignment, got error: "+err.Error())
-		return
 	}
 
-	if response.FirewallServer == nil {
-		data.ID = types.StringNull()
-		return
-	}
+	// If not found, the assignment was likely deleted
+	data.ID = types.StringNull()
+}
 
-	// Check if this is our assignment
-	if response.FirewallServer.ID == nil || *response.FirewallServer.ID != assignmentID {
-		data.ID = types.StringNull()
-		return
-	}
+// Helper function to populate assignment data
+func (r *FirewallAssignmentResource) populateAssignmentData(data *FirewallAssignmentResourceModel, assignment *components.FirewallAssignmentData) {
+	if assignment.Attributes != nil {
+		if assignment.Attributes.FirewallID != nil {
+			data.FirewallID = types.StringValue(*assignment.Attributes.FirewallID)
+		}
 
-	assignment := response.FirewallServer
-
-	data.FirewallID = types.StringValue(firewallID)
-
-	if assignment.Attributes != nil && assignment.Attributes.Server != nil && assignment.Attributes.Server.ID != nil {
-		data.ServerID = types.StringValue(*assignment.Attributes.Server.ID)
+		if assignment.Attributes.Server != nil && assignment.Attributes.Server.ID != nil {
+			data.ServerID = types.StringValue(*assignment.Attributes.Server.ID)
+		}
 	}
 }

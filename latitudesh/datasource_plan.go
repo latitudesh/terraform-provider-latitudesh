@@ -137,7 +137,7 @@ func (d *PlanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	if !data.ID.IsNull() {
 		// Look up by ID
 		planID := data.ID.ValueString()
-		result, err := d.client.Plans.GetPlan(ctx, planID)
+		result, err := d.client.Plans.Get(ctx, planID)
 		if err != nil {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read plan %s, got error: %s", planID, err.Error()))
 			return
@@ -151,7 +151,7 @@ func (d *PlanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		request := operations.GetPlansRequest{
 			FilterSlug: &slug,
 		}
-		result, err := d.client.Plans.GetPlans(ctx, request)
+		result, err := d.client.Plans.List(ctx, request)
 		if err != nil {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to search for plan with slug %s, got error: %s", slug, err.Error()))
 			return

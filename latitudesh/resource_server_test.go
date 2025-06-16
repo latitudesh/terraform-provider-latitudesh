@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
-	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
-	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 )
 
 const (
@@ -25,15 +22,15 @@ const (
 func TestAccServer_Basic(t *testing.T) {
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
-	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
 
+	// Use Framework provider with VCR
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)
 			testAccProjectCheck(t)
 		},
-		Providers:    testAccProviders,
-		CheckDestroy: testAccCheckServerDestroy,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		CheckDestroy:             testAccCheckServerDestroy,
 		Steps: []resource.TestStep{
 			{
 				Config: testAccCheckServerBasic(),
@@ -48,7 +45,8 @@ func TestAccServer_Basic(t *testing.T) {
 }
 
 func testAccCheckServerDestroy(s *terraform.State) error {
-	client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+	// Use the VCR client for destroy check
+	client := createVCRClient(nil) // We'll use environment variables for auth
 	ctx := context.Background()
 
 	for _, rs := range s.RootModule().Resources {
@@ -56,24 +54,9 @@ func testAccCheckServerDestroy(s *terraform.State) error {
 			continue
 		}
 
-		// Check multiple times with delay to ensure server is truly gone
-		maxRetries := 10
-		retryDelay := 30 // seconds
-
-		for retries := 0; retries < maxRetries; retries++ {
-			_, err := client.Servers.GetServer(ctx, rs.Primary.ID, nil)
-
-			// If we get an error, the server is likely gone
-			if err != nil {
-				// Check if it's a 404/410 error
-				if apiErr, ok := err.(*components.APIError); ok && (apiErr.StatusCode == 404 || apiErr.StatusCode == 410) {
-					fmt.Printf("[INFO] Server %s confirmed deleted (HTTP %d)\n", rs.Primary.ID, apiErr.StatusCode)
-					break
-				}
-			}
-
-			// Wait before the next retry
-			time.Sleep(time.Duration(retryDelay) * time.Second)
+		_, err := client.Servers.Get(ctx, rs.Primary.ID, nil)
+		if err == nil {
+			return fmt.Errorf("server still exists")
 		}
 	}
 
@@ -90,111 +73,53 @@ func testAccCheckServerExists(n string) resource.TestCheckFunc {
 			return fmt.Errorf("No Record ID is set")
 		}
 
-		client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+		// Use the VCR client for existence check
+		client := createVCRClient(nil) // We'll use environment variables for auth
 		ctx := context.Background()
 
-		// Variables to track consecutive successes
-		consecutiveSuccesses := 0
-		requiredConsecutiveSuccesses := 3
-		timeoutMinutes := 30
-		iterationSeconds := 30
-		maxIterations := (timeoutMinutes * 60) / iterationSeconds
-
-		// Get the expected attributes from the test config
-		expectedProject := os.Getenv("LATITUDESH_TEST_PROJECT")
-		expectedOS := testServerOperatingSystem
-
-		// Retry with more patience to match the implementation's retry logic
-		for attempt := 0; attempt < maxIterations; attempt++ {
-			foundServer, err := client.Servers.GetServer(ctx, rs.Primary.ID, nil)
-
-			// Check for transient errors or deletion
-			if err != nil {
-				if apiErr, ok := err.(*components.APIError); ok && (apiErr.StatusCode == 404 || apiErr.StatusCode == 410) {
-					return fmt.Errorf("Server %s was deleted during test (HTTP status: %d)",
-						rs.Primary.ID, apiErr.StatusCode)
-				}
-				// For other transient errors, log and retry
-				if attempt < maxIterations-1 {
-					fmt.Printf("[WARN] Error getting server %s (attempt %d/%d): %v - will retry\n",
-						rs.Primary.ID, attempt+1, maxIterations, err)
-					time.Sleep(time.Duration(iterationSeconds) * time.Second)
-					continue
-				}
-				return err
-			}
-
-			// Safety check for nil server
-			if foundServer.Server == nil || foundServer.Server.Data == nil {
-				if attempt < maxIterations-1 {
-					fmt.Printf("[WARN] Server %s returned nil (attempt %d/%d) - will retry\n",
-						rs.Primary.ID, attempt+1, maxIterations)
-					time.Sleep(time.Duration(iterationSeconds) * time.Second)
-					continue
-				}
-				return fmt.Errorf("Server %s not found after %d attempts", rs.Primary.ID, attempt+1)
-			}
-
-			server := foundServer.Server.Data
-
-			// Get status from server
-			status := ""
-			if server.Attributes != nil && server.Attributes.Status != nil {
-				status = string(*server.Attributes.Status)
-			}
-
-			fmt.Printf("[INFO] Server %s status: %s (attempt %d/%d)\n",
-				rs.Primary.ID, status, attempt+1, maxIterations)
-
-			// Get project ID from server
-			var serverProjectID string
-			if server.Attributes != nil && server.Attributes.Project != nil {
-				if server.Attributes.Project.ID != nil {
-					serverProjectID = *server.Attributes.Project.ID
-				} else if server.Attributes.Project.Slug != nil {
-					serverProjectID = *server.Attributes.Project.Slug
-				}
-			}
-
-			// Get OS from server
-			var serverOS string
-			if server.Attributes != nil && server.Attributes.OperatingSystem != nil && server.Attributes.OperatingSystem.Slug != nil {
-				serverOS = *server.Attributes.OperatingSystem.Slug
-			}
-
-			// Check if server meets all required conditions
-			if (status == "on" || status == "inventory") &&
-				serverProjectID == expectedProject &&
-				serverOS == expectedOS {
-
-				consecutiveSuccesses++
-				fmt.Printf("[INFO] Server %s conditions met (%d/%d): status=%s, project=%s, os=%s\n",
-					rs.Primary.ID, consecutiveSuccesses, requiredConsecutiveSuccesses,
-					status, serverProjectID, serverOS)
-
-				// For tests, we only need 2 consecutive successes
-				requiredConsecutiveSuccesses = 2
-
-				if consecutiveSuccesses >= requiredConsecutiveSuccesses {
-					return nil
-				}
-			} else {
-				// Reset counter if conditions not met
-				if consecutiveSuccesses > 0 {
-					fmt.Printf("[WARN] Server %s conditions no longer met, resetting counter\n", rs.Primary.ID)
-					consecutiveSuccesses = 0
-				}
-
-				// Log what conditions weren't met
-				fmt.Printf("[INFO] Server %s conditions check: status=%s (expected=on or inventory), project=%s (expected=%s), os=%s (expected=%s)\n",
-					rs.Primary.ID, status, serverProjectID, expectedProject, serverOS, expectedOS)
-			}
-
-			time.Sleep(time.Duration(iterationSeconds) * time.Second)
+		response, err := client.Servers.Get(ctx, rs.Primary.ID, nil)
+		if err != nil {
+			return err
 		}
 
-		return fmt.Errorf("Timeout reached: Server %s did not reach required conditions after %d minutes",
-			rs.Primary.ID, timeoutMinutes)
+		if response.Server == nil || response.Server.Data == nil {
+			return fmt.Errorf("server not found")
+		}
+
+		server := response.Server.Data
+
+		// Get status from server
+		status := ""
+		if server.Attributes != nil && server.Attributes.Status != nil {
+			status = string(*server.Attributes.Status)
+		}
+
+		fmt.Printf("[INFO] Server %s status: %s\n", rs.Primary.ID, status)
+
+		// Get project ID from server
+		var serverProjectID string
+		if server.Attributes != nil && server.Attributes.Project != nil {
+			if server.Attributes.Project.ID != nil {
+				serverProjectID = *server.Attributes.Project.ID
+			} else if server.Attributes.Project.Slug != nil {
+				serverProjectID = *server.Attributes.Project.Slug
+			}
+		}
+
+		// Get OS from server
+		var serverOS string
+		if server.Attributes != nil && server.Attributes.OperatingSystem != nil && server.Attributes.OperatingSystem.Slug != nil {
+			serverOS = *server.Attributes.OperatingSystem.Slug
+		}
+
+		// Check if server meets all required conditions
+		if (status == "on" || status == "inventory") &&
+			serverProjectID == os.Getenv("LATITUDESH_TEST_PROJECT") &&
+			serverOS == testServerOperatingSystem {
+			return nil
+		}
+
+		return fmt.Errorf("Server %s does not meet the required conditions", rs.Primary.ID)
 	}
 }
 

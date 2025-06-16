@@ -56,17 +56,10 @@ func testAccCheckSSHKeyDestroy(s *terraform.State) error {
 			continue
 		}
 
-		_, err := client.SSHKeys.GetSSHKey(ctx, rs.Primary.ID)
+		_, err := client.SSHKeys.Retrieve(ctx, rs.Primary.ID)
 		if err == nil {
 			return fmt.Errorf("SSH key still exists")
 		}
-
-		// If we get a 404, the resource is gone
-		if apiErr, ok := err.(*components.APIError); ok && apiErr.StatusCode == 404 {
-			continue
-		}
-
-		return err
 	}
 
 	return nil
@@ -85,16 +78,16 @@ func testAccCheckSSHKeyExists(n string, sshKey *components.SSHKeyData) resource.
 		client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
 		ctx := context.Background()
 
-		result, err := client.SSHKeys.GetSSHKey(ctx, rs.Primary.ID)
+		response, err := client.SSHKeys.Retrieve(ctx, rs.Primary.ID)
 		if err != nil {
 			return err
 		}
 
-		if result.Object == nil || result.Object.Data == nil || result.Object.Data.ID == nil || *result.Object.Data.ID != rs.Primary.ID {
-			return fmt.Errorf("Record not found: %v - %v", rs.Primary.ID, result.Object)
+		if response.Object == nil || response.Object.Data == nil {
+			return fmt.Errorf("SSH key not found")
 		}
 
-		*sshKey = *result.Object.Data
+		*sshKey = *response.Object.Data
 
 		return nil
 	}

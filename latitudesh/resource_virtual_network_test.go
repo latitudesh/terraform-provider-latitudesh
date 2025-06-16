@@ -52,12 +52,9 @@ func testAccCheckVirtualNetworkDestroy(s *terraform.State) error {
 			continue
 		}
 
-		// Try to get the virtual network
-		_, err := client.PrivateNetworks.GetVirtualNetwork(ctx, rs.Primary.ID)
-
-		// If no error is returned, the resource still exists
+		_, err := client.PrivateNetworks.Get(ctx, rs.Primary.ID)
 		if err == nil {
-			return fmt.Errorf("Virtual network still exists")
+			return fmt.Errorf("virtual network still exists")
 		}
 	}
 
@@ -77,19 +74,19 @@ func testAccCheckVirtualNetworkExists(n string) resource.TestCheckFunc {
 		client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
 		ctx := context.Background()
 
-		// Try to get the virtual network
-		result, err := client.PrivateNetworks.GetVirtualNetwork(ctx, rs.Primary.ID)
+		response, err := client.PrivateNetworks.Get(ctx, rs.Primary.ID)
 		if err != nil {
 			return err
 		}
 
-		// Check if the returned virtual network has the expected ID
-		if result.Object != nil && result.Object.Data != nil && result.Object.Data.ID != nil {
-			if *result.Object.Data.ID != rs.Primary.ID {
-				return fmt.Errorf("Record not found: %v", rs.Primary.ID)
-			}
-		} else {
-			return fmt.Errorf("Invalid response or missing ID in the response")
+		if response.Object == nil || response.Object.Data == nil {
+			return fmt.Errorf("virtual network not found")
+		}
+
+		vnet := response.Object.Data
+
+		if *vnet.ID != rs.Primary.ID {
+			return fmt.Errorf("Record not found: %v", rs.Primary.ID)
 		}
 
 		return nil
@@ -99,9 +96,9 @@ func testAccCheckVirtualNetworkExists(n string) resource.TestCheckFunc {
 func testAccCheckVirtualNetworkBasic() string {
 	return fmt.Sprintf(`
 resource "latitudesh_virtual_network" "test_item" {
-	project  	= "%s"
-  	description = "%s"
-  	site        = "%s"
+	project     = "%s"
+	description = "%s"
+	site        = "%s"
 }
 `,
 		os.Getenv("LATITUDESH_TEST_PROJECT"),

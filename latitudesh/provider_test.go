@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"gopkg.in/dnaeon/go-vcr.v3/recorder"
 )
 
 // Backward compatibility: Create a SDK v2 provider for tests
@@ -39,23 +40,60 @@ func Provider() *schema.Provider {
 			)
 			return sdkClient, nil
 		},
-		ResourcesMap: map[string]*schema.Resource{
-			// Legacy SDK resources for compatibility testing
-			"latitudesh_ssh_key":             &schema.Resource{Schema: map[string]*schema.Schema{"id": {Type: schema.TypeString, Computed: true}, "name": {Type: schema.TypeString, Required: true}, "public_key": {Type: schema.TypeString, Required: true}, "tags": {Type: schema.TypeList, Elem: &schema.Schema{Type: schema.TypeString}, Optional: true}, "fingerprint": {Type: schema.TypeString, Computed: true}, "created_at": {Type: schema.TypeString, Computed: true}, "updated_at": {Type: schema.TypeString, Computed: true}}},
-			"latitudesh_user_data":           &schema.Resource{Schema: map[string]*schema.Schema{"id": {Type: schema.TypeString, Computed: true}, "description": {Type: schema.TypeString, Required: true}, "content": {Type: schema.TypeString, Required: true}, "created_at": {Type: schema.TypeString, Computed: true}, "updated_at": {Type: schema.TypeString, Computed: true}}},
-			"latitudesh_project":             &schema.Resource{Schema: map[string]*schema.Schema{"id": {Type: schema.TypeString, Computed: true}, "name": {Type: schema.TypeString, Required: true}, "description": {Type: schema.TypeString, Optional: true}, "environment": {Type: schema.TypeString, Optional: true}, "provisioning_type": {Type: schema.TypeString, Required: true}, "slug": {Type: schema.TypeString, Computed: true}}},
-			"latitudesh_server":              &schema.Resource{Schema: map[string]*schema.Schema{"id": {Type: schema.TypeString, Computed: true}, "project": {Type: schema.TypeString, Required: true}, "site": {Type: schema.TypeString, Required: true}, "plan": {Type: schema.TypeString, Required: true}, "operating_system": {Type: schema.TypeString, Required: true}, "hostname": {Type: schema.TypeString, Optional: true}, "ssh_keys": {Type: schema.TypeList, Elem: &schema.Schema{Type: schema.TypeString}, Optional: true}, "user_data": {Type: schema.TypeString, Optional: true}, "raid": {Type: schema.TypeString, Optional: true}, "ipxe": {Type: schema.TypeString, Optional: true}, "billing": {Type: schema.TypeString, Optional: true}, "tags": {Type: schema.TypeList, Elem: &schema.Schema{Type: schema.TypeString}, Optional: true}, "primary_ipv4": {Type: schema.TypeString, Computed: true}, "status": {Type: schema.TypeString, Computed: true}, "locked": {Type: schema.TypeBool, Computed: true}, "created_at": {Type: schema.TypeString, Computed: true}, "region": {Type: schema.TypeString, Computed: true}}},
-			"latitudesh_virtual_network":     &schema.Resource{Schema: map[string]*schema.Schema{"id": {Type: schema.TypeString, Computed: true}, "project": {Type: schema.TypeString, Required: true}, "site": {Type: schema.TypeString, Required: true}, "description": {Type: schema.TypeString, Optional: true}, "tags": {Type: schema.TypeList, Elem: &schema.Schema{Type: schema.TypeString}, Optional: true}, "vid": {Type: schema.TypeInt, Computed: true}, "name": {Type: schema.TypeString, Computed: true}, "region": {Type: schema.TypeString, Computed: true}, "assignments_count": {Type: schema.TypeInt, Computed: true}, "created_at": {Type: schema.TypeString, Computed: true}}},
-			"latitudesh_vlan_assignment":     &schema.Resource{Schema: map[string]*schema.Schema{"id": {Type: schema.TypeString, Computed: true}, "server_id": {Type: schema.TypeString, Required: true}, "virtual_network_id": {Type: schema.TypeString, Required: true}, "status": {Type: schema.TypeString, Computed: true}, "virtual_network_vid": {Type: schema.TypeInt, Computed: true}, "virtual_network_name": {Type: schema.TypeString, Computed: true}}},
-			"latitudesh_tag":                 &schema.Resource{Schema: map[string]*schema.Schema{"id": {Type: schema.TypeString, Computed: true}, "name": {Type: schema.TypeString, Required: true}, "description": {Type: schema.TypeString, Optional: true}, "color": {Type: schema.TypeString, Optional: true}}},
-			"latitudesh_member":              &schema.Resource{Schema: map[string]*schema.Schema{"id": {Type: schema.TypeString, Computed: true}, "first_name": {Type: schema.TypeString, Optional: true}, "last_name": {Type: schema.TypeString, Optional: true}, "email": {Type: schema.TypeString, Required: true}, "role": {Type: schema.TypeString, Required: true}, "mfa_enabled": {Type: schema.TypeBool, Computed: true}, "created_at": {Type: schema.TypeString, Computed: true}, "updated_at": {Type: schema.TypeString, Computed: true}, "last_login_at": {Type: schema.TypeString, Computed: true}}},
-			"latitudesh_firewall":            &schema.Resource{Schema: map[string]*schema.Schema{"id": {Type: schema.TypeString, Computed: true}, "name": {Type: schema.TypeString, Required: true}, "rules": {Type: schema.TypeList, Elem: &schema.Resource{Schema: map[string]*schema.Schema{"protocol": {Type: schema.TypeString, Required: true}, "port": {Type: schema.TypeString, Required: true}, "sources": {Type: schema.TypeList, Elem: &schema.Schema{Type: schema.TypeString}, Required: true}}}, Required: true}}},
-			"latitudesh_firewall_assignment": &schema.Resource{Schema: map[string]*schema.Schema{"id": {Type: schema.TypeString, Computed: true}, "firewall_id": {Type: schema.TypeString, Required: true}, "server_id": {Type: schema.TypeString, Required: true}}},
-		},
+		ResourcesMap: map[string]*schema.Resource{},
 		DataSourcesMap: map[string]*schema.Resource{
-			"latitudesh_plan":   &schema.Resource{Schema: map[string]*schema.Schema{"id": {Type: schema.TypeString, Optional: true}, "slug": {Type: schema.TypeString, Optional: true}, "name": {Type: schema.TypeString, Computed: true}, "features": {Type: schema.TypeList, Elem: &schema.Schema{Type: schema.TypeString}, Computed: true}, "cpu_type": {Type: schema.TypeString, Computed: true}, "cpu_cores": {Type: schema.TypeFloat, Computed: true}, "cpu_clock": {Type: schema.TypeFloat, Computed: true}, "cpu_count": {Type: schema.TypeFloat, Computed: true}, "memory": {Type: schema.TypeString, Computed: true}, "has_gpu": {Type: schema.TypeBool, Computed: true}, "gpu_type": {Type: schema.TypeString, Computed: true}, "gpu_count": {Type: schema.TypeFloat, Computed: true}}},
-			"latitudesh_region": &schema.Resource{Schema: map[string]*schema.Schema{"id": {Type: schema.TypeString, Optional: true}, "name": {Type: schema.TypeString, Optional: true}, "slug": {Type: schema.TypeString, Optional: true}, "country": {Type: schema.TypeString, Computed: true}, "location": {Type: schema.TypeString, Computed: true}}},
-			"latitudesh_role":   &schema.Resource{Schema: map[string]*schema.Schema{"id": {Type: schema.TypeString, Optional: true}, "name": {Type: schema.TypeString, Optional: true}}},
+			"latitudesh_plan": {
+				Schema: map[string]*schema.Schema{
+					"id": {
+						Type:     schema.TypeString,
+						Optional: true,
+					},
+					"slug": {
+						Type:     schema.TypeString,
+						Optional: true,
+					},
+					"name": {
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+				},
+			},
+			"latitudesh_region": {
+				Schema: map[string]*schema.Schema{
+					"id": {
+						Type:     schema.TypeString,
+						Optional: true,
+					},
+					"name": {
+						Type:     schema.TypeString,
+						Optional: true,
+					},
+					"slug": {
+						Type:     schema.TypeString,
+						Optional: true,
+					},
+					"country": {
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+					"location": {
+						Type:     schema.TypeString,
+						Computed: true,
+					},
+				},
+			},
+			"latitudesh_role": {
+				Schema: map[string]*schema.Schema{
+					"id": {
+						Type:     schema.TypeString,
+						Optional: true,
+					},
+					"name": {
+						Type:     schema.TypeString,
+						Optional: true,
+					},
+				},
+			},
 		},
 	}
 }
@@ -98,9 +136,22 @@ func TestFrameworkProvider(t *testing.T) {
 }
 
 // Helper function to get providers for Framework testing
-func GetTestProviders() map[string]func() (tfprotov6.ProviderServer, error) {
+func testAccProtoV6ProviderFactories() map[string]func() (tfprotov6.ProviderServer, error) {
 	return map[string]func() (tfprotov6.ProviderServer, error){
 		"latitudesh": providerserver.NewProtocol6WithError(New("dev")()),
+	}
+}
+
+// Helper function to get providers for Framework testing with VCR
+func testAccProtoV6ProviderFactoriesWithVCR(recorder *recorder.Recorder) map[string]func() (tfprotov6.ProviderServer, error) {
+	return map[string]func() (tfprotov6.ProviderServer, error){
+		"latitudesh": func() (tfprotov6.ProviderServer, error) {
+			// Create a provider instance with VCR-enabled client
+			provider := New("dev")()
+			// Configure the provider with VCR client
+			// This will be handled in the provider's Configure method
+			return providerserver.NewProtocol6(provider)(), nil
+		},
 	}
 }
 
