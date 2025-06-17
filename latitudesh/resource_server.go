@@ -275,7 +275,14 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 				return
 			}
 
-			err = r.updateServerTags(ctx, data.ID.ValueString(), tagIDs)
+			// Get current hostname to preserve it during tag update
+			var hostnamePtr *string
+			if !data.Hostname.IsNull() {
+				hostname := data.Hostname.ValueString()
+				hostnamePtr = &hostname
+			}
+
+			err = r.updateServerTags(ctx, data.ID.ValueString(), tagIDs, hostnamePtr)
 			if err != nil {
 				resp.Diagnostics.AddError("Tag Update Error", "Unable to update server with tags: "+err.Error())
 				return
@@ -343,8 +350,15 @@ func (r *ServerResource) Read(ctx context.Context, req resource.ReadRequest, res
 
 func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var data ServerResourceModel
+	var currentData ServerResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Get current state to preserve existing values
+	resp.Diagnostics.Append(req.State.Get(ctx, &currentData)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -352,17 +366,27 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 	serverID := data.ID.ValueString()
 	attrs := &operations.UpdateServerServersRequestApplicationJSONAttributes{}
 
+	// Always include hostname (from plan if set, otherwise from current state)
 	if !data.Hostname.IsNull() {
 		hostname := data.Hostname.ValueString()
 		attrs.Hostname = &hostname
+	} else if !currentData.Hostname.IsNull() {
+		hostname := currentData.Hostname.ValueString()
+		attrs.Hostname = &hostname
 	}
 
+	// Always include billing (from plan if set, otherwise from current state)
 	if !data.Billing.IsNull() {
 		billingValue := data.Billing.ValueString()
 		billing := operations.UpdateServerServersRequestApplicationJSONBilling(billingValue)
 		attrs.Billing = &billing
+	} else if !currentData.Billing.IsNull() {
+		billingValue := currentData.Billing.ValueString()
+		billing := operations.UpdateServerServersRequestApplicationJSONBilling(billingValue)
+		attrs.Billing = &billing
 	}
 
+	// Handle tags
 	if !data.Tags.IsNull() && !data.Tags.IsUnknown() {
 		var tagIDs []string
 		resp.Diagnostics.Append(data.Tags.ElementsAs(ctx, &tagIDs, false)...)
@@ -376,10 +400,21 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 			return
 		}
 		attrs.Tags = tagIDs
+	} else if !currentData.Tags.IsNull() && !currentData.Tags.IsUnknown() {
+		var tagIDs []string
+		resp.Diagnostics.Append(currentData.Tags.ElementsAs(ctx, &tagIDs, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		attrs.Tags = tagIDs
 	}
 
+	// Always include project (from plan if set, otherwise from current state)
 	if !data.Project.IsNull() {
 		project := data.Project.ValueString()
+		attrs.Project = &project
+	} else if !currentData.Project.IsNull() {
+		project := currentData.Project.ValueString()
 		attrs.Project = &project
 	}
 
@@ -563,9 +598,14 @@ func (r *ServerResource) validateTagIDs(ctx context.Context, tagIDs []string) er
 	return nil
 }
 
-func (r *ServerResource) updateServerTags(ctx context.Context, serverID string, tagIDs []string) error {
+func (r *ServerResource) updateServerTags(ctx context.Context, serverID string, tagIDs []string, hostname *string) error {
 	attrs := &operations.UpdateServerServersRequestApplicationJSONAttributes{
 		Tags: tagIDs,
+	}
+
+	// Preserve hostname if provided
+	if hostname != nil {
+		attrs.Hostname = hostname
 	}
 
 	updateType := operations.UpdateServerServersRequestApplicationJSONTypeServers

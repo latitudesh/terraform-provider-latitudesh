@@ -44,6 +44,53 @@ func TestAccServer_Basic(t *testing.T) {
 	})
 }
 
+func TestAccServer_Update(t *testing.T) {
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+
+	// Use Framework provider with VCR
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+			testAccProjectCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		CheckDestroy:             testAccCheckServerDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCheckServerUpdateInitial(),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckServerExists("latitudesh_server.test_item"),
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "hostname", "test-initial"),
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "billing", "hourly"),
+				),
+			},
+			{
+				Config: testAccCheckServerUpdateChanged(),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckServerExists("latitudesh_server.test_item"),
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "hostname", "test-initial"), // hostname should be preserved
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "billing", "monthly"), // billing should be updated
+				),
+			},
+			{
+				Config: testAccCheckServerUpdateHostname(),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckServerExists("latitudesh_server.test_item"),
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "hostname", "test-updated"), // hostname should be updated
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "billing", "monthly"), // billing should be preserved
+				),
+			},
+		},
+	})
+}
+
 func testAccCheckServerDestroy(s *terraform.State) error {
 	// Use the VCR client for destroy check
 	client := createVCRClient(nil) // We'll use environment variables for auth
@@ -135,6 +182,60 @@ resource "latitudesh_server" "test_item" {
 `,
 		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testServerHostname,
+		testServerPlan,
+		testServerSite,
+		testServerOperatingSystem,
+	)
+}
+
+func testAccCheckServerUpdateInitial() string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	project = "%s"
+  	hostname = "test-initial"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+	billing = "hourly"
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testServerPlan,
+		testServerSite,
+		testServerOperatingSystem,
+	)
+}
+
+func testAccCheckServerUpdateChanged() string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	project = "%s"
+  	hostname = "test-initial"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+	billing = "monthly"
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testServerPlan,
+		testServerSite,
+		testServerOperatingSystem,
+	)
+}
+
+func testAccCheckServerUpdateHostname() string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	project = "%s"
+  	hostname = "test-updated"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+	billing = "monthly"
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testServerPlan,
 		testServerSite,
 		testServerOperatingSystem,
