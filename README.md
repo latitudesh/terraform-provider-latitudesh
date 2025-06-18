@@ -12,7 +12,7 @@ Requirements for developing the provider
 ------------
 
 -	[Terraform](https://www.terraform.io/downloads.html) >= 1.3.x
--	[Go](https://golang.org/doc/install) >= 1.19.x (to build the provider plugin)
+-	[Go](https://golang.org/doc/install) >= 1.23.x (to build the provider plugin)
 
 Developing the provider locally
 ------------
