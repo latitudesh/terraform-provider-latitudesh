@@ -279,4 +279,4 @@ The team-scoped approach brings several advantages:
 
 **— The Latitude.sh Team**
 
-*Last updated: January 2025* 
+*Last updated: June 2025* 
