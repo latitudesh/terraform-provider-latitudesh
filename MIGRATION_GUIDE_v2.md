@@ -270,7 +270,7 @@ The team-scoped approach brings several advantages:
 ## Need help?
 
 - **Email**: [support@latitude.sh](mailto:support@latitude.sh) 
-- **Community**: [latitude.sh/community](https://latitude.sh/community)
+- **Community**: [Slack](https://slack.latitude.sh)
 - **GitHub Issues**: [Create an issue](https://github.com/latitudesh/terraform-provider-latitudesh/issues) with the `migration-v2` label
 
 ---
