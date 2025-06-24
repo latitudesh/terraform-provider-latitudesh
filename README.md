@@ -14,6 +14,12 @@ Requirements for developing the provider
 -	[Terraform](https://www.terraform.io/downloads.html) >= 1.3.x
 -	[Go](https://golang.org/doc/install) >= 1.23.x (to build the provider plugin)
 
+Migration Guide
+------------
+
+**Upgrading to v2?** Please read the [Migration Guide to v2](https://github.com/latitudesh/terraform-provider-latitudesh/blob/main/MIGRATION_GUIDE_v2.md) for details on breaking changes and how to safely upgrade.
+
+
 Developing the provider locally
 ------------
 
@@ -43,7 +49,14 @@ $ # Move the binary to the appropriate subdirectory within your user plugins dir
 After installing the provider locally, create a Terraform project and on `main.tf` replace source with:
 
 ```sh
-source  = "latitude.sh/iac/latitudesh"
+terraform {
+  required_providers {
+    latitudesh = {
+      source  = "latitude.sh/iac/latitudesh"
+      version = "2.0.0"
+    }
+  }
+}
 ```
 
 Create `variables.tf` and add your Latitude.sh token. Finally, initialize the project with `terraform init`
