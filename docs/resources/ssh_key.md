@@ -13,9 +13,8 @@ description: |-
 
 ```terraform
 resource "latitudesh_ssh_key" "ssh_key" {
-  project    = latitudesh_project.project.id
   name       = "John's Key"
-  public_key = var.ssh_public_key
+  public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5..."
 }
 ```
 
@@ -25,7 +24,7 @@ resource "latitudesh_ssh_key" "ssh_key" {
 ### Required
 
 - `name` (String) The SSH key name
-- `project` (String) The id or slug of the project
+- `project` (String, Deprecated) The id or slug of the project
 - `public_key` (String) The SSH public key
 
 ### Optional

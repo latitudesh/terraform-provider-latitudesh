@@ -12,7 +12,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	api "github.com/latitudesh/latitudesh-go"
+	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"gopkg.in/dnaeon/go-vcr.v3/cassette"
 	"gopkg.in/dnaeon/go-vcr.v3/recorder"
 )
@@ -82,14 +82,19 @@ func testProviderConfigure(rec *recorder.Recorder) func(ctx context.Context, d *
 		httpClient.Transport = rec
 
 		if authToken != "" {
-			c := api.NewClientWithAuth("latitudesh", authToken, &httpClient)
-			c.UserAgent = fmt.Sprintf("%s/%s", userAgentForProvider, currentVersion)
-
-			return c, diags
+			sdkClient := latitudeshgosdk.New(
+				latitudeshgosdk.WithSecurity(authToken),
+				latitudeshgosdk.WithClient(&httpClient),
+			)
+			return sdkClient, diags
 		}
-		c := api.NewClientWithAuth("latitudesh", " ", &httpClient)
 
-		return c, diags
+		sdkClient := latitudeshgosdk.New(
+			latitudeshgosdk.WithSecurity(""),
+			latitudeshgosdk.WithClient(&httpClient),
+		)
+
+		return sdkClient, diags
 	}
 }
 
@@ -100,4 +105,27 @@ func createTestRecorder(t *testing.T) (*recorder.Recorder, func()) {
 		t.Fatal(err)
 	}
 	return testRecorder(name, mode)
+}
+
+// createVCRClient creates a Latitude.sh SDK client with VCR recording/playback
+func createVCRClient(recorder *recorder.Recorder) *latitudeshgosdk.Latitudesh {
+	authToken := os.Getenv("LATITUDESH_AUTH_TOKEN")
+	if authToken == "" {
+		authToken = "test" // Use test token for VCR playback
+	}
+
+	if recorder != nil {
+		httpClient := *http.DefaultClient
+		httpClient.Transport = recorder
+
+		return latitudeshgosdk.New(
+			latitudeshgosdk.WithSecurity(authToken),
+			latitudeshgosdk.WithClient(&httpClient),
+		)
+	}
+
+	// Use default client when no recorder is provided
+	return latitudeshgosdk.New(
+		latitudeshgosdk.WithSecurity(authToken),
+	)
 }

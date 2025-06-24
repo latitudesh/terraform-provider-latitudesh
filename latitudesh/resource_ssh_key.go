@@ -3,177 +3,307 @@ package latitudesh
 import (
 	"context"
 	"net/http"
-	"time"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	api "github.com/latitudesh/latitudesh-go"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"github.com/latitudesh/latitudesh-go-sdk/models/components"
+	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
-func resourceSSHKey() *schema.Resource {
-	return &schema.Resource{
-		CreateContext: resourceSSHKeyCreate,
-		ReadContext:   resourceSSHKeyRead,
-		UpdateContext: resourceSSHKeyUpdate,
-		DeleteContext: resourceSSHKeyDelete,
-		Schema: map[string]*schema.Schema{
-			"project": {
-				Type:        schema.TypeString,
-				Description: "The id or slug of the project",
-				Required:    true,
-				ForceNew:    true,
-			},
-			"name": {
-				Type:        schema.TypeString,
-				Description: "The SSH key name",
-				Required:    true,
-			},
-			"public_key": {
-				Type:        schema.TypeString,
-				Description: "The SSH public key",
-				Required:    true,
-				ForceNew:    true,
-			},
-			"tags": {
-				Type: schema.TypeList,
-				Elem: &schema.Schema{
-					Type: schema.TypeString,
+// Ensure provider defined types fully satisfy framework interfaces.
+var _ resource.Resource = &SSHKeyResource{}
+var _ resource.ResourceWithImportState = &SSHKeyResource{}
+
+func NewSSHKeyResource() resource.Resource {
+	return &SSHKeyResource{}
+}
+
+// SSHKeyResource defines the resource implementation.
+type SSHKeyResource struct {
+	client *latitudeshgosdk.Latitudesh
+}
+
+// SSHKeyResourceModel describes the resource data model.
+type SSHKeyResourceModel struct {
+	ID          types.String `tfsdk:"id"`
+	Name        types.String `tfsdk:"name"`
+	PublicKey   types.String `tfsdk:"public_key"`
+	Tags        types.List   `tfsdk:"tags"`
+	Fingerprint types.String `tfsdk:"fingerprint"`
+	CreatedAt   types.String `tfsdk:"created_at"`
+	UpdatedAt   types.String `tfsdk:"updated_at"`
+}
+
+func (r *SSHKeyResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_ssh_key"
+}
+
+func (r *SSHKeyResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		MarkdownDescription: "SSH Key resource",
+
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				MarkdownDescription: "SSH key identifier",
+				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
-				Description: "List of SSH key tags",
-				Optional:    true,
 			},
-			"created": {
-				Type:        schema.TypeString,
-				Description: "The timestamp for when the SSH key was created",
-				Computed:    true,
+			"name": schema.StringAttribute{
+				MarkdownDescription: "The SSH key name",
+				Required:            true,
 			},
-			"updated": {
-				Type:        schema.TypeString,
-				Description: "The timestamp for the last time the SSH key was updated",
-				Computed:    true,
+			"public_key": schema.StringAttribute{
+				MarkdownDescription: "The SSH public key",
+				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
-		},
-		Importer: &schema.ResourceImporter{
-			StateContext: NestedResourceRestAPIImport,
+			"tags": schema.ListAttribute{
+				MarkdownDescription: "List of SSH key tags",
+				ElementType:         types.StringType,
+				Optional:            true,
+			},
+			"fingerprint": schema.StringAttribute{
+				MarkdownDescription: "The SSH key fingerprint",
+				Computed:            true,
+			},
+			"created_at": schema.StringAttribute{
+				MarkdownDescription: "The timestamp for when the SSH key was created",
+				Computed:            true,
+			},
+			"updated_at": schema.StringAttribute{
+				MarkdownDescription: "The timestamp for the last time the SSH key was updated",
+				Computed:            true,
+			},
 		},
 	}
 }
 
-func resourceSSHKeyCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	var diags diag.Diagnostics
-	c := m.(*api.Client)
+func (r *SSHKeyResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	// Prevent panic if the provider has not been configured.
+	if req.ProviderData == nil {
+		return
+	}
 
-	createRequest := &api.SSHKeyCreateRequest{
-		Data: api.SSHKeyCreateData{
-			Type: "ssh_keys",
-			Attributes: api.SSHKeyCreateAttributes{
-				Name:      d.Get("name").(string),
-				PublicKey: d.Get("public_key").(string),
+	client, ok := req.ProviderData.(*latitudeshgosdk.Latitudesh)
+
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			"Expected *latitudeshgosdk.Latitudesh, got: %T. Please report this issue to the provider developers.",
+		)
+
+		return
+	}
+
+	r.client = client
+}
+
+func (r *SSHKeyResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data SSHKeyResourceModel
+
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	name := data.Name.ValueString()
+	publicKey := data.PublicKey.ValueString()
+
+	createRequest := operations.PostSSHKeySSHKeysRequestBody{
+		Data: operations.PostSSHKeySSHKeysData{
+			Type: operations.PostSSHKeySSHKeysTypeSSHKeys,
+			Attributes: &operations.PostSSHKeySSHKeysAttributes{
+				Name:      &name,
+				PublicKey: &publicKey,
 			},
 		},
 	}
 
-	key, _, err := c.SSHKeys.Create(d.Get("project").(string), createRequest)
+	result, err := r.client.SSHKeys.Create(ctx, createRequest)
 	if err != nil {
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError("Client Error", "Unable to create SSH key, got error: "+err.Error())
+		return
 	}
 
-	d.SetId(key.ID)
-
-	if d.Get("tags") != nil {
-		resourceSSHKeyUpdate(ctx, d, m)
-	}
-	if err := d.Set("name", &key.Name); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("public_key", &key.PublicKey); err != nil {
-		return diag.FromErr(err)
-	}
-	if d.Get("tags") != nil {
-		resourceSSHKeyUpdate(ctx, d, m)
+	if result.Object == nil || result.Object.Data == nil || result.Object.Data.ID == nil {
+		resp.Diagnostics.AddError("API Error", "Failed to get SSH key ID from response")
+		return
 	}
 
-	return diags
+	data.ID = types.StringValue(*result.Object.Data.ID)
+
+	// Update tags if provided
+	if !data.Tags.IsNull() && !data.Tags.IsUnknown() {
+		r.updateSSHKey(ctx, &data, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
+	// Read the resource to populate computed attributes
+	r.readSSHKey(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Save data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func resourceSSHKeyRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*api.Client)
+func (r *SSHKeyResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data SSHKeyResourceModel
 
-	var diags diag.Diagnostics
+	// Read Terraform prior state data into the model
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 
-	keyID := d.Id()
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	key, resp, err := c.SSHKeys.Get(keyID, d.Get("project").(string), nil)
+	r.readSSHKey(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Save updated data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *SSHKeyResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data SSHKeyResourceModel
+
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	r.updateSSHKey(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Read the resource to populate computed attributes
+	r.readSSHKey(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Save updated data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *SSHKeyResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data SSHKeyResourceModel
+
+	// Read Terraform prior state data into the model
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	keyID := data.ID.ValueString()
+
+	_, err := r.client.SSHKeys.Delete(ctx, keyID)
 	if err != nil {
-		if resp.StatusCode == http.StatusNotFound {
-			d.SetId("")
-			return diags
+		resp.Diagnostics.AddError("Client Error", "Unable to delete SSH key, got error: "+err.Error())
+		return
+	}
+}
+
+func (r *SSHKeyResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	var data SSHKeyResourceModel
+	data.ID = types.StringValue(req.ID)
+
+	r.readSSHKey(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *SSHKeyResource) readSSHKey(ctx context.Context, data *SSHKeyResourceModel, diags *diag.Diagnostics) {
+	keyID := data.ID.ValueString()
+
+	result, err := r.client.SSHKeys.Retrieve(ctx, keyID)
+	if err != nil {
+		// Check if the SSH key was deleted
+		if apiErr, ok := err.(*components.APIError); ok && apiErr.StatusCode == http.StatusNotFound {
+			data.ID = types.StringNull()
+			return
+		}
+		diags.AddError("Client Error", "Unable to read SSH key, got error: "+err.Error())
+		return
+	}
+
+	if result.Object == nil || result.Object.Data == nil {
+		data.ID = types.StringNull()
+		return
+	}
+
+	sshKey := result.Object.Data
+	if sshKey.Attributes != nil {
+		if sshKey.Attributes.Name != nil {
+			data.Name = types.StringValue(*sshKey.Attributes.Name)
 		}
 
-		return diag.FromErr(err)
-	}
+		if sshKey.Attributes.PublicKey != nil {
+			data.PublicKey = types.StringValue(*sshKey.Attributes.PublicKey)
+		}
 
-	if err := d.Set("name", &key.Name); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("public_key", &key.PublicKey); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("tags", tagIDs(key.Tags)); err != nil {
-		return diag.FromErr(err)
-	}
+		if sshKey.Attributes.Fingerprint != nil {
+			data.Fingerprint = types.StringValue(*sshKey.Attributes.Fingerprint)
+		}
 
-	return diags
+		if sshKey.Attributes.CreatedAt != nil {
+			data.CreatedAt = types.StringValue(*sshKey.Attributes.CreatedAt)
+		}
+
+		if sshKey.Attributes.UpdatedAt != nil {
+			data.UpdatedAt = types.StringValue(*sshKey.Attributes.UpdatedAt)
+		}
+	}
 }
 
-func resourceSSHKeyUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*api.Client)
-	var diags diag.Diagnostics
+func (r *SSHKeyResource) updateSSHKey(ctx context.Context, data *SSHKeyResourceModel, diags *diag.Diagnostics) {
+	keyID := data.ID.ValueString()
+	name := data.Name.ValueString()
 
-	keyID := d.Id()
-	tags := parseTags(d)
+	var tags []string
+	if !data.Tags.IsNull() && !data.Tags.IsUnknown() {
+		for _, tag := range data.Tags.Elements() {
+			tags = append(tags, tag.(types.String).ValueString())
+		}
+	}
 
-	updateRequest := &api.SSHKeyUpdateRequest{
-		Data: api.SSHKeyUpdateData{
-			Type: "ssh_keys",
-			ID:   keyID,
-			Attributes: api.SSHKeyUpdateAttributes{
-				Name: d.Get("name").(string),
+	updateRequest := operations.PutSSHKeySSHKeysRequestBody{
+		Data: operations.PutSSHKeySSHKeysData{
+			ID:   &keyID,
+			Type: operations.PutSSHKeySSHKeysTypeSSHKeys,
+			Attributes: &operations.PutSSHKeySSHKeysAttributes{
+				Name: &name,
 				Tags: tags,
 			},
 		},
 	}
 
-	key, _, err := c.SSHKeys.Update(keyID, d.Get("project").(string), updateRequest)
+	_, err := r.client.SSHKeys.Update(ctx, keyID, updateRequest)
 	if err != nil {
-		return diag.FromErr(err)
+		diags.AddError("Client Error", "Unable to update SSH key, got error: "+err.Error())
+		return
 	}
-
-	d.Set("updated", time.Now().Format(time.RFC850))
-
-	if err := d.Set("name", &key.Name); err != nil {
-		return diag.FromErr(err)
-	}
-	if err := d.Set("tags", tagIDs(key.Tags)); err != nil {
-		return diag.FromErr(err)
-	}
-
-	return diags
-}
-
-func resourceSSHKeyDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*api.Client)
-
-	var diags diag.Diagnostics
-
-	keyID := d.Id()
-
-	_, err := c.SSHKeys.Delete(keyID, d.Get("project").(string))
-	if err != nil {
-		return diag.FromErr(err)
-	}
-
-	d.SetId("")
-
-	return diags
 }

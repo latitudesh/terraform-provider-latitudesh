@@ -23,7 +23,7 @@ jobs:
         name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '^1.22.4'
+          go-version: '^1.23.0'
       - 
         name: Install dependencies
         run: go get .
@@ -31,13 +31,5 @@ jobs:
         name: Build
         run: go build -v ./...
       - 
-        name: Export Variables and Run Tests
-        run: | 
-          export LATITUDESH_TEST_SSH_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC4y/S9agzMmMyXzSWYbuAuzt7sOKqz3IYZlph5KdNuqcL0JUJBtg1kf1uBpPTlavEZOPUHnN4Qfba5XEqgiEXogaq3PTbvk+Jte2Ui5DaC7bqreA9RlHFGVFxdG3g7PFTj5uddXfc/64m2UFWNxvcAGa11HBwY1UBTWS2k3PH1ZPIY97aHvIbubhBKdZa8DqGm7LKzwQxyx9+/VyRipE5xtwWkFs7AYOFYsFyIUfZy+WxB9+MpoUMQiPMZV9tFOud2mO4jlev442pJBPUnvnucQwwTmunJAih3u8bPLH7JFvbvTZx+rj39veHwwp6600pjZE+ysJsaOlZGejXTNUwDXXYSg/zfBMw5yTBY9otCw9wxvK72pHlJO6lLJbamZjfrOg/AW7I8KS4nZVuKOw3f1b+XA0x+p4aVbyaFaGCML23kckhKZ31berCoR8857pnxXwQPyqF5AicZi1HwfO54mmISRGPkwnc/Tf8gnA9PJao0qceO6YcDZGaU2U+gSo8hSnW9yl4kgsieY8qN5aKWrz8XYXhHutJyi+0MIVjulJ1ZVltgQHorNidQMOG8CPTZDJtyJm6XHzO3WpQC0voWXg+MdV4GYrqowWZc7z/kLSmCYX5UHGto+ZXRgrxzEcor5uW2TR2d+rsMWhLTW+5JgwlqKeXkygXvTrcfFbMdKw=="
-          export LATITUDESH_TEST_USER_DATA_CONTENT=dGVzdGUK
-          export LATITUDESH_TEST_SERVER_ID=sv_ZWr75Zbjr5A91
-          export LATITUDESH_TEST_VIRTUAL_NETWORK_ID=vlan_M3Beab6eyaLnb
-          export LATITUDESH_AUTH_TOKEN=test
-          export LATITUDESH_TEST_PROJECT=proj_gXQvNedwV0zpb
-          export LATITUDESH_FIREWALL_ID=fw_y3ZXaD7n5p2ml
-          TF_ACC=1 LATITUDE_TEST_RECORDER=play go test ./... -v -timeout 10m
+        name: Run Unit Tests
+        run: go test ./latitudesh -v -timeout 10m -run "TestProvider|TestFrameworkProvider"

@@ -1,13 +1,14 @@
 package latitudesh
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
-	api "github.com/latitudesh/latitudesh-go"
+	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 )
 
 const (
@@ -16,8 +17,6 @@ const (
 )
 
 func TestAccVirtualNetwork_Basic(t *testing.T) {
-	var VirtualNetwork api.VirtualNetwork
-
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
 	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
@@ -33,7 +32,7 @@ func TestAccVirtualNetwork_Basic(t *testing.T) {
 			{
 				Config: testAccCheckVirtualNetworkBasic(),
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckVirtualNetworkExists("latitudesh_virtual_network.test_item", &VirtualNetwork),
+					testAccCheckVirtualNetworkExists("latitudesh_virtual_network.test_item"),
 					resource.TestCheckResourceAttr(
 						"latitudesh_virtual_network.test_item", "description", testVirtualNetworkDescription),
 					resource.TestCheckResourceAttr(
@@ -45,21 +44,24 @@ func TestAccVirtualNetwork_Basic(t *testing.T) {
 }
 
 func testAccCheckVirtualNetworkDestroy(s *terraform.State) error {
-	client := testAccProvider.Meta().(*api.Client)
+	client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+	ctx := context.Background()
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "latitudesh_virtual_network" {
 			continue
 		}
-		if _, _, err := client.VirtualNetworks.Get(rs.Primary.ID, nil); err == nil {
-			return fmt.Errorf("Virtual network still exists")
+
+		_, err := client.PrivateNetworks.Get(ctx, rs.Primary.ID)
+		if err == nil {
+			return fmt.Errorf("virtual network still exists")
 		}
 	}
 
 	return nil
 }
 
-func testAccCheckVirtualNetworkExists(n string, virtualNetwork *api.VirtualNetwork) resource.TestCheckFunc {
+func testAccCheckVirtualNetworkExists(n string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[n]
 		if !ok {
@@ -69,18 +71,23 @@ func testAccCheckVirtualNetworkExists(n string, virtualNetwork *api.VirtualNetwo
 			return fmt.Errorf("No Record ID is set")
 		}
 
-		client := testAccProvider.Meta().(*api.Client)
+		client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+		ctx := context.Background()
 
-		foundVirtualNetwork, _, err := client.VirtualNetworks.Get(rs.Primary.ID, nil)
+		response, err := client.PrivateNetworks.Get(ctx, rs.Primary.ID)
 		if err != nil {
 			return err
 		}
 
-		if foundVirtualNetwork.ID != rs.Primary.ID {
-			return fmt.Errorf("Record not found: %v - %v", rs.Primary.ID, foundVirtualNetwork)
+		if response.Object == nil || response.Object.Data == nil {
+			return fmt.Errorf("virtual network not found")
 		}
 
-		*virtualNetwork = *foundVirtualNetwork
+		vnet := response.Object.Data
+
+		if *vnet.ID != rs.Primary.ID {
+			return fmt.Errorf("Record not found: %v", rs.Primary.ID)
+		}
 
 		return nil
 	}
@@ -89,9 +96,9 @@ func testAccCheckVirtualNetworkExists(n string, virtualNetwork *api.VirtualNetwo
 func testAccCheckVirtualNetworkBasic() string {
 	return fmt.Sprintf(`
 resource "latitudesh_virtual_network" "test_item" {
-	project  	= "%s"
-  	description = "%s"
-  	site        = "%s"
+	project     = "%s"
+	description = "%s"
+	site        = "%s"
 }
 `,
 		os.Getenv("LATITUDESH_TEST_PROJECT"),

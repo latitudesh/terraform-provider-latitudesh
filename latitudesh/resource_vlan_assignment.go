@@ -2,226 +2,383 @@ package latitudesh
 
 import (
 	"context"
+	"fmt"
+	"time"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-
-	api "github.com/latitudesh/latitudesh-go"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"github.com/latitudesh/latitudesh-go-sdk/models/components"
+	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
-func resourceVlanAssignment() *schema.Resource {
-	return &schema.Resource{
-		CreateContext: resourceVlanAssignmentCreate,
-		ReadContext:   resourceVlanAssignmentRead,
-		DeleteContext: resourceVlanAssignmentDelete,
-		Schema: map[string]*schema.Schema{
-			"virtual_network_id": {
-				Type:        schema.TypeString,
-				Description: "The virtual network ID",
-				Required:    true,
-				ForceNew:    true,
+var _ resource.Resource = &VlanAssignmentResource{}
+var _ resource.ResourceWithImportState = &VlanAssignmentResource{}
+
+func NewVlanAssignmentResource() resource.Resource {
+	return &VlanAssignmentResource{}
+}
+
+type VlanAssignmentResource struct {
+	client *latitudeshgosdk.Latitudesh
+}
+
+type VlanAssignmentResourceModel struct {
+	ID               types.String `tfsdk:"id"`
+	ServerID         types.String `tfsdk:"server_id"`
+	VirtualNetworkID types.String `tfsdk:"virtual_network_id"`
+	Vid              types.Int64  `tfsdk:"vid"`
+	Description      types.String `tfsdk:"description"`
+	Status           types.String `tfsdk:"status"`
+}
+
+func (r *VlanAssignmentResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_vlan_assignment"
+}
+
+func (r *VlanAssignmentResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		MarkdownDescription: "VLAN Assignment resource",
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				MarkdownDescription: "VLAN Assignment identifier",
+				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
-			"vid": {
-				Type:        schema.TypeInt,
-				Description: "The vlan ID of the virtual network",
-				Computed:    true,
+			"server_id": schema.StringAttribute{
+				MarkdownDescription: "The server ID to assign to the virtual network",
+				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
-			"description": {
-				Type:        schema.TypeString,
-				Description: "The Virtual Network description",
-				Computed:    true,
+			"virtual_network_id": schema.StringAttribute{
+				MarkdownDescription: "The virtual network ID to assign the server to",
+				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
-			"status": {
-				Type:        schema.TypeString,
-				Description: "The assignment status",
-				Computed:    true,
+			// Computed attributes
+			"vid": schema.Int64Attribute{
+				MarkdownDescription: "VLAN ID of the virtual network",
+				Computed:            true,
 			},
-			"server_id": {
-				Type:        schema.TypeString,
-				Description: "The assignment server ID",
-				Required:    true,
-				ForceNew:    true,
+			"description": schema.StringAttribute{
+				MarkdownDescription: "Description of the virtual network",
+				Computed:            true,
 			},
-			"server_hostname": {
-				Type:        schema.TypeString,
-				Description: "The assignment server hostname",
-				Computed:    true,
+			"status": schema.StringAttribute{
+				MarkdownDescription: "Status of the assignment",
+				Computed:            true,
 			},
-			"server_label": {
-				Type:        schema.TypeString,
-				Description: "The assignment server label",
-				Computed:    true,
-			},
-		},
-		Importer: &schema.ResourceImporter{
-			StateContext: schema.ImportStatePassthroughContext,
 		},
 	}
 }
 
-func resourceVlanAssignmentCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	var diags diag.Diagnostics
-	c := m.(*api.Client)
-
-	serverID := d.Get("server_id").(string)
-	virtualNetworkID := d.Get("virtual_network_id").(string)
-
-	existingAssignment, found, err := findExistingVlanAssignment(c, serverID, virtualNetworkID)
-	if err != nil {
-		return diag.FromErr(err)
+func (r *VlanAssignmentResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
 	}
 
-	if found {
-		d.SetId(existingAssignment.ID)
-
-		if err := d.Set("vid", existingAssignment.Vid); err != nil {
-			return diag.FromErr(err)
-		}
-
-		if err := d.Set("description", existingAssignment.Description); err != nil {
-			return diag.FromErr(err)
-		}
-
-		if err := d.Set("status", existingAssignment.Status); err != nil {
-			return diag.FromErr(err)
-		}
-
-		if err := d.Set("server_hostname", existingAssignment.ServerHostname); err != nil {
-			return diag.FromErr(err)
-		}
-
-		if err := d.Set("server_label", existingAssignment.ServerLabel); err != nil {
-			return diag.FromErr(err)
-		}
-
-		return diags
+	client, ok := req.ProviderData.(*latitudeshgosdk.Latitudesh)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			"Expected *latitudeshgosdk.Latitudesh, got: %T. Please report this issue to the provider developers.",
+		)
+		return
 	}
 
-	assignRequest := &api.VlanAssignRequest{
-		Data: api.VlanAssignData{
-			Type: "virtual_network_assignment",
-			Attributes: api.VlanAssignAttributes{
-				ServerID:         serverID,
-				VirtualNetworkID: virtualNetworkID,
-			},
+	r.client = client
+}
+
+func (r *VlanAssignmentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data VlanAssignmentResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	serverID := data.ServerID.ValueString()
+	vnetID := data.VirtualNetworkID.ValueString()
+
+	// Create the assignment request
+	attrs := &operations.AssignServerVirtualNetworkPrivateNetworksAttributes{
+		ServerID:         serverID,
+		VirtualNetworkID: vnetID,
+	}
+
+	createRequest := operations.AssignServerVirtualNetworkPrivateNetworksRequestBody{
+		Data: &operations.AssignServerVirtualNetworkPrivateNetworksData{
+			Type:       operations.AssignServerVirtualNetworkPrivateNetworksTypeVirtualNetworkAssignment,
+			Attributes: attrs,
 		},
 	}
 
-	vlanAssignment, _, err := c.VlanAssignments.Assign(assignRequest)
+	result, err := r.client.PrivateNetworks.Assign(ctx, createRequest)
 	if err != nil {
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError("Client Error", "Unable to create virtual network assignment, got error: "+err.Error())
+		return
 	}
 
-	d.SetId(vlanAssignment.ID)
-
-	if err := d.Set("vid", vlanAssignment.Vid); err != nil {
-		return diag.FromErr(err)
-	}
-
-	if err := d.Set("description", vlanAssignment.Description); err != nil {
-		return diag.FromErr(err)
-	}
-
-	if err := d.Set("status", vlanAssignment.Status); err != nil {
-		return diag.FromErr(err)
-	}
-
-	if err := d.Set("server_hostname", vlanAssignment.ServerHostname); err != nil {
-		return diag.FromErr(err)
-	}
-
-	if err := d.Set("server_label", vlanAssignment.ServerLabel); err != nil {
-		return diag.FromErr(err)
-	}
-
-	return diags
-}
-
-func findExistingVlanAssignment(c *api.Client, serverID, virtualNetworkID string) (*api.VlanAssignment, bool, error) {
-	assignments, _, err := c.VlanAssignments.List(nil)
-	if err != nil {
-		return nil, false, err
-	}
-
-	for _, assignment := range assignments {
-		if assignment.ServerID == serverID && assignment.VirtualNetworkID == virtualNetworkID {
-			return &assignment, true, nil
+	// Check for successful status codes
+	if result != nil {
+		httpStatus := result.HTTPMeta.Response.StatusCode
+		if httpStatus != 200 && httpStatus != 201 {
+			resp.Diagnostics.AddError("API Error", fmt.Sprintf("Create virtual network assignment returned unexpected status code: %d", httpStatus))
+			return
 		}
 	}
 
-	return nil, false, nil
-}
+	// Try to get ID from response first
+	if result.VirtualNetworkAssignment != nil && result.VirtualNetworkAssignment.ID != nil {
+		data.ID = types.StringValue(*result.VirtualNetworkAssignment.ID)
+	} else {
+		// If we can't get ID from response, use List endpoint to find it
+		resp.Diagnostics.AddWarning("Assignment ID Not in Response", "Virtual network assignment was created but ID not returned in response. Using List endpoint to find it.")
 
-func resourceVlanAssignmentRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*api.Client)
-	var diags diag.Diagnostics
-	vlanAssignmentID := d.Id()
+		// Wait a moment for the assignment to be processed
+		time.Sleep(2 * time.Second)
 
-	assignments, _, err := c.VlanAssignments.List(nil)
-	if err != nil {
-		return diag.FromErr(err)
+		// Use List endpoint to find the assignment we just created
+		r.findAssignmentByServerAndVNet(ctx, &data, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+
+		if data.ID.IsNull() || data.ID.ValueString() == "" {
+			resp.Diagnostics.AddError("API Error", "Virtual network assignment was created but could not determine its ID")
+			return
+		}
 	}
 
-	var found bool
-	var vlanAssignment api.VlanAssignment
+	// Read the resource to populate all attributes
+	r.readVlanAssignment(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	for _, assignment := range assignments {
-		if assignment.ID == vlanAssignmentID {
-			vlanAssignment = assignment
-			found = true
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *VlanAssignmentResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data VlanAssignmentResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	r.readVlanAssignment(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *VlanAssignmentResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	// VLAN assignments cannot be updated, they must be replaced
+	resp.Diagnostics.AddError("Update Not Supported", "VLAN assignments cannot be updated, they must be replaced.")
+}
+
+func (r *VlanAssignmentResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data VlanAssignmentResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	assignmentID := data.ID.ValueString()
+
+	_, err := r.client.PrivateNetworks.DeleteAssignment(ctx, assignmentID)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Unable to delete virtual network assignment, got error: "+err.Error())
+		return
+	}
+}
+
+func (r *VlanAssignmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	var data VlanAssignmentResourceModel
+	data.ID = types.StringValue(req.ID)
+
+	r.readVlanAssignment(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *VlanAssignmentResource) readVlanAssignment(ctx context.Context, data *VlanAssignmentResourceModel, diags *diag.Diagnostics) {
+	assignmentID := data.ID.ValueString()
+
+	// Get all virtual network assignments and find ours
+	response, err := r.client.PrivateNetworks.ListAssignments(ctx, operations.GetVirtualNetworksAssignmentsRequest{})
+	if err != nil {
+		diags.AddError("Client Error", "Unable to read virtual network assignments, got error: "+err.Error())
+		return
+	}
+
+	if response.VirtualNetworkAssignments == nil || response.VirtualNetworkAssignments.Data == nil {
+		data.ID = types.StringNull()
+		return
+	}
+
+	// Find our assignment
+	var assignment *components.VirtualNetworkAssignmentData
+	for _, a := range response.VirtualNetworkAssignments.Data {
+		if a.ID != nil && *a.ID == assignmentID {
+			assignment = &a
 			break
 		}
 	}
 
-	if !found {
-		d.SetId("")
-		return diags
+	if assignment == nil {
+		data.ID = types.StringNull()
+		return
 	}
 
-	if err := d.Set("virtual_network_id", vlanAssignment.VirtualNetworkID); err != nil {
-		return diag.FromErr(err)
-	}
+	if assignment.Attributes != nil {
+		attrs := assignment.Attributes
 
-	if err := d.Set("vid", vlanAssignment.Vid); err != nil {
-		return diag.FromErr(err)
-	}
+		// Set server ID from the appropriate field
+		if attrs.ServerID != nil {
+			data.ServerID = types.StringValue(*attrs.ServerID)
+		} else if attrs.Server != nil && attrs.Server.ID != nil {
+			data.ServerID = types.StringValue(*attrs.Server.ID)
+		}
 
-	if err := d.Set("status", vlanAssignment.Status); err != nil {
-		return diag.FromErr(err)
-	}
+		if attrs.VirtualNetworkID != nil {
+			data.VirtualNetworkID = types.StringValue(*attrs.VirtualNetworkID)
+		}
 
-	if err := d.Set("description", vlanAssignment.Description); err != nil {
-		return diag.FromErr(err)
-	}
+		if attrs.Vid != nil {
+			data.Vid = types.Int64Value(*attrs.Vid)
+		}
 
-	if err := d.Set("server_id", vlanAssignment.ServerID); err != nil {
-		return diag.FromErr(err)
-	}
+		if attrs.Description != nil {
+			data.Description = types.StringValue(*attrs.Description)
+		}
 
-	if err := d.Set("server_hostname", vlanAssignment.ServerHostname); err != nil {
-		return diag.FromErr(err)
+		if attrs.Status != nil {
+			data.Status = types.StringValue(*attrs.Status)
+		}
 	}
-
-	if err := d.Set("server_label", vlanAssignment.ServerLabel); err != nil {
-		return diag.FromErr(err)
-	}
-
-	return diags
 }
 
-func resourceVlanAssignmentDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	c := m.(*api.Client)
+func (r *VlanAssignmentResource) findAssignmentByServerAndVNet(ctx context.Context, data *VlanAssignmentResourceModel, diags *diag.Diagnostics) {
+	serverID := data.ServerID.ValueString()
+	vnetID := data.VirtualNetworkID.ValueString()
 
-	var diags diag.Diagnostics
-
-	VlanAssignmentID := d.Id()
-
-	_, err := c.VlanAssignments.Delete(VlanAssignmentID)
+	// Get all virtual network assignments and find ours
+	response, err := r.client.PrivateNetworks.ListAssignments(ctx, operations.GetVirtualNetworksAssignmentsRequest{})
 	if err != nil {
-		return diag.FromErr(err)
+		diags.AddError("Client Error", "Unable to read virtual network assignments, got error: "+err.Error())
+		return
 	}
 
-	d.SetId("")
+	if response.VirtualNetworkAssignments == nil || response.VirtualNetworkAssignments.Data == nil {
+		diags.AddError("API Error", "No virtual network assignments found in response")
+		return
+	}
 
-	return diags
+	// Find our assignment
+	var assignment *components.VirtualNetworkAssignmentData
+	for _, a := range response.VirtualNetworkAssignments.Data {
+		if a.Attributes != nil {
+			attrs := a.Attributes
+
+			// Check virtual network ID first
+			if attrs.VirtualNetworkID != nil && *attrs.VirtualNetworkID == vnetID {
+				// Check server ID - try both ServerID field and nested Server.ID
+				var assignmentServerID string
+				if attrs.ServerID != nil {
+					assignmentServerID = *attrs.ServerID
+				} else if attrs.Server != nil && attrs.Server.ID != nil {
+					assignmentServerID = *attrs.Server.ID
+				}
+
+				if assignmentServerID == serverID {
+					assignment = &a
+					break
+				}
+			}
+		}
+	}
+
+	if assignment == nil {
+		// Add more detailed debugging information
+		var foundAssignments []string
+		for _, a := range response.VirtualNetworkAssignments.Data {
+			if a.Attributes != nil && a.ID != nil {
+				attrs := a.Attributes
+				serverIDStr := "nil"
+				vnetIDStr := "nil"
+
+				// Try to get server ID from both possible locations
+				if attrs.ServerID != nil {
+					serverIDStr = *attrs.ServerID
+				} else if attrs.Server != nil && attrs.Server.ID != nil {
+					serverIDStr = *attrs.Server.ID
+				}
+
+				if attrs.VirtualNetworkID != nil {
+					vnetIDStr = *attrs.VirtualNetworkID
+				}
+				foundAssignments = append(foundAssignments, fmt.Sprintf("ID: %s, Server: %s, VNet: %s", *a.ID, serverIDStr, vnetIDStr))
+			}
+		}
+
+		errorMsg := fmt.Sprintf("Could not find virtual network assignment for server '%s' and virtual network '%s'", serverID, vnetID)
+		if len(foundAssignments) > 0 {
+			errorMsg += fmt.Sprintf(". Found assignments: %v", foundAssignments)
+		} else {
+			errorMsg += ". No assignments found in response."
+		}
+
+		diags.AddError("API Error", errorMsg)
+		return
+	}
+
+	// Set the ID
+	if assignment.ID != nil {
+		data.ID = types.StringValue(*assignment.ID)
+	}
+
+	if assignment.Attributes != nil {
+		attrs := assignment.Attributes
+
+		// Set server ID from the appropriate field
+		if attrs.ServerID != nil {
+			data.ServerID = types.StringValue(*attrs.ServerID)
+		} else if attrs.Server != nil && attrs.Server.ID != nil {
+			data.ServerID = types.StringValue(*attrs.Server.ID)
+		}
+
+		if attrs.VirtualNetworkID != nil {
+			data.VirtualNetworkID = types.StringValue(*attrs.VirtualNetworkID)
+		}
+
+		if attrs.Vid != nil {
+			data.Vid = types.Int64Value(*attrs.Vid)
+		}
+
+		if attrs.Description != nil {
+			data.Description = types.StringValue(*attrs.Description)
+		}
+
+		if attrs.Status != nil {
+			data.Status = types.StringValue(*attrs.Status)
+		}
+	}
 }

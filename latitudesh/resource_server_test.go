@@ -1,15 +1,13 @@
 package latitudesh
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"strconv"
 	"testing"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
-	api "github.com/latitudesh/latitudesh-go"
 )
 
 const (
@@ -22,24 +20,22 @@ const (
 )
 
 func TestAccServer_Basic(t *testing.T) {
-	var server api.Server
-
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
-	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
 
+	// Use Framework provider with VCR
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)
 			testAccProjectCheck(t)
 		},
-		Providers:    testAccProviders,
-		CheckDestroy: testAccCheckServerDestroy,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		CheckDestroy:             testAccCheckServerDestroy,
 		Steps: []resource.TestStep{
 			{
 				Config: testAccCheckServerBasic(),
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckServerExists("latitudesh_server.test_item", &server),
+					testAccCheckServerExists("latitudesh_server.test_item"),
 					resource.TestCheckResourceAttr(
 						"latitudesh_server.test_item", "hostname", "test"),
 				),
@@ -48,36 +44,73 @@ func TestAccServer_Basic(t *testing.T) {
 	})
 }
 
+func TestAccServer_Update(t *testing.T) {
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+
+	// Use Framework provider with VCR
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+			testAccProjectCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		CheckDestroy:             testAccCheckServerDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCheckServerUpdateInitial(),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckServerExists("latitudesh_server.test_item"),
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "hostname", "test-initial"),
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "billing", "hourly"),
+				),
+			},
+			{
+				Config: testAccCheckServerUpdateChanged(),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckServerExists("latitudesh_server.test_item"),
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "hostname", "test-initial"), // hostname should be preserved
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "billing", "monthly"), // billing should be updated
+				),
+			},
+			{
+				Config: testAccCheckServerUpdateHostname(),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckServerExists("latitudesh_server.test_item"),
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "hostname", "test-updated"), // hostname should be updated
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "billing", "monthly"), // billing should be preserved
+				),
+			},
+		},
+	})
+}
+
 func testAccCheckServerDestroy(s *terraform.State) error {
-	client := testAccProvider.Meta().(*api.Client)
+	// Use the VCR client for destroy check
+	client := createVCRClient(nil) // We'll use environment variables for auth
+	ctx := context.Background()
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "latitudesh_server" {
 			continue
 		}
 
-		// Check multiple times with delay to ensure server is truly gone
-		maxRetries := 10
-		retryDelay := 30 // seconds
-
-		for retries := 0; retries < maxRetries; retries++ {
-			_, resp, err := client.Servers.Get(rs.Primary.ID, nil)
-
-			// If we get an error and the response is a 404/410, the server is gone
-			if err != nil {
-				fmt.Printf("[INFO] Server %s confirmed deleted (HTTP %d)\n", rs.Primary.ID, resp.StatusCode)
-				break
-			}
-
-			// Wait before the next retry
-			time.Sleep(time.Duration(retryDelay) * time.Second)
+		_, err := client.Servers.Get(ctx, rs.Primary.ID, nil)
+		if err == nil {
+			return fmt.Errorf("server still exists")
 		}
 	}
 
 	return nil
 }
 
-func testAccCheckServerExists(n string, server *api.Server) resource.TestCheckFunc {
+func testAccCheckServerExists(n string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[n]
 		if !ok {
@@ -87,105 +120,53 @@ func testAccCheckServerExists(n string, server *api.Server) resource.TestCheckFu
 			return fmt.Errorf("No Record ID is set")
 		}
 
-		client := testAccProvider.Meta().(*api.Client)
+		// Use the VCR client for existence check
+		client := createVCRClient(nil) // We'll use environment variables for auth
+		ctx := context.Background()
 
-		// Variables to track consecutive successes
-		consecutiveSuccesses := 0
-		requiredConsecutiveSuccesses := 3
-		timeoutMinutes := 30
-		iterationSeconds := 30
-		maxIterations := (timeoutMinutes * 60) / iterationSeconds
-
-		// Get the expected attributes from the test config
-		expectedProject := os.Getenv("LATITUDESH_TEST_PROJECT")
-		expectedOS := testServerOperatingSystem
-
-		// Retry with more patience to match the implementation's retry logic
-		for attempt := 0; attempt < maxIterations; attempt++ {
-			foundServer, resp, err := client.Servers.Get(rs.Primary.ID, nil)
-
-			// Check for transient errors or deletion
-			if err != nil {
-				if resp != nil && (resp.StatusCode == 404 || resp.StatusCode == 410) {
-					return fmt.Errorf("Server %s was deleted during test (HTTP status: %d)",
-						rs.Primary.ID, resp.StatusCode)
-				}
-				// For other transient errors, log and retry
-				if attempt < maxIterations-1 {
-					fmt.Printf("[WARN] Error getting server %s (attempt %d/%d): %v - will retry\n",
-						rs.Primary.ID, attempt+1, maxIterations, err)
-					time.Sleep(time.Duration(iterationSeconds) * time.Second)
-					continue
-				}
-				return err
-			}
-
-			// Safety check for nil server
-			if foundServer == nil {
-				if attempt < maxIterations-1 {
-					fmt.Printf("[WARN] Server %s returned nil (attempt %d/%d) - will retry\n",
-						rs.Primary.ID, attempt+1, maxIterations)
-					time.Sleep(time.Duration(iterationSeconds) * time.Second)
-					continue
-				}
-				return fmt.Errorf("Server %s not found after %d attempts", rs.Primary.ID, attempt+1)
-			}
-
-			fmt.Printf("[INFO] Server %s status: %s (attempt %d/%d)\n",
-				rs.Primary.ID, foundServer.Status, attempt+1, maxIterations)
-
-			// Get project ID from server
-			var serverProjectID string
-			if foundServer.Project.ID != nil {
-				switch foundServer.Project.ID.(type) {
-				case string:
-					serverProjectID = foundServer.Project.ID.(string)
-				case float64:
-					serverProjectID = strconv.FormatFloat(foundServer.Project.ID.(float64), 'b', 2, 64)
-				}
-			}
-
-			// Get OS from server
-			var serverOS string
-			if foundServer.OperatingSystem.Slug != "" {
-				serverOS = foundServer.OperatingSystem.Slug
-			}
-
-			// Check if server meets all required conditions
-			if (foundServer.Status == "on" || foundServer.Status == "inventory") &&
-				serverProjectID == expectedProject &&
-				serverOS == expectedOS {
-
-				consecutiveSuccesses++
-				fmt.Printf("[INFO] Server %s conditions met (%d/%d): status=%s, project=%s, os=%s\n",
-					rs.Primary.ID, consecutiveSuccesses, requiredConsecutiveSuccesses,
-					foundServer.Status, serverProjectID, serverOS)
-
-				// For tests, we only need 2 consecutive successes
-				requiredConsecutiveSuccesses = 2
-
-				if consecutiveSuccesses >= requiredConsecutiveSuccesses {
-					// Only set the server once we've reached the required consecutive successes
-					*server = *foundServer
-					return nil
-				}
-			} else {
-				// Reset counter if conditions not met
-				if consecutiveSuccesses > 0 {
-					fmt.Printf("[WARN] Server %s conditions no longer met, resetting counter\n", rs.Primary.ID)
-					consecutiveSuccesses = 0
-				}
-
-				// Log what conditions weren't met
-				fmt.Printf("[INFO] Server %s conditions check: status=%s (expected=on or inventory), project=%s (expected=%s), os=%s (expected=%s)\n",
-					rs.Primary.ID, foundServer.Status, serverProjectID, expectedProject, serverOS, expectedOS)
-			}
-
-			time.Sleep(time.Duration(iterationSeconds) * time.Second)
+		response, err := client.Servers.Get(ctx, rs.Primary.ID, nil)
+		if err != nil {
+			return err
 		}
 
-		return fmt.Errorf("Timeout reached: Server %s did not reach required conditions after %d minutes",
-			rs.Primary.ID, timeoutMinutes)
+		if response.Server == nil || response.Server.Data == nil {
+			return fmt.Errorf("server not found")
+		}
+
+		server := response.Server.Data
+
+		// Get status from server
+		status := ""
+		if server.Attributes != nil && server.Attributes.Status != nil {
+			status = string(*server.Attributes.Status)
+		}
+
+		fmt.Printf("[INFO] Server %s status: %s\n", rs.Primary.ID, status)
+
+		// Get project ID from server
+		var serverProjectID string
+		if server.Attributes != nil && server.Attributes.Project != nil {
+			if server.Attributes.Project.ID != nil {
+				serverProjectID = *server.Attributes.Project.ID
+			} else if server.Attributes.Project.Slug != nil {
+				serverProjectID = *server.Attributes.Project.Slug
+			}
+		}
+
+		// Get OS from server
+		var serverOS string
+		if server.Attributes != nil && server.Attributes.OperatingSystem != nil && server.Attributes.OperatingSystem.Slug != nil {
+			serverOS = *server.Attributes.OperatingSystem.Slug
+		}
+
+		// Check if server meets all required conditions
+		if (status == "on" || status == "inventory") &&
+			serverProjectID == os.Getenv("LATITUDESH_TEST_PROJECT") &&
+			serverOS == testServerOperatingSystem {
+			return nil
+		}
+
+		return fmt.Errorf("Server %s does not meet the required conditions", rs.Primary.ID)
 	}
 }
 
@@ -201,6 +182,60 @@ resource "latitudesh_server" "test_item" {
 `,
 		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testServerHostname,
+		testServerPlan,
+		testServerSite,
+		testServerOperatingSystem,
+	)
+}
+
+func testAccCheckServerUpdateInitial() string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	project = "%s"
+  	hostname = "test-initial"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+	billing = "hourly"
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testServerPlan,
+		testServerSite,
+		testServerOperatingSystem,
+	)
+}
+
+func testAccCheckServerUpdateChanged() string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	project = "%s"
+  	hostname = "test-initial"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+	billing = "monthly"
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testServerPlan,
+		testServerSite,
+		testServerOperatingSystem,
+	)
+}
+
+func testAccCheckServerUpdateHostname() string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	project = "%s"
+  	hostname = "test-updated"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+	billing = "monthly"
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testServerPlan,
 		testServerSite,
 		testServerOperatingSystem,
