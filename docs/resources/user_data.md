@@ -12,10 +12,16 @@ description: |-
 ## Example usage
 
 ```terraform
-resource "latitudesh_user_data" "user_data" {
-    project = latitudesh_project.project.id
-    description = "Update apt packages"
-    content = "I2Nsb3VkLWNvbmZpZwoKYXB0OgoKcHJpbWFyeToKCXByaW1hcnk6CglyZXF1aXJlOiBbZGVmYXVsdF0KICB1cmk6IGh0dHA6Ly91cy5hcmNoaXZlLnVidW50dS5jb20vdWJ1bnR1Lwo="
+resource "latitudesh_user_data" "setup" {
+  description = "Server initialization script"
+  content     = base64encode(<<-EOF
+    #!/bin/bash
+    apt-get update
+    apt-get install -y docker.io
+    systemctl enable docker
+    systemctl start docker
+  EOF
+  )
 }
 ```
 
@@ -26,7 +32,7 @@ resource "latitudesh_user_data" "user_data" {
 
 - `content` (String) Base64 encoded content of the User Data
 - `description` (String) The User Data description
-- `project` (String) The id or slug of the project
+- `project` (String, Deprecated) The id or slug of the project
 
 ### Read-Only
 
