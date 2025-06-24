@@ -10,6 +10,9 @@ Use the navigation to the left to read about the available resources.
 
 All resources require authentication. API keys can be obtained from your Latitude.sh dashboard.
 
+**Upgrading to v2:** If you're upgrading from version 1.x to 2.x, please read the [migration guide](https://github.com/latitudesh/terraform-provider-latitudesh/blob/main/MIGRATION_GUIDE_v2.md).
+
+
 ## Example usage
 
 `main.tf` example
