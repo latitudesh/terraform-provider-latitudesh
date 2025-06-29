@@ -38,6 +38,10 @@ func TestAccServer_Basic(t *testing.T) {
 					testAccCheckServerExists("latitudesh_server.test_item"),
 					resource.TestCheckResourceAttr(
 						"latitudesh_server.test_item", "hostname", "test"),
+					resource.TestCheckResourceAttrSet(
+						"latitudesh_server.test_item", "primary_ipv4"),
+					resource.TestCheckResourceAttrSet(
+						"latitudesh_server.test_item", "primary_ipv6"),
 				),
 			},
 		},
@@ -85,6 +89,37 @@ func TestAccServer_Update(t *testing.T) {
 						"latitudesh_server.test_item", "hostname", "test-updated"), // hostname should be updated
 					resource.TestCheckResourceAttr(
 						"latitudesh_server.test_item", "billing", "monthly"), // billing should be preserved
+				),
+			},
+		},
+	})
+}
+
+func TestAccServer_IPv6Support(t *testing.T) {
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+
+	// Use Framework provider with VCR
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+			testAccProjectCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		CheckDestroy:             testAccCheckServerDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCheckServerBasic(),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckServerExists("latitudesh_server.test_item"),
+					// Verify that both IPv4 and IPv6 fields are present in the schema
+					resource.TestCheckResourceAttrSet(
+						"latitudesh_server.test_item", "primary_ipv4"),
+					resource.TestCheckResourceAttrSet(
+						"latitudesh_server.test_item", "primary_ipv6"),
+					// Verify the field names are correct
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "hostname", "test"),
 				),
 			},
 		},
