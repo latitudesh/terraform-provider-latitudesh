@@ -19,6 +19,28 @@ Migration Guide
 
 **Upgrading to v2?** Please read the [Migration Guide to v2](https://github.com/latitudesh/terraform-provider-latitudesh/blob/main/MIGRATION_GUIDE_v2.md) for details on breaking changes and how to safely upgrade.
 
+Features
+------------
+
+- **IPv6 Support**: The server resource now supports both IPv4 and IPv6 addresses. You can access the primary IPv6 address using the `primary_ipv6` attribute:
+
+```hcl
+resource "latitudesh_server" "example" {
+  hostname         = "example.latitude.sh"
+  operating_system = "ubuntu_22_04_x64_lts"
+  plan             = data.latitudesh_plan.plan.slug
+  project          = latitudesh_project.project.id
+  site             = data.latitudesh_region.region.slug
+}
+
+output "server_ipv4" {
+  value = latitudesh_server.example.primary_ipv4
+}
+
+output "server_ipv6" {
+  value = latitudesh_server.example.primary_ipv6
+}
+```
 
 Developing the provider locally
 ------------

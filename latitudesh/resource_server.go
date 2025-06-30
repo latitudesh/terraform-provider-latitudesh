@@ -39,6 +39,7 @@ type ServerResourceModel struct {
 	Billing         types.String `tfsdk:"billing"`
 	Tags            types.List   `tfsdk:"tags"`
 	PrimaryIpv4     types.String `tfsdk:"primary_ipv4"`
+	PrimaryIpv6     types.String `tfsdk:"primary_ipv6"`
 	Status          types.String `tfsdk:"status"`
 	Locked          types.Bool   `tfsdk:"locked"`
 	CreatedAt       types.String `tfsdk:"created_at"`
@@ -131,6 +132,10 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			},
 			"primary_ipv4": schema.StringAttribute{
 				MarkdownDescription: "Primary IPv4 address of the server",
+				Computed:            true,
+			},
+			"primary_ipv6": schema.StringAttribute{
+				MarkdownDescription: "Primary IPv6 address of the server",
 				Computed:            true,
 			},
 			"status": schema.StringAttribute{
@@ -530,6 +535,10 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 
 		if attrs.PrimaryIpv4 != nil {
 			data.PrimaryIpv4 = types.StringValue(*attrs.PrimaryIpv4)
+		}
+
+		if attrs.PrimaryIpv6 != nil {
+			data.PrimaryIpv6 = types.StringValue(*attrs.PrimaryIpv6)
 		}
 
 		if attrs.Locked != nil {
