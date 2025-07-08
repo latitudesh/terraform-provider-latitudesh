@@ -75,7 +75,7 @@ terraform {
   required_providers {
     latitudesh = {
       source  = "latitude.sh/iac/latitudesh"
-      version = "2.1.0"
+      version = "2.1.1"
     }
   }
 }
