@@ -574,6 +574,9 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 		if attrs.Region != nil && attrs.Region.Site != nil && attrs.Region.Site.Slug != nil {
 			data.Region = types.StringValue(*attrs.Region.Site.Slug)
 		}
+
+		data.SSHKeys = types.ListNull(types.StringType)
+		data.Tags = types.ListNull(types.StringType)
 	}
 }
 
