@@ -14,6 +14,8 @@ import (
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
+const maxHostnameLength = 32
+
 var _ resource.Resource = &ServerResource{}
 var _ resource.ResourceWithImportState = &ServerResource{}
 
@@ -211,6 +213,11 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 
 	if !data.Hostname.IsNull() {
 		hostname := data.Hostname.ValueString()
+		if len(hostname) > maxHostnameLength {
+			errMsg := fmt.Sprintf("The hostname must not exceed %d characters. Provided hostname has %d characters.", maxHostnameLength, len(hostname))
+			resp.Diagnostics.AddError("Hostname Too Long", errMsg)
+			return
+		}
 		attrs.Hostname = &hostname
 	}
 
