@@ -19,6 +19,28 @@ const (
 	testRetryDelay            = 30 // Delay between retries in seconds
 )
 
+func TestValidateHostnameLength(t *testing.T) {
+	cases := []struct {
+		hostname  string
+		shouldErr bool
+		name      string
+	}{
+		{"short-hostname", false, "shorter than max"},
+		{"abcdefghijklmnopqrstuvwxyzabcdef", false, "exactly max length"}, // 32 chars
+		{"abcdefghijklmnopqrstuvwxyzabcdefg", true, "longer than max"},    // 33 chars
+	}
+
+	for _, tc := range cases {
+		err := validateHostnameLength(tc.hostname)
+		if tc.shouldErr && err == nil {
+			t.Errorf("%s: expected error, got nil", tc.name)
+		}
+		if !tc.shouldErr && err != nil {
+			t.Errorf("%s: expected no error, got %v", tc.name, err)
+		}
+	}
+}
+
 func TestAccServer_Basic(t *testing.T) {
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
