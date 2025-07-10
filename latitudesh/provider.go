@@ -15,7 +15,7 @@ const (
 	userAgentForProvider = "Latitude-Terraform-Provider"
 )
 
-var currentVersion = "2.1.0"
+var currentVersion = "2.1.1"
 
 // Ensure latitudeshProvider satisfies various provider interfaces
 var _ provider.Provider = &latitudeshProvider{}

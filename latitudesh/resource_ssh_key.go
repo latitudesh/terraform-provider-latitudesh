@@ -256,6 +256,9 @@ func (r *SSHKeyResource) readSSHKey(ctx context.Context, data *SSHKeyResourceMod
 	}
 
 	sshKey := result.Object.Data
+
+	data.Tags = types.ListNull(types.StringType)
+
 	if sshKey.Attributes != nil {
 		if sshKey.Attributes.Name != nil {
 			data.Name = types.StringValue(*sshKey.Attributes.Name)

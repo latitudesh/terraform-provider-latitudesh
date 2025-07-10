@@ -24,7 +24,6 @@ resource "latitudesh_ssh_key" "ssh_key" {
 ### Required
 
 - `name` (String) The SSH key name
-- `project` (String, Deprecated) The id or slug of the project
 - `public_key` (String) The SSH public key
 
 ### Optional
@@ -38,8 +37,8 @@ resource "latitudesh_ssh_key" "ssh_key" {
 - `updated` (String) The timestamp for the last time the SSH key was updated
 
 ## Import
-SshKey can be imported using the sshKeyID along with the projectID that contains the sshKey, e.g.,
+The `latitudesh_ssh_key` resource can now be imported by specifying only the `sshKeyID`, for example:
 
 ```sh
-$ terraform import latitudesh_ssh_key.ssh_key projectID:sshKeyID
+$ terraform import latitudesh_ssh_key.ssh_key sshKeyID
 ```
