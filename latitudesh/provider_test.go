@@ -135,6 +135,15 @@ func TestFrameworkProvider(t *testing.T) {
 	}
 }
 
+func TestAccEnvVarAuthTokenSet(t *testing.T) {
+	if os.Getenv("TF_ACC") != "1" {
+		t.Skip("Acceptance tests skipped unless env 'TF_ACC' set")
+	}
+	if v := os.Getenv("LATITUDESH_AUTH_TOKEN"); v == "" {
+		t.Fatal("LATITUDESH_AUTH_TOKEN must be set for acceptance tests")
+	}
+}
+
 // Helper function to get providers for Framework testing
 func testAccProtoV6ProviderFactories() map[string]func() (tfprotov6.ProviderServer, error) {
 	return map[string]func() (tfprotov6.ProviderServer, error){
