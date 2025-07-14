@@ -56,4 +56,3 @@ jobs:
         run: go test ./latitudesh -v -timeout 10m -run "TestAccEnvVarAuthTokenSet"
         env:
           TF_ACC: '1'
-          LATITUDESH_AUTH_TOKEN: ${{ secrets.LATITUDESH_AUTH_TOKEN }}
