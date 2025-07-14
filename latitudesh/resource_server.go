@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -98,6 +99,9 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "SSH Keys to set on the server",
 				ElementType:         types.StringType,
 				Optional:            true,
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.RequiresReplace(),
+				},
 			},
 			"user_data": schema.StringAttribute{
 				MarkdownDescription: "User data to set on the server",
@@ -253,6 +257,7 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	result, err := r.client.Servers.Create(ctx, createRequest)
+
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to create server, got error: "+err.Error())
 		return
@@ -303,6 +308,7 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	plannedOperatingSystem := data.OperatingSystem
 	plannedBilling := data.Billing
 	plannedTags := data.Tags
+	plannedSSHKeys := data.SSHKeys
 
 	// Read server to get computed values
 	r.readServer(ctx, &data, &resp.Diagnostics)
@@ -332,6 +338,9 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 	if !plannedTags.IsNull() {
 		data.Tags = plannedTags
+	}
+	if !plannedSSHKeys.IsNull() {
+		data.SSHKeys = plannedSSHKeys
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -391,6 +400,10 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		attrs.Billing = &billing
 	}
 
+	if data.Billing.ValueString() == currentData.Billing.ValueString() {
+		attrs.Billing = nil
+	}
+
 	// Handle tags
 	if !data.Tags.IsNull() && !data.Tags.IsUnknown() {
 		var tagIDs []string
@@ -421,6 +434,10 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 	} else if !currentData.Project.IsNull() {
 		project := currentData.Project.ValueString()
 		attrs.Project = &project
+	}
+
+	if data.Project.ValueString() == currentData.Project.ValueString() {
+		attrs.Project = nil
 	}
 
 	updateType := operations.UpdateServerServersRequestApplicationJSONTypeServers
@@ -575,7 +592,6 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 			data.Region = types.StringValue(*attrs.Region.Site.Slug)
 		}
 
-		data.SSHKeys = types.ListNull(types.StringType)
 		data.Tags = types.ListNull(types.StringType)
 	}
 }
