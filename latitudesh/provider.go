@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -47,12 +48,27 @@ func (p *latitudeshProvider) Schema(ctx context.Context, req provider.SchemaRequ
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"auth_token": schema.StringAttribute{
-				MarkdownDescription: "Latitude.sh API authentication token",
+				MarkdownDescription: "Latitude.sh API authentication token. Can also be set via the LATITUDESH_AUTH_TOKEN environment variable.",
 				Optional:            true,
 				Sensitive:           true,
 			},
 		},
 	}
+}
+
+func getAuthToken(data latitudeshProviderModel) (string, bool) {
+	authToken := data.AuthToken.ValueString()
+
+	if authToken != "" {
+		return authToken, true
+	}
+
+	authToken = os.Getenv("LATITUDESH_AUTH_TOKEN")
+	if authToken != "" {
+		return authToken, true
+	}
+
+	return "", false
 }
 
 func (p *latitudeshProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
@@ -64,23 +80,21 @@ func (p *latitudeshProvider) Configure(ctx context.Context, req provider.Configu
 		return
 	}
 
-	// Configuration values are now available.
-	// Example client configuration for data sources and resources.
-	authToken := data.AuthToken.ValueString()
+	authToken, found := getAuthToken(data)
 
-	if authToken != "" {
-		sdkClient := latitudeshgosdk.New(
-			latitudeshgosdk.WithSecurity(authToken),
+	if !found {
+		resp.Diagnostics.AddError(
+			"Missing Auth Token",
+			"Either 'auth_token' must be set in the provider configuration or LATITUDESH_AUTH_TOKEN environment variable must be set.",
 		)
-		resp.DataSourceData = sdkClient
-		resp.ResourceData = sdkClient
-	} else {
-		sdkClient := latitudeshgosdk.New(
-			latitudeshgosdk.WithSecurity(""),
-		)
-		resp.DataSourceData = sdkClient
-		resp.ResourceData = sdkClient
+		return
 	}
+
+	sdkClient := latitudeshgosdk.New(
+		latitudeshgosdk.WithSecurity(authToken),
+	)
+	resp.DataSourceData = sdkClient
+	resp.ResourceData = sdkClient
 }
 
 func (p *latitudeshProvider) Resources(ctx context.Context) []func() resource.Resource {
