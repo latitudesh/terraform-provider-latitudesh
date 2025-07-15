@@ -678,6 +678,9 @@ func (r *ServerResource) ImportState(ctx context.Context, req resource.ImportSta
 	var data ServerResourceModel
 	data.ID = types.StringValue(req.ID)
 
+	// Initialize SSH keys since API doesn't return them and import creates fresh model
+	data.SSHKeys = types.ListNull(types.StringType)
+
 	r.readServer(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
