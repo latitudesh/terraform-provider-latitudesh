@@ -57,7 +57,7 @@ output "server_ipv6" {
 - `raid` (String) RAID mode for the server. 
 				Updating raid will trigger a reinstall if allow_reinstall is set to true.
 - `ssh_keys` (List of String) List of server SSH key ids. 
-				Updating ssh_keys will trigger a reinstall if allow_reinstall is set to true.
+				Any change to `ssh_keys` will force a resource replacement.
 - `tags` (List of String) List of server tags
 - `user_data` (String) The id of user data to set on the server. 
 				Updating user_data will trigger a reinstall if allow_reinstall is set to true.

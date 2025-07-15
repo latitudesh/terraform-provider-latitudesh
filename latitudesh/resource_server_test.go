@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	testServerHostname        = "test"
+	testServerHostname        = "terraform-ci-test.latitude.sh"
 	testServerPlan            = "c2-small-x86"
-	testServerSite            = "SAO"
+	testServerSite            = "SAO2"
 	testServerOperatingSystem = "ubuntu_24_04_x64_lts"
 	testMaxRetries            = 10 // Maximum number of retries
 	testRetryDelay            = 30 // Delay between retries in seconds
@@ -27,7 +27,6 @@ func TestAccServer_Basic(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)
-			testAccProjectCheck(t)
 		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
 		CheckDestroy:             testAccCheckServerDestroy,
@@ -121,6 +120,34 @@ func TestAccServer_IPv6Support(t *testing.T) {
 					resource.TestCheckResourceAttr(
 						"latitudesh_server.test_item", "hostname", "test"),
 				),
+			},
+		},
+	})
+}
+
+func TestAccServer_SSHKeys_NoDrift(t *testing.T) {
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+
+	resourceName := "latitudesh_server.test_item"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+			testAccProjectCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccServerConfigWithSSHKeys(),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "hostname", testServerHostname),
+				),
+			},
+			{
+				Config:             testAccServerConfigWithSSHKeys(),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})
@@ -274,5 +301,20 @@ resource "latitudesh_server" "test_item" {
 		testServerPlan,
 		testServerSite,
 		testServerOperatingSystem,
+	)
+}
+
+func testAccServerConfigWithSSHKeys() string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+  hostname         = "terraform-ci-test.latitude.sh"
+  operating_system = "ubuntu_24_04_x64_lts"
+  plan             = "c2-small-x86"
+  project          = "%s"
+  site             = "SAO2"
+  billing          = "monthly"
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
 	)
 }
