@@ -94,6 +94,5 @@ After defining the import block, you can generate the configuration file:
 
 ```bash
 terraform plan -generate-config-out=server.tf
-```
 
 This will create a `server.tf` file with the current configuration of your imported server, which you can then customize as needed.
