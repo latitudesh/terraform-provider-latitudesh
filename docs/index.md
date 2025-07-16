@@ -78,7 +78,7 @@ Example of importing a server:
 terraform {
   required_providers {
     latitudesh = {
-      source  = "latitudesh/latitudesh"
+      source  = "latitude.sh/iac/latitudesh"
       version = "2.1.1"
     }
   }
