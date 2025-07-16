@@ -8,5 +8,5 @@ resource "latitudesh_server" "server" {
 }
 
 output "server_state" {
-  value = latitudesh_server.terraform_server
+  value = latitudesh_server.server
 }
