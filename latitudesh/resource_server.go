@@ -8,7 +8,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -107,11 +106,14 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "SSH Keys to set on the server",
 				ElementType:         types.StringType,
 				Optional:            true,
+<<<<<<< HEAD
 				Computed:            true,
 				PlanModifiers: []planmodifier.List{
 					listplanmodifier.UseStateForUnknown(),
 					sshKeysReinstallWarningModifier{},
 				},
+=======
+>>>>>>> a5e9f67 (fix: ssh keys computing)
 			},
 			"user_data": schema.StringAttribute{
 				MarkdownDescription: "User data ID to assign to the server (reference to latitudesh_user_data resource)",
@@ -332,12 +334,15 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	plannedOperatingSystem := data.OperatingSystem
 	plannedBilling := data.Billing
 	plannedTags := data.Tags
+<<<<<<< HEAD
 	plannedSSHKeys := data.SSHKeys
 	plannedUserData := data.UserData
 	plannedRaid := data.Raid
 	plannedIpxe := data.Ipxe
 	plannedAllowReinstall := data.AllowReinstall
 	plannedReinstallReason := data.ReinstallReason
+=======
+>>>>>>> a5e9f67 (fix: ssh keys computing)
 
 	// Read server to get computed values
 	r.readServer(ctx, &data, &resp.Diagnostics)
@@ -368,6 +373,7 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	if !plannedTags.IsNull() {
 		data.Tags = plannedTags
 	}
+<<<<<<< HEAD
 	if !plannedSSHKeys.IsNull() {
 		data.SSHKeys = plannedSSHKeys
 	}
@@ -386,6 +392,8 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	if !plannedReinstallReason.IsNull() {
 		data.ReinstallReason = plannedReinstallReason
 	}
+=======
+>>>>>>> a5e9f67 (fix: ssh keys computing)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
