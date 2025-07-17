@@ -8,7 +8,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -106,9 +105,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "SSH Keys to set on the server",
 				ElementType:         types.StringType,
 				Optional:            true,
-				Computed:            true,
 				PlanModifiers: []planmodifier.List{
-					listplanmodifier.UseStateForUnknown(),
 					sshKeysReinstallWarningModifier{},
 				},
 			},
@@ -134,7 +131,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"billing": schema.StringAttribute{
-				MarkdownDescription: "The server billing type (hourly, monthly, yearly)",
+				MarkdownDescription: "The server billing type (hourly, monthly, yearly). Defaults to monthly.",
 				Optional:            true,
 				Computed:            true,
 			},
@@ -146,7 +143,6 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			"allow_reinstall": schema.BoolAttribute{
 				MarkdownDescription: "Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe changes. If false, only in-place updates are allowed.",
 				Optional:            true,
-				Computed:            true,
 			},
 			"primary_ipv4": schema.StringAttribute{
 				MarkdownDescription: "Primary IPv4 address of the server",
@@ -200,6 +196,11 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// Set default value for billing if not provided
+	if data.Billing.IsNull() {
+		data.Billing = types.StringValue("monthly")
 	}
 
 	attrs := &operations.CreateServerServersAttributes{}
@@ -319,7 +320,14 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		}
 	}
 
-	// Store the planned values that we want to preserve
+	// Read server to get computed values
+	r.readServer(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Restore the planned values for fields we set during creation
+	// This ensures consistency between plan and apply
 	plannedHostname := data.Hostname
 	plannedProject := data.Project
 	plannedSite := data.Site
@@ -394,12 +402,6 @@ func (r *ServerResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
-	// Also read deploy config to get SSH keys, raid, user data, and ipxe
-	r.readDeployConfig(ctx, &data, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -418,14 +420,8 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
-	// Read deploy config to get accurate SSH keys for comparison
-	r.readDeployConfig(ctx, &currentData, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
 	// Determine what changed to decide between reinstall vs in-place update
-	// Compare planned config vs current state (including current SSH keys from API)
+	// Compare planned config vs current state
 	needsReinstall, reason := r.needsReinstall(ctx, &data, &currentData, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -466,12 +462,6 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 				return
 			}
 
-			// Read current deploy config state
-			r.readDeployConfig(ctx, &data, &resp.Diagnostics)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-
 			// Skip reinstall - just update state
 
 			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -489,12 +479,6 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 
 		// Read server to get updated values after reinstall
 		r.readServer(ctx, &data, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-
-		// Read deploy config to get updated SSH keys after reinstall
-		r.readDeployConfig(ctx, &data, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -761,9 +745,7 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 			}
 		}
 
-		if attrs.OperatingSystem != nil && attrs.OperatingSystem.Slug != nil {
-			data.OperatingSystem = types.StringValue(*attrs.OperatingSystem.Slug)
-		}
+		// operating_system is preserved from user configuration, not overwritten from API
 
 		if attrs.Project != nil && attrs.Project.ID != nil {
 			data.Project = types.StringValue(*attrs.Project.ID)
@@ -776,48 +758,11 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 		// Tags are handled separately - preserve existing tags if not returned by API
 		// The server API doesn't return tags in the get response, so we don't overwrite them
 	}
-
-	// Set default value for allow_reinstall if not set
-	if data.AllowReinstall.IsNull() {
-		data.AllowReinstall = types.BoolValue(true)
-	}
-
-	// Read deploy config to get SSH keys, user data, raid, and ipxe
-	r.readDeployConfig(ctx, data, diags)
 }
 
 func (r *ServerResource) readDeployConfig(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) {
-	serverID := data.ID.ValueString()
-
-	response, err := r.client.Servers.GetDeployConfig(ctx, serverID)
-	if err != nil {
-		diags.AddError("Client Error", "Unable to read server deploy config, got error: "+err.Error())
-		return
-	}
-
-	if response.DeployConfig == nil || response.DeployConfig.Data == nil || response.DeployConfig.Data.Attributes == nil {
-		return
-	}
-
-	attrs := response.DeployConfig.Data.Attributes
-
-	// Only update SSH keys if we don't already have them set from the plan
-	// This prevents overwriting planned SSH keys during create operations
-	if data.SSHKeys.IsNull() {
-		if attrs.SSHKeys != nil && len(attrs.SSHKeys) > 0 {
-			sshKeysList, convertDiags := types.ListValueFrom(ctx, types.StringType, attrs.SSHKeys)
-			diags.Append(convertDiags...)
-			if !convertDiags.HasError() {
-				data.SSHKeys = sshKeysList
-			}
-		} else {
-			emptyList, convertDiags := types.ListValueFrom(ctx, types.StringType, []string{})
-			diags.Append(convertDiags...)
-			if !convertDiags.HasError() {
-				data.SSHKeys = emptyList
-			}
-		}
-	}
+	// Deploy config reading is no longer needed since no fields are computed from it
+	return
 }
 
 func (r *ServerResource) validateTagIDs(ctx context.Context, tagIDs []string) error {
@@ -898,6 +843,11 @@ func (m sshKeysReinstallWarningModifier) MarkdownDescription(ctx context.Context
 }
 
 func (m sshKeysReinstallWarningModifier) PlanModifyList(ctx context.Context, req planmodifier.ListRequest, resp *planmodifier.ListResponse) {
+	// Only show warnings during updates (when state exists), not during creation
+	if req.StateValue.IsNull() {
+		return
+	}
+
 	var allowReinstall types.Bool
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
 	if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
@@ -924,6 +874,11 @@ func (m operatingSystemReinstallWarningModifier) MarkdownDescription(ctx context
 }
 
 func (m operatingSystemReinstallWarningModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// Only show warnings during updates (when state exists), not during creation
+	if req.StateValue.IsNull() {
+		return
+	}
+
 	var allowReinstall types.Bool
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
 	if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
@@ -950,6 +905,11 @@ func (m userDataReinstallWarningModifier) MarkdownDescription(ctx context.Contex
 }
 
 func (m userDataReinstallWarningModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// Only show warnings during updates (when state exists), not during creation
+	if req.StateValue.IsNull() {
+		return
+	}
+
 	var allowReinstall types.Bool
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
 	if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
@@ -976,6 +936,11 @@ func (m raidReinstallWarningModifier) MarkdownDescription(ctx context.Context) s
 }
 
 func (m raidReinstallWarningModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// Only show warnings during updates (when state exists), not during creation
+	if req.StateValue.IsNull() {
+		return
+	}
+
 	var allowReinstall types.Bool
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
 	if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
@@ -1008,6 +973,11 @@ func (m ipxeReinstallWarningModifier) MarkdownDescription(ctx context.Context) s
 }
 
 func (m ipxeReinstallWarningModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// Only show warnings during updates (when state exists), not during creation
+	if req.StateValue.IsNull() {
+		return
+	}
+
 	var allowReinstall types.Bool
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
 	if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
