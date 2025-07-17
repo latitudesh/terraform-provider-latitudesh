@@ -6,4 +6,5 @@ resource "latitudesh_server" "server" {
   site             = data.latitudesh_region.region.slug # You can use the site id or slug
   ssh_keys         = [latitudesh_ssh_key.ssh_key.id]
   billing          = "hourly"                           # Required for on_demand projects: hourly, monthly
+  allow_reinstall  = true                               # Allow reinstall for OS/SSH/UserData/RAID/iPXE changes
 }
