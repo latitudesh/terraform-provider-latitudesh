@@ -3,6 +3,7 @@ package latitudesh
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -108,7 +109,7 @@ func (r *TagResource) Create(ctx context.Context, req resource.CreateRequest, re
 
 	// Add optional color
 	if !data.Color.IsNull() {
-		color := data.Color.ValueString()
+		color := normalizeHexColor(data.Color.ValueString())
 		attrs.Color = &color
 	}
 
@@ -188,7 +189,7 @@ func (r *TagResource) Update(ctx context.Context, req resource.UpdateRequest, re
 
 	// Add optional color
 	if !data.Color.IsNull() {
-		color := data.Color.ValueString()
+		color := normalizeHexColor(data.Color.ValueString())
 		attrs.Color = &color
 	}
 
@@ -284,7 +285,7 @@ func (r *TagResource) readTag(ctx context.Context, data *TagResourceModel, diags
 		}
 
 		if foundTag.Attributes.Color != nil {
-			data.Color = types.StringValue(*foundTag.Attributes.Color)
+			data.Color = types.StringValue(normalizeHexColor(*foundTag.Attributes.Color))
 		}
 
 		if foundTag.Attributes.Slug != nil {
@@ -312,4 +313,12 @@ func (r *TagResource) findTagByName(ctx context.Context, name string) (string, e
 	}
 
 	return "", fmt.Errorf("tag with name '%s' not found", name)
+}
+
+// normalizeHexColor normalizes hex color codes to uppercase for consistency
+func normalizeHexColor(color string) string {
+	if color == "" {
+		return color
+	}
+	return strings.ToUpper(color)
 }

@@ -5,25 +5,25 @@ resource "latitudesh_firewall" "web_firewall" {
   
   # SSH Access
   rules {
-    from     = "0.0.0.0/0"
-    to       = "server"
+    from     = "ANY"
+    to       = "ANY"
     port     = "22"
-    protocol = "tcp"
+    protocol = "TCP"
   }
   
   # HTTP Access
   rules {
-    from     = "0.0.0.0/0"
-    to       = "server"
+    from     = "ANY"
+    to       = "ANY"
     port     = "80"
-    protocol = "tcp"
+    protocol = "TCP"
   }
   
   # HTTPS Access
   rules {
-    from     = "0.0.0.0/0"
-    to       = "server"
+    from     = "ANY"
+    to       = "ANY"
     port     = "443"
-    protocol = "tcp"
+    protocol = "TCP"
   }
 } 

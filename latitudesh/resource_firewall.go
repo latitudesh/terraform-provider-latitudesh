@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -142,7 +143,7 @@ func (r *FirewallResource) Create(ctx context.Context, req resource.CreateReques
 
 		// Convert string protocol to the proper type
 		var protocolEnum operations.CreateFirewallProtocol
-		switch protocol {
+		switch strings.ToUpper(protocol) {
 		case "TCP":
 			protocolEnum = operations.CreateFirewallProtocolTCP
 		case "UDP":
@@ -292,7 +293,7 @@ func (r *FirewallResource) Update(ctx context.Context, req resource.UpdateReques
 
 		// Convert string protocol to the proper type
 		var protocolEnum operations.UpdateFirewallFirewallsProtocol
-		switch protocol {
+		switch strings.ToUpper(protocol) {
 		case "TCP":
 			protocolEnum = operations.UpdateFirewallFirewallsProtocolTCP
 		case "UDP":
@@ -432,10 +433,10 @@ func (r *FirewallResource) readFirewall(ctx context.Context, data *FirewallResou
 			data.Project = types.StringValue(*attributes.Project.ID)
 		}
 
-		// IMPORTANT: Only update rules if we don't have any configured rules yet
-		// This prevents the "block count changed" error by preserving user configuration
+		// Only update rules if we don't have configured rules to preserve user configuration
+		// This prevents the API from adding extra rules that would cause count mismatches
 		if len(data.Rules) == 0 {
-			// Convert rules only on first read (import/create)
+			// This is import/initial read - populate rules from API
 			var rules []FirewallRuleModel
 			for _, rule := range attributes.Rules {
 				ruleModel := FirewallRuleModel{}
@@ -449,13 +450,21 @@ func (r *FirewallResource) readFirewall(ctx context.Context, data *FirewallResou
 					ruleModel.Port = types.StringValue(*rule.Port)
 				}
 				if rule.Protocol != nil {
-					ruleModel.Protocol = types.StringValue(*rule.Protocol)
+					// Normalize protocol to match user input case
+					protocol := *rule.Protocol
+					// Keep the original case if it matches common conventions
+					if strings.ToUpper(protocol) == "TCP" {
+						ruleModel.Protocol = types.StringValue("TCP")
+					} else if strings.ToUpper(protocol) == "UDP" {
+						ruleModel.Protocol = types.StringValue("UDP")
+					} else {
+						ruleModel.Protocol = types.StringValue(protocol)
+					}
 				}
 				rules = append(rules, ruleModel)
 			}
 			data.Rules = rules
 		}
-		// If we already have rules configured, keep the user's configuration
-		// and ignore what the API returns to prevent state drift
+		// If we have configured rules, preserve them to avoid count mismatches from API-added rules
 	}
 }

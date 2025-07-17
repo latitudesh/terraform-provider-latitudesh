@@ -43,7 +43,6 @@ type ServerResourceModel struct {
 	Billing         types.String `tfsdk:"billing"`
 	Tags            types.List   `tfsdk:"tags"`
 	AllowReinstall  types.Bool   `tfsdk:"allow_reinstall"`
-	ReinstallReason types.String `tfsdk:"reinstall_reason"`
 	PrimaryIpv4     types.String `tfsdk:"primary_ipv4"`
 	PrimaryIpv6     types.String `tfsdk:"primary_ipv6"`
 	Status          types.String `tfsdk:"status"`
@@ -147,10 +146,6 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			"allow_reinstall": schema.BoolAttribute{
 				MarkdownDescription: "Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe changes. If false, only in-place updates are allowed.",
 				Optional:            true,
-				Computed:            true,
-			},
-			"reinstall_reason": schema.StringAttribute{
-				MarkdownDescription: "Reason for the last server reinstallation",
 				Computed:            true,
 			},
 			"primary_ipv4": schema.StringAttribute{
@@ -337,7 +332,6 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	plannedRaid := data.Raid
 	plannedIpxe := data.Ipxe
 	plannedAllowReinstall := data.AllowReinstall
-	plannedReinstallReason := data.ReinstallReason
 
 	// Read server to get computed values
 	r.readServer(ctx, &data, &resp.Diagnostics)
@@ -380,11 +374,8 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	if !plannedIpxe.IsNull() {
 		data.Ipxe = plannedIpxe
 	}
-	if !plannedAllowReinstall.IsNull() {
+	if !plannedAllowReinstall.IsNull() && !plannedAllowReinstall.IsUnknown() {
 		data.AllowReinstall = plannedAllowReinstall
-	}
-	if !plannedReinstallReason.IsNull() {
-		data.ReinstallReason = plannedReinstallReason
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -481,15 +472,13 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 				return
 			}
 
-			// Clear reinstall reason since no reinstall happened
-			data.ReinstallReason = types.StringNull()
+			// Skip reinstall - just update state
 
 			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 			return
 		}
 
-		// Set the reinstall reason for tracking
-		data.ReinstallReason = types.StringValue(reason)
+		// Performing reinstall due to: " + reason
 
 		// Perform reinstall for OS, SSH keys, user data, raid, or ipxe changes
 		err := r.reinstallServer(ctx, &data, &resp.Diagnostics)
@@ -510,8 +499,7 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 			return
 		}
 	} else {
-		// Clear reinstall reason for in-place updates
-		data.ReinstallReason = types.StringNull()
+		// Performing in-place update
 
 		// Perform in-place update for hostname, billing, tags, project changes
 		err := r.updateServerInPlace(ctx, &data, &currentData, &resp.Diagnostics)
@@ -791,11 +779,6 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 	// Set default value for allow_reinstall if not set
 	if data.AllowReinstall.IsNull() {
 		data.AllowReinstall = types.BoolValue(true)
-	}
-
-	// Set default value for reinstall_reason if not set
-	if data.ReinstallReason.IsNull() {
-		data.ReinstallReason = types.StringValue("Initial creation")
 	}
 
 	// Read deploy config to get SSH keys, user data, raid, and ipxe
