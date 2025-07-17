@@ -773,7 +773,8 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 			data.Region = types.StringValue(*attrs.Region.Site.Slug)
 		}
 
-		data.Tags = types.ListNull(types.StringType)
+		// Tags are handled separately - preserve existing tags if not returned by API
+		// The server API doesn't return tags in the get response, so we don't overwrite them
 	}
 
 	// Set default value for allow_reinstall if not set
@@ -800,17 +801,21 @@ func (r *ServerResource) readDeployConfig(ctx context.Context, data *ServerResou
 
 	attrs := response.DeployConfig.Data.Attributes
 
-	if attrs.SSHKeys != nil && len(attrs.SSHKeys) > 0 {
-		sshKeysList, convertDiags := types.ListValueFrom(ctx, types.StringType, attrs.SSHKeys)
-		diags.Append(convertDiags...)
-		if !convertDiags.HasError() {
-			data.SSHKeys = sshKeysList
-		}
-	} else {
-		emptyList, convertDiags := types.ListValueFrom(ctx, types.StringType, []string{})
-		diags.Append(convertDiags...)
-		if !convertDiags.HasError() {
-			data.SSHKeys = emptyList
+	// Only update SSH keys if we don't already have them set from the plan
+	// This prevents overwriting planned SSH keys during create operations
+	if data.SSHKeys.IsNull() {
+		if attrs.SSHKeys != nil && len(attrs.SSHKeys) > 0 {
+			sshKeysList, convertDiags := types.ListValueFrom(ctx, types.StringType, attrs.SSHKeys)
+			diags.Append(convertDiags...)
+			if !convertDiags.HasError() {
+				data.SSHKeys = sshKeysList
+			}
+		} else {
+			emptyList, convertDiags := types.ListValueFrom(ctx, types.StringType, []string{})
+			diags.Append(convertDiags...)
+			if !convertDiags.HasError() {
+				data.SSHKeys = emptyList
+			}
 		}
 	}
 }
