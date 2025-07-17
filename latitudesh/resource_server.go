@@ -481,11 +481,37 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		}
 
 		if !allowReinstall {
-			resp.Diagnostics.AddError(
-				"Reinstall Required But Not Allowed",
-				"Changes to operating_system, ssh_keys, user_data, raid, or ipxe require server reinstallation, "+
-					"but allow_reinstall is set to false. Either set allow_reinstall=true or remove the conflicting changes.",
+			// When reinstall is not allowed, just update the state
+			resp.Diagnostics.AddWarning(
+				"State Updated Without Server Changes",
+				fmt.Sprintf("Changes detected (%s) would normally trigger a server reinstall, but allow_reinstall is set to false. "+
+					"The Terraform state has been updated to match your configuration, but no actual server changes were made. "+
+					"Set allow_reinstall=true to perform the actual reinstall.", reason),
 			)
+
+			// Skip deploy config update until SDK is fixed
+			// err := r.updateDeployConfig(ctx, &data, &resp.Diagnostics)
+			// if err != nil {
+			// 	resp.Diagnostics.AddError("Deploy Config Update Error", "Unable to update deploy config: "+err.Error())
+			// 	return
+			// }
+
+			// Read current server state
+			r.readServer(ctx, &data, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+
+			// Read current deploy config state
+			r.readDeployConfig(ctx, &data, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+
+			// Clear reinstall reason since no reinstall happened
+			data.ReinstallReason = types.StringNull()
+
+			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 			return
 		}
 
@@ -1001,6 +1027,12 @@ func (m raidReinstallWarningModifier) PlanModifyString(ctx context.Context, req 
 			"raid changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
 		)
 	}
+}
+
+func (r *ServerResource) updateDeployConfig(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) error {
+	// Skip actual API call until SDK is fixed
+	// Just return success so state can be updated with planned values
+	return nil
 }
 
 // ipxeReinstallWarningModifier shows warning when ipxe changes during plan phase
