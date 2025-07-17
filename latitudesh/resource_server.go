@@ -107,20 +107,11 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "SSH Keys to set on the server",
 				ElementType:         types.StringType,
 				Optional:            true,
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> a11ff3e (fix: reinstall on updating server)
 				Computed:            true,
 				PlanModifiers: []planmodifier.List{
 					listplanmodifier.UseStateForUnknown(),
 					sshKeysReinstallWarningModifier{},
 				},
-<<<<<<< HEAD
-=======
->>>>>>> a5e9f67 (fix: ssh keys computing)
-=======
->>>>>>> a11ff3e (fix: reinstall on updating server)
 			},
 			"user_data": schema.StringAttribute{
 				MarkdownDescription: "User data ID to assign to the server (reference to latitudesh_user_data resource)",
@@ -341,21 +332,12 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	plannedOperatingSystem := data.OperatingSystem
 	plannedBilling := data.Billing
 	plannedTags := data.Tags
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> a11ff3e (fix: reinstall on updating server)
 	plannedSSHKeys := data.SSHKeys
 	plannedUserData := data.UserData
 	plannedRaid := data.Raid
 	plannedIpxe := data.Ipxe
 	plannedAllowReinstall := data.AllowReinstall
 	plannedReinstallReason := data.ReinstallReason
-<<<<<<< HEAD
-=======
->>>>>>> a5e9f67 (fix: ssh keys computing)
-=======
->>>>>>> a11ff3e (fix: reinstall on updating server)
 
 	// Read server to get computed values
 	r.readServer(ctx, &data, &resp.Diagnostics)
@@ -386,10 +368,6 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	if !plannedTags.IsNull() {
 		data.Tags = plannedTags
 	}
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> a11ff3e (fix: reinstall on updating server)
 	if !plannedSSHKeys.IsNull() {
 		data.SSHKeys = plannedSSHKeys
 	}
@@ -408,11 +386,6 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	if !plannedReinstallReason.IsNull() {
 		data.ReinstallReason = plannedReinstallReason
 	}
-<<<<<<< HEAD
-=======
->>>>>>> a5e9f67 (fix: ssh keys computing)
-=======
->>>>>>> a11ff3e (fix: reinstall on updating server)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -1060,7 +1033,6 @@ func (m ipxeReinstallWarningModifier) PlanModifyString(ctx context.Context, req 
 		)
 	}
 }
-<<<<<<< HEAD
 
 func validateHostnameLength(hostname string) error {
 	if len(hostname) > maxHostnameLength {
@@ -1068,5 +1040,3 @@ func validateHostnameLength(hostname string) error {
 	}
 	return nil
 }
-=======
->>>>>>> a11ff3e (fix: reinstall on updating server)
