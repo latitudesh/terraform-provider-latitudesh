@@ -38,7 +38,7 @@ output "server_ipv6" {
 
 ### Required
 
-- `hostname` (String) The server hostname
+- `hostname` (String): The server hostname. **Maximum length: 32 characters.**
 - `operating_system` (String) The server OS. 
 				Updating operating_system will trigger a reinstall if allow_reinstall is set to true.
 - `plan` (String) The server plan
