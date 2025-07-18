@@ -35,6 +35,7 @@ type ProjectResourceModel struct {
 	Environment      types.String `tfsdk:"environment"`
 	ProvisioningType types.String `tfsdk:"provisioning_type"`
 	Slug             types.String `tfsdk:"slug"`
+	Tags             types.List   `tfsdk:"tags"`
 }
 
 func (r *ProjectResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -67,11 +68,17 @@ func (r *ProjectResource) Schema(ctx context.Context, req resource.SchemaRequest
 			},
 			"provisioning_type": schema.StringAttribute{
 				MarkdownDescription: "The provisioning type (on_demand, reserved)",
-				Required:            true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"slug": schema.StringAttribute{
 				MarkdownDescription: "Project slug",
 				Computed:            true,
+			},
+			"tags": schema.ListAttribute{
+				MarkdownDescription: "Project tags",
+				ElementType:         types.StringType,
+				Optional:            true,
 			},
 		},
 	}
@@ -108,6 +115,16 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 
 	name := data.Name.ValueString()
+
+	// Validate that provisioning_type is provided during creation
+	if data.ProvisioningType.IsNull() || data.ProvisioningType.ValueString() == "" {
+		resp.Diagnostics.AddError(
+			"Missing Required Field",
+			"The provisioning_type field is required when creating a project.",
+		)
+		return
+	}
+
 	provisioningType := data.ProvisioningType.ValueString()
 
 	// Convert provisioning type string to enum
@@ -338,7 +355,10 @@ func (r *ProjectResource) readProject(ctx context.Context, data *ProjectResource
 			data.Slug = types.StringValue(*project.Attributes.Slug)
 		}
 
-		// Note: ProvisioningType is not available in the API response,
-		// so we keep the value from state (Terraform will maintain it)
+		if data.ProvisioningType.IsNull() {
+			data.ProvisioningType = types.StringValue("on_demand")
+		}
+
+		data.Tags = types.ListNull(types.StringType)
 	}
 }

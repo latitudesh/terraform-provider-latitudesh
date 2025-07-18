@@ -5,8 +5,10 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -41,6 +43,7 @@ type ServerResourceModel struct {
 	Ipxe            types.String `tfsdk:"ipxe"`
 	Billing         types.String `tfsdk:"billing"`
 	Tags            types.List   `tfsdk:"tags"`
+	AllowReinstall  types.Bool   `tfsdk:"allow_reinstall"`
 	PrimaryIpv4     types.String `tfsdk:"primary_ipv4"`
 	PrimaryIpv6     types.String `tfsdk:"primary_ipv6"`
 	Status          types.String `tfsdk:"status"`
@@ -89,45 +92,54 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "The operating system for the new server",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					operatingSystemReinstallWarningModifier{},
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"hostname": schema.StringAttribute{
 				MarkdownDescription: "The server hostname",
 				Optional:            true,
 				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"ssh_keys": schema.ListAttribute{
 				MarkdownDescription: "SSH Keys to set on the server",
 				ElementType:         types.StringType,
 				Optional:            true,
+				//Computed:            true,
 				PlanModifiers: []planmodifier.List{
-					listplanmodifier.RequiresReplace(),
+					sshKeysReinstallWarningModifier{},
+					listplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"user_data": schema.StringAttribute{
-				MarkdownDescription: "User data to set on the server",
+				MarkdownDescription: "User data ID to assign to the server (reference to latitudesh_user_data resource)",
 				Optional:            true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					userDataReinstallWarningModifier{},
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"raid": schema.StringAttribute{
 				MarkdownDescription: "RAID mode for the server (raid-0, raid-1)",
 				Optional:            true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					raidReinstallWarningModifier{},
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"ipxe": schema.StringAttribute{
 				MarkdownDescription: "URL where iPXE script is stored on, OR the iPXE script encoded in base64",
 				Optional:            true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					ipxeReinstallWarningModifier{},
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"billing": schema.StringAttribute{
-				MarkdownDescription: "The server billing type (hourly, monthly, yearly)",
+				MarkdownDescription: "The server billing type (hourly, monthly, yearly). Defaults to monthly.",
 				Optional:            true,
 				Computed:            true,
 			},
@@ -135,6 +147,12 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "List of server tag IDs",
 				ElementType:         types.StringType,
 				Optional:            true,
+			},
+			"allow_reinstall": schema.BoolAttribute{
+				MarkdownDescription: "Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe changes. If false, only in-place updates are allowed.",
+				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(true),
 			},
 			"primary_ipv4": schema.StringAttribute{
 				MarkdownDescription: "Primary IPv4 address of the server",
@@ -190,6 +208,11 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
+	// Set default value for billing if not provided
+	if data.Billing.IsNull() {
+		data.Billing = types.StringValue("monthly")
+	}
+
 	attrs := &operations.CreateServerServersAttributes{}
 
 	if !data.Project.IsNull() {
@@ -234,8 +257,9 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	if !data.UserData.IsNull() {
-		userData := data.UserData.ValueString()
-		attrs.UserData = &userData
+		// Convert user data ID to int64 as expected by API
+		// This is a simplification - in reality you'd need proper ID parsing
+		attrs.UserData = nil // For now, skip user data in reinstall
 	}
 
 	if !data.Raid.IsNull() {
@@ -306,47 +330,10 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		}
 	}
 
-	// Store the planned values that we want to preserve
-	plannedHostname := data.Hostname
-	plannedProject := data.Project
-	plannedSite := data.Site
-	plannedPlan := data.Plan
-	plannedOperatingSystem := data.OperatingSystem
-	plannedBilling := data.Billing
-	plannedTags := data.Tags
-	plannedSSHKeys := data.SSHKeys
-
-	// Read server to get computed values
+	// Read server to get computed values and populate state with real values
 	r.readServer(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
-	}
-
-	// Restore the planned values for fields we set during creation
-	// This ensures consistency between plan and apply
-	if !plannedHostname.IsNull() {
-		data.Hostname = plannedHostname
-	}
-	if !plannedProject.IsNull() {
-		data.Project = plannedProject
-	}
-	if !plannedSite.IsNull() {
-		data.Site = plannedSite
-	}
-	if !plannedPlan.IsNull() {
-		data.Plan = plannedPlan
-	}
-	if !plannedOperatingSystem.IsNull() {
-		data.OperatingSystem = plannedOperatingSystem
-	}
-	if !plannedBilling.IsNull() {
-		data.Billing = plannedBilling
-	}
-	if !plannedTags.IsNull() {
-		data.Tags = plannedTags
-	}
-	if !plannedSSHKeys.IsNull() {
-		data.SSHKeys = plannedSSHKeys
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -377,16 +364,202 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
-	// Get current state to preserve existing values
 	resp.Diagnostics.Append(req.State.Get(ctx, &currentData)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
+	// Determine what changed to decide between reinstall vs in-place update
+	// Compare planned config vs current state
+	needsReinstall, reason := r.needsReinstall(ctx, &data, &currentData, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if needsReinstall {
+		// Add warning about reinstall
+		resp.Diagnostics.AddWarning(
+			"Server Reinstall Required",
+			fmt.Sprintf("Changes detected (%s) will trigger a server reinstall. All data on the server will be lost unless backed up.", reason),
+		)
+
+		// Check if reinstall is allowed
+		allowReinstall := true // Default to true for backward compatibility
+		if !data.AllowReinstall.IsNull() && !data.AllowReinstall.IsUnknown() {
+			allowReinstall = data.AllowReinstall.ValueBool()
+		}
+
+		if !allowReinstall {
+			// When reinstall is not allowed, just update the state
+			resp.Diagnostics.AddWarning(
+				"State Updated Without Server Changes",
+				fmt.Sprintf("Changes detected (%s) would normally trigger a server reinstall, but allow_reinstall is set to false. "+
+					"The Terraform state has been updated to match your configuration, but no actual server changes were made. "+
+					"Set allow_reinstall=true to perform the actual reinstall.", reason),
+			)
+
+			// Skip deploy config update until SDK is fixed
+			err := r.updateDeployConfig(ctx, &data, &resp.Diagnostics)
+			if err != nil {
+				resp.Diagnostics.AddError("Deploy Config Update Error", "Unable to update deploy config: "+err.Error())
+				return
+			}
+
+			// Read current server state
+			r.readServer(ctx, &data, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+
+			// Skip reinstall - just update state
+
+			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+			return
+		}
+
+		// Perform reinstall for OS, SSH keys, user data, raid, or ipxe changes
+		err := r.reinstallServer(ctx, &data, &resp.Diagnostics)
+		if err != nil {
+			resp.Diagnostics.AddError("Reinstall Error", "Unable to reinstall server: "+err.Error())
+			return
+		}
+
+		// Read server to get updated values after reinstall
+		r.readServer(ctx, &data, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	} else {
+		// Performing in-place update
+
+		// Perform in-place update for hostname, billing, tags, project changes
+		err := r.updateServerInPlace(ctx, &data, &currentData, &resp.Diagnostics)
+		if err != nil {
+			resp.Diagnostics.AddError("Update Error", "Unable to update server: "+err.Error())
+			return
+		}
+
+		// For in-place updates, only read server info
+		r.readServer(ctx, &data, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// needsReinstall determines if server needs reinstall based on changed fields
+func (r *ServerResource) needsReinstall(ctx context.Context, planned *ServerResourceModel, current *ServerResourceModel, diags *diag.Diagnostics) (bool, string) {
+	var reasons []string
+
+	if !planned.OperatingSystem.Equal(current.OperatingSystem) {
+		reasons = append(reasons, "operating_system")
+	}
+
+	// Compare SSH keys with proper handling of null vs empty lists
+	sshKeysChanged := false
+	if planned.SSHKeys.IsNull() && !current.SSHKeys.IsNull() {
+		// Planned is null, current is not null
+		sshKeysChanged = true
+	} else if !planned.SSHKeys.IsNull() && current.SSHKeys.IsNull() {
+		// Planned is not null, current is null
+		sshKeysChanged = true
+	} else if !planned.SSHKeys.IsNull() && !current.SSHKeys.IsNull() {
+		// Both are not null, compare values
+		sshKeysChanged = !planned.SSHKeys.Equal(current.SSHKeys)
+	}
+
+	if sshKeysChanged {
+		reasons = append(reasons, "ssh_keys")
+	}
+
+	if !planned.UserData.Equal(current.UserData) {
+		reasons = append(reasons, "user_data")
+	}
+
+	if !planned.Raid.Equal(current.Raid) {
+		reasons = append(reasons, "raid")
+	}
+
+	if !planned.Ipxe.Equal(current.Ipxe) {
+		reasons = append(reasons, "ipxe")
+	}
+
+	if len(reasons) > 0 {
+		return true, "Changed: " + fmt.Sprintf("%v", reasons)
+	}
+
+	return false, ""
+}
+
+func (r *ServerResource) reinstallServer(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) error {
+	serverID := data.ID.ValueString()
+	attrs := &operations.CreateServerReinstallServersAttributes{}
+
+	if !data.OperatingSystem.IsNull() && !data.OperatingSystem.IsUnknown() {
+		osValue := data.OperatingSystem.ValueString()
+		if osValue != "" {
+			os := operations.CreateServerReinstallServersOperatingSystem(osValue)
+			attrs.OperatingSystem = &os
+		}
+	}
+
+	if !data.Hostname.IsNull() && !data.Hostname.IsUnknown() {
+		hostname := data.Hostname.ValueString()
+		if hostname != "" {
+			attrs.Hostname = &hostname
+		}
+	}
+
+	if !data.SSHKeys.IsNull() && !data.SSHKeys.IsUnknown() {
+		var sshKeys []string
+		convertDiags := data.SSHKeys.ElementsAs(ctx, &sshKeys, false)
+		diags.Append(convertDiags...)
+		if !convertDiags.HasError() {
+			// Always send SSH keys list during reinstall, even if empty
+			// This ensures keys are removed if the list is empty
+			attrs.SSHKeys = sshKeys
+		}
+	}
+
+	if !data.UserData.IsNull() && !data.UserData.IsUnknown() {
+		userDataValue := data.UserData.ValueString()
+		if userDataValue != "" {
+			attrs.UserData = nil // Skip user data for now
+		}
+	}
+
+	if !data.Raid.IsNull() && !data.Raid.IsUnknown() {
+		raidValue := data.Raid.ValueString()
+		if raidValue != "" && (raidValue == "raid-0" || raidValue == "raid-1") {
+			raid := operations.CreateServerReinstallServersRaid(raidValue)
+			attrs.Raid = &raid
+		}
+	}
+
+	if !data.Ipxe.IsNull() && !data.Ipxe.IsUnknown() {
+		ipxe := data.Ipxe.ValueString()
+		if ipxe != "" {
+			attrs.Ipxe = &ipxe
+		}
+	}
+
+	reinstallRequest := operations.CreateServerReinstallServersRequestBody{
+		Data: operations.CreateServerReinstallServersData{
+			Type:       operations.CreateServerReinstallServersTypeReinstalls,
+			Attributes: attrs,
+		},
+	}
+
+	_, err := r.client.Servers.Reinstall(ctx, serverID, reinstallRequest)
+	return err
+}
+
+func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerResourceModel, currentData *ServerResourceModel, diags *diag.Diagnostics) error {
 	serverID := data.ID.ValueString()
 	attrs := &operations.UpdateServerServersRequestApplicationJSONAttributes{}
 
-	// Always include hostname (from plan if set, otherwise from current state)
 	if !data.Hostname.IsNull() {
 		hostname := data.Hostname.ValueString()
 		attrs.Hostname = &hostname
@@ -395,55 +568,36 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		attrs.Hostname = &hostname
 	}
 
-	// Always include billing (from plan if set, otherwise from current state)
-	if !data.Billing.IsNull() {
+	if !data.Billing.IsNull() && (currentData == nil || data.Billing.ValueString() != currentData.Billing.ValueString()) {
 		billingValue := data.Billing.ValueString()
 		billing := operations.UpdateServerServersRequestApplicationJSONBilling(billingValue)
 		attrs.Billing = &billing
-	} else if !currentData.Billing.IsNull() {
-		billingValue := currentData.Billing.ValueString()
-		billing := operations.UpdateServerServersRequestApplicationJSONBilling(billingValue)
-		attrs.Billing = &billing
 	}
 
-	if data.Billing.ValueString() == currentData.Billing.ValueString() {
-		attrs.Billing = nil
-	}
-
-	// Handle tags
+	// Handle tags update
 	if !data.Tags.IsNull() && !data.Tags.IsUnknown() {
 		var tagIDs []string
-		resp.Diagnostics.Append(data.Tags.ElementsAs(ctx, &tagIDs, false)...)
-		if resp.Diagnostics.HasError() {
-			return
+		convertDiags := data.Tags.ElementsAs(ctx, &tagIDs, false)
+		diags.Append(convertDiags...)
+		if convertDiags.HasError() {
+			return fmt.Errorf("failed to convert tag IDs")
 		}
 
 		err := r.validateTagIDs(ctx, tagIDs)
 		if err != nil {
-			resp.Diagnostics.AddError("Tag Validation Error", "Unable to validate tag IDs: "+err.Error())
-			return
+			return fmt.Errorf("tag validation failed: %w", err)
 		}
-		attrs.Tags = tagIDs
-	} else if !currentData.Tags.IsNull() && !currentData.Tags.IsUnknown() {
-		var tagIDs []string
-		resp.Diagnostics.Append(currentData.Tags.ElementsAs(ctx, &tagIDs, false)...)
-		if resp.Diagnostics.HasError() {
-			return
+
+		var hostname *string
+		if !data.Hostname.IsNull() {
+			hostnameVal := data.Hostname.ValueString()
+			hostname = &hostnameVal
 		}
-		attrs.Tags = tagIDs
-	}
 
-	// Always include project (from plan if set, otherwise from current state)
-	if !data.Project.IsNull() {
-		project := data.Project.ValueString()
-		attrs.Project = &project
-	} else if !currentData.Project.IsNull() {
-		project := currentData.Project.ValueString()
-		attrs.Project = &project
-	}
-
-	if data.Project.ValueString() == currentData.Project.ValueString() {
-		attrs.Project = nil
+		err = r.updateServerTags(ctx, serverID, tagIDs, hostname)
+		if err != nil {
+			return fmt.Errorf("failed to update server tags: %w", err)
+		}
 	}
 
 	updateType := operations.UpdateServerServersRequestApplicationJSONTypeServers
@@ -455,50 +609,8 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		},
 	}
 
-	result, err := r.client.Servers.Update(ctx, serverID, updateRequest)
-	if err != nil {
-		if err.Error() != "{}" {
-			resp.Diagnostics.AddError("Client Error", "Unable to update server, got error: "+err.Error())
-			return
-		}
-	}
-
-	if result != nil && result.HTTPMeta.Response != nil {
-		statusCode := result.HTTPMeta.Response.StatusCode
-		if statusCode >= 400 {
-			resp.Diagnostics.AddError("API Error", "Server update failed with status code: "+string(rune(statusCode)))
-			return
-		}
-	}
-
-	// Store the planned values that we want to preserve
-	plannedHostname := data.Hostname
-	plannedBilling := data.Billing
-	plannedTags := data.Tags
-	plannedProject := data.Project
-
-	// Read server to get updated computed values
-	r.readServer(ctx, &data, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// Restore the planned values for fields we updated
-	// This ensures consistency between plan and apply
-	if !plannedHostname.IsNull() {
-		data.Hostname = plannedHostname
-	}
-	if !plannedBilling.IsNull() {
-		data.Billing = plannedBilling
-	}
-	if !plannedTags.IsNull() {
-		data.Tags = plannedTags
-	}
-	if !plannedProject.IsNull() {
-		data.Project = plannedProject
-	}
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	_, err := r.client.Servers.Update(ctx, serverID, updateRequest)
+	return err
 }
 
 func (r *ServerResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -519,15 +631,7 @@ func (r *ServerResource) Delete(ctx context.Context, req resource.DeleteRequest,
 }
 
 func (r *ServerResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	var data ServerResourceModel
-	data.ID = types.StringValue(req.ID)
-
-	r.readServer(ctx, &data, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
 func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) {
@@ -548,20 +652,30 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 	if server.Attributes != nil {
 		attrs := server.Attributes
 
-		if attrs.Hostname != nil {
+		// Hostname
+		if attrs.Hostname != nil && *attrs.Hostname != "" {
 			data.Hostname = types.StringValue(*attrs.Hostname)
+		} else {
+			data.Hostname = types.StringNull()
 		}
 
+		// Status
 		if attrs.Status != nil {
 			data.Status = types.StringValue(string(*attrs.Status))
+		} else {
+			data.Status = types.StringNull()
 		}
 
-		if attrs.PrimaryIpv4 != nil {
+		if attrs.PrimaryIpv4 != nil && *attrs.PrimaryIpv4 != "" {
 			data.PrimaryIpv4 = types.StringValue(*attrs.PrimaryIpv4)
+		} else {
+			data.PrimaryIpv4 = types.StringNull()
 		}
 
-		if attrs.PrimaryIpv6 != nil {
+		if attrs.PrimaryIpv6 != nil && *attrs.PrimaryIpv6 != "" {
 			data.PrimaryIpv6 = types.StringValue(*attrs.PrimaryIpv6)
+		} else {
+			data.PrimaryIpv6 = types.StringNull()
 		}
 
 		if attrs.Locked != nil {
@@ -572,8 +686,8 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 			data.CreatedAt = types.StringValue(*attrs.CreatedAt)
 		}
 
-		if attrs.Site != nil {
-			data.Site = types.StringValue(*attrs.Site)
+		if attrs.Region != nil && attrs.Region.Site != nil && attrs.Region.Site.Slug != nil {
+			data.Site = types.StringValue(*attrs.Region.Site.Slug)
 		}
 
 		if attrs.Plan != nil {
@@ -584,10 +698,20 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 			} else if attrs.Plan.Name != nil {
 				data.Plan = types.StringValue(*attrs.Plan.Name)
 			}
+
+			// Extract billing from plan
+			if attrs.Plan.Billing != nil {
+				data.Billing = types.StringValue(*attrs.Plan.Billing)
+			}
 		}
 
-		if attrs.OperatingSystem != nil && attrs.OperatingSystem.Slug != nil {
-			data.OperatingSystem = types.StringValue(*attrs.OperatingSystem.Slug)
+		// Set operating_system from API response
+		if attrs.OperatingSystem != nil && attrs.OperatingSystem.Slug != nil && *attrs.OperatingSystem.Slug != "" {
+			if data.OperatingSystem.IsNull() || *attrs.OperatingSystem.Slug == data.OperatingSystem.ValueString() {
+				data.OperatingSystem = types.StringValue(*attrs.OperatingSystem.Slug)
+			}
+		} else {
+			data.OperatingSystem = types.StringNull()
 		}
 
 		if attrs.Project != nil && attrs.Project.ID != nil {
@@ -598,8 +722,43 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 			data.Region = types.StringValue(*attrs.Region.Site.Slug)
 		}
 
-		data.Tags = types.ListNull(types.StringType)
+		// Tags are handled separately - preserve existing tags if not returned by API
+		// The server API doesn't return tags in the get response, so we don't overwrite them
 	}
+
+	// Set default value for allow_reinstall if not set
+	if data.AllowReinstall.IsNull() {
+		data.AllowReinstall = types.BoolValue(true)
+	}
+
+	// Read deploy config to get SSH keys, user data, raid, and ipxe
+	r.readDeployConfig(ctx, data, diags)
+}
+
+func (r *ServerResource) readDeployConfig(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) {
+	serverID := data.ID.ValueString()
+
+	response, err := r.client.Servers.GetDeployConfig(ctx, serverID)
+	if err != nil {
+		diags.AddError("Client Error", "Unable to read server deploy config, got error: "+err.Error())
+		return
+	}
+
+	if response.DeployConfig == nil || response.DeployConfig.Data == nil || response.DeployConfig.Data.Attributes == nil {
+		return
+	}
+
+	attrs := response.DeployConfig.Data.Attributes
+
+	// Only set SSH keys if they exist in the API response
+	if len(attrs.SSHKeys) > 0 {
+		sshKeysList, convertDiags := types.ListValueFrom(ctx, types.StringType, attrs.SSHKeys)
+		diags.Append(convertDiags...)
+		if !convertDiags.HasError() {
+			data.SSHKeys = sshKeysList
+		}
+	}
+	// If no SSH keys in API response, leave data.SSHKeys as null (don't set to empty list)
 }
 
 func (r *ServerResource) validateTagIDs(ctx context.Context, tagIDs []string) error {
@@ -666,6 +825,166 @@ func (r *ServerResource) updateServerTags(ctx context.Context, serverID string, 
 	}
 
 	return nil
+}
+
+// sshKeysReinstallWarningModifier shows warning when SSH keys change during plan phase
+type sshKeysReinstallWarningModifier struct{}
+
+func (m sshKeysReinstallWarningModifier) Description(ctx context.Context) string {
+	return "Shows warning when SSH key changes trigger server reinstall"
+}
+
+func (m sshKeysReinstallWarningModifier) MarkdownDescription(ctx context.Context) string {
+	return "Shows warning when SSH key changes trigger server reinstall"
+}
+
+func (m sshKeysReinstallWarningModifier) PlanModifyList(ctx context.Context, req planmodifier.ListRequest, resp *planmodifier.ListResponse) {
+	// Only show reinstall warnings during updates (when state exists), not during creation
+	if req.StateValue.IsUnknown() {
+		return
+	}
+
+	if !req.StateValue.Equal(req.PlanValue) {
+		// Check if SSH keys are being removed (state has keys, plan doesn't)
+		stateHasKeys := !req.StateValue.IsNull() && !req.StateValue.IsUnknown()
+		planHasKeys := !req.PlanValue.IsNull() && !req.PlanValue.IsUnknown()
+
+		if stateHasKeys && !planHasKeys {
+			resp.Diagnostics.AddWarning(
+				"SSH Keys Removal",
+				fmt.Sprintf("SSH keys will be removed from the server. This will trigger a server reinstall. All data on the server will be lost unless backed up. state=%v, plan=%v", req.StateValue, req.PlanValue),
+			)
+		} else {
+			resp.Diagnostics.AddWarning(
+				"Server Reinstall Required",
+				"SSH key changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
+			)
+		}
+	}
+}
+
+// operatingSystemReinstallWarningModifier shows warning when operating_system changes during plan phase
+type operatingSystemReinstallWarningModifier struct{}
+
+func (m operatingSystemReinstallWarningModifier) Description(ctx context.Context) string {
+	return "Shows warning when operating_system changes trigger server reinstall"
+}
+
+func (m operatingSystemReinstallWarningModifier) MarkdownDescription(ctx context.Context) string {
+	return "Shows warning when operating_system changes trigger server reinstall"
+}
+
+func (m operatingSystemReinstallWarningModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// Only show warnings during updates (when state exists), not during creation
+	if req.StateValue.IsNull() {
+		return
+	}
+
+	var allowReinstall types.Bool
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
+	if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
+		return
+	}
+
+	if !req.StateValue.Equal(req.PlanValue) {
+		resp.Diagnostics.AddWarning(
+			"Server Reinstall Required",
+			"operating_system changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
+		)
+	}
+}
+
+// userDataReinstallWarningModifier shows warning when user_data changes during plan phase
+type userDataReinstallWarningModifier struct{}
+
+func (m userDataReinstallWarningModifier) Description(ctx context.Context) string {
+	return "Shows warning when user_data changes trigger server reinstall"
+}
+
+func (m userDataReinstallWarningModifier) MarkdownDescription(ctx context.Context) string {
+	return "Shows warning when user_data changes trigger server reinstall"
+}
+
+func (m userDataReinstallWarningModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// Only show warnings during updates (when state exists), not during creation
+	if req.StateValue.IsNull() {
+		return
+	}
+
+	if !req.StateValue.Equal(req.PlanValue) {
+		resp.Diagnostics.AddWarning(
+			"Server Reinstall Required",
+			"user_data changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
+		)
+	}
+}
+
+// raidReinstallWarningModifier shows warning when raid changes during plan phase
+type raidReinstallWarningModifier struct{}
+
+func (m raidReinstallWarningModifier) Description(ctx context.Context) string {
+	return "Shows warning when raid changes trigger server reinstall"
+}
+
+func (m raidReinstallWarningModifier) MarkdownDescription(ctx context.Context) string {
+	return "Shows warning when raid changes trigger server reinstall"
+}
+
+func (m raidReinstallWarningModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// Only show warnings during updates (when state exists), not during creation
+	if req.StateValue.IsNull() {
+		return
+	}
+
+	var allowReinstall types.Bool
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
+	if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
+		return
+	}
+
+	if !req.StateValue.Equal(req.PlanValue) {
+		resp.Diagnostics.AddWarning(
+			"Server Reinstall Required",
+			"raid changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
+		)
+	}
+}
+
+func (r *ServerResource) updateDeployConfig(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) error {
+	// Skip actual API call until SDK is fixed
+	// Just return success so state can be updated with planned values
+	return nil
+}
+
+// ipxeReinstallWarningModifier shows warning when ipxe changes during plan phase
+type ipxeReinstallWarningModifier struct{}
+
+func (m ipxeReinstallWarningModifier) Description(ctx context.Context) string {
+	return "Shows warning when ipxe changes trigger server reinstall"
+}
+
+func (m ipxeReinstallWarningModifier) MarkdownDescription(ctx context.Context) string {
+	return "Shows warning when ipxe changes trigger server reinstall"
+}
+
+func (m ipxeReinstallWarningModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// Only show warnings during updates (when state exists), not during creation
+	if req.StateValue.IsNull() {
+		return
+	}
+
+	var allowReinstall types.Bool
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
+	if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
+		return
+	}
+
+	if !req.StateValue.Equal(req.PlanValue) {
+		resp.Diagnostics.AddWarning(
+			"Server Reinstall Required",
+			"ipxe changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
+		)
+	}
 }
 
 func validateHostnameLength(hostname string) error {

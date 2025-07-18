@@ -56,7 +56,8 @@ func (r *VirtualNetworkResource) Schema(ctx context.Context, req resource.Schema
 			},
 			"project": schema.StringAttribute{
 				MarkdownDescription: "The project (ID or Slug) to deploy the virtual network",
-				Required:            true,
+				Optional:            true,
+				Computed:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -123,13 +124,20 @@ func (r *VirtualNetworkResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
+	// Validate that project is provided during creation
+	if data.Project.IsNull() || data.Project.ValueString() == "" {
+		resp.Diagnostics.AddError(
+			"Missing Required Field",
+			"The project field is required when creating a virtual network.",
+		)
+		return
+	}
+
 	// Prepare attributes for creation
 	attrs := operations.CreateVirtualNetworkPrivateNetworksAttributes{}
 
 	// Required fields
-	if !data.Project.IsNull() {
-		attrs.Project = data.Project.ValueString()
-	}
+	attrs.Project = data.Project.ValueString()
 
 	if !data.Site.IsNull() {
 		siteValue := data.Site.ValueString()
@@ -433,6 +441,9 @@ func (r *VirtualNetworkResource) readVirtualNetwork(ctx context.Context, data *V
 
 		if attrs.Region != nil && attrs.Region.Site != nil && attrs.Region.Site.Slug != nil {
 			data.Region = types.StringValue(*attrs.Region.Site.Slug)
+			data.Site = types.StringValue(*attrs.Region.Site.Slug)
 		}
+
+		data.Tags = types.ListNull(types.StringType)
 	}
 }

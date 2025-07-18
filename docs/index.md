@@ -67,3 +67,32 @@ resource "latitudesh_server" "server" {
   ssh_keys         = [latitudesh_ssh_key.ssh_key.id]
 }
 ```
+
+## Importing existing resources
+
+You can import existing Latitude.sh resources into your Terraform state using the `import` block. This is useful when you have existing infrastructure that you want to manage with Terraform.
+
+Example of importing a server:
+
+```terraform
+terraform {
+  required_providers {
+    latitudesh = {
+      source  = "latitude.sh/iac/latitudesh"
+      version = "2.1.1"
+    }
+  }
+}
+
+import {
+  to = latitudesh_server.server
+  id = "sv_your_server_id_here"
+}
+```
+
+After defining the import block, you can generate the configuration file:
+
+```bash
+terraform plan -generate-config-out=server.tf
+
+This will create a `server.tf` file with the current configuration of your imported server, which you can then customize as needed.

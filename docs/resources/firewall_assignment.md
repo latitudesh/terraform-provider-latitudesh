@@ -63,8 +63,32 @@ resource "latitudesh_firewall_assignment" "web_assignment" {
 - `id` (String) The ID of this resource.
 
 ## Import
-Firewall assignment can be imported using the assignmentID, e.g.,
+Firewall assignment can be imported in two ways:
 
+### Option 1: Using just the assignment ID (recommended)
 ```sh
-$ terraform import latitudesh_firewall_assignment.web_assignment assignmentID
-``` 
+$ terraform import latitudesh_firewall_assignment.web_assignment fwasg_dmkONWje0jL1b
+```
+
+Or using Terraform import blocks:
+```terraform
+import {
+  to = latitudesh_firewall_assignment.web_assignment
+  id = "fwasg_dmkONWje0jL1b"
+}
+```
+
+### Option 2: Using composite ID format
+```sh
+$ terraform import latitudesh_firewall_assignment.web_assignment firewall_abc123:assignment_def456
+```
+
+Or using Terraform import blocks:
+```terraform
+import {
+  to = latitudesh_firewall_assignment.web_assignment
+  id = "firewall_abc123:assignment_def456"
+}
+```
+
+The single assignment ID method is recommended as it's simpler and automatically finds the associated firewall. 

@@ -64,11 +64,13 @@ func (r *MemberResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			},
 			"email": schema.StringAttribute{
 				MarkdownDescription: "Email address of the team member",
-				Required:            true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"role": schema.StringAttribute{
 				MarkdownDescription: "Role of the team member (owner, administrator, collaborator, billing)",
-				Required:            true,
+				Optional:            true,
+				Computed:            true,
 			},
 			// Computed attributes
 			"mfa_enabled": schema.BoolAttribute{
@@ -111,6 +113,23 @@ func (r *MemberResource) Create(ctx context.Context, req resource.CreateRequest,
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Validate that required fields are provided during creation
+	if data.Email.IsNull() || data.Email.ValueString() == "" {
+		resp.Diagnostics.AddError(
+			"Missing Required Field",
+			"The email field is required when creating a member.",
+		)
+		return
+	}
+
+	if data.Role.IsNull() || data.Role.ValueString() == "" {
+		resp.Diagnostics.AddError(
+			"Missing Required Field",
+			"The role field is required when creating a member.",
+		)
 		return
 	}
 

@@ -3,6 +3,7 @@ package latitudesh
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -50,14 +51,16 @@ func (r *FirewallAssignmentResource) Schema(ctx context.Context, req resource.Sc
 			},
 			"firewall_id": schema.StringAttribute{
 				MarkdownDescription: "The ID of the firewall",
-				Required:            true,
+				Optional:            true,
+				Computed:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"server_id": schema.StringAttribute{
 				MarkdownDescription: "The ID of the server to assign the firewall to",
-				Required:            true,
+				Optional:            true,
+				Computed:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -255,8 +258,56 @@ func (r *FirewallAssignmentResource) Delete(ctx context.Context, req resource.De
 }
 
 func (r *FirewallAssignmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	if strings.Contains(req.ID, ":") {
+		parts := strings.Split(req.ID, ":")
+		if len(parts) != 2 {
+			resp.Diagnostics.AddError(
+				"Invalid Import ID Format",
+				"Import ID must be in the format: firewall_id:assignment_id or just assignment_id",
+			)
+			return
+		}
+
+		firewallID := parts[0]
+		assignmentID := parts[1]
+
+		if firewallID == "" || assignmentID == "" {
+			resp.Diagnostics.AddError(
+				"Invalid Import ID",
+				"Both firewall_id and assignment_id must be non-empty",
+			)
+			return
+		}
+
+		var data FirewallAssignmentResourceModel
+		data.ID = types.StringValue(assignmentID)
+		data.FirewallID = types.StringValue(firewallID)
+
+		r.readFirewallAssignment(ctx, &data, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+
+		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+		return
+	}
+
+	assignmentID := req.ID
+	if assignmentID == "" {
+		resp.Diagnostics.AddError(
+			"Invalid Import ID",
+			"Assignment ID cannot be empty",
+		)
+		return
+	}
+
 	var data FirewallAssignmentResourceModel
-	data.ID = types.StringValue(req.ID)
+	data.ID = types.StringValue(assignmentID)
+
+	r.findFirewallForAssignment(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
 	r.readFirewallAssignment(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -319,4 +370,45 @@ func (r *FirewallAssignmentResource) populateAssignmentData(data *FirewallAssign
 			data.ServerID = types.StringValue(*assignment.Attributes.Server.ID)
 		}
 	}
+}
+
+func (r *FirewallAssignmentResource) findFirewallForAssignment(ctx context.Context, data *FirewallAssignmentResourceModel, diags *diag.Diagnostics) {
+	assignmentID := data.ID.ValueString()
+
+	response, err := r.client.Firewalls.List(ctx, nil, nil, nil)
+	if err != nil {
+		diags.AddError("Client Error", "Unable to list firewalls to find assignment, got error: "+err.Error())
+		return
+	}
+
+	if response.Firewalls == nil || response.Firewalls.Data == nil {
+		diags.AddError("API Error", "No firewalls found")
+		return
+	}
+
+	for _, firewall := range response.Firewalls.Data {
+		if firewall.ID == nil {
+			continue
+		}
+
+		firewallID := *firewall.ID
+
+		assignmentsResp, err := r.client.Firewalls.ListAssignments(ctx, firewallID, nil, nil)
+		if err != nil {
+			continue
+		}
+
+		if assignmentsResp.FirewallAssignments == nil || assignmentsResp.FirewallAssignments.Data == nil {
+			continue
+		}
+
+		for _, assignment := range assignmentsResp.FirewallAssignments.Data {
+			if assignment.ID != nil && *assignment.ID == assignmentID {
+				data.FirewallID = types.StringValue(firewallID)
+				return
+			}
+		}
+	}
+
+	diags.AddError("Assignment Not Found", fmt.Sprintf("Assignment %s not found in any firewall", assignmentID))
 }
