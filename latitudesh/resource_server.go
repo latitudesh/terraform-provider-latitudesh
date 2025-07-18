@@ -94,7 +94,6 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				PlanModifiers: []planmodifier.String{
 					operatingSystemReinstallWarningModifier{},
 					stringplanmodifier.UseStateForUnknown(),
-					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"hostname": schema.StringAttribute{
@@ -113,17 +112,14 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				PlanModifiers: []planmodifier.List{
 					sshKeysReinstallWarningModifier{},
 					listplanmodifier.UseStateForUnknown(),
-					listplanmodifier.RequiresReplace(),
 				},
 			},
 			"user_data": schema.StringAttribute{
 				MarkdownDescription: "User data ID to assign to the server (reference to latitudesh_user_data resource)",
 				Optional:            true,
-
 				PlanModifiers: []planmodifier.String{
 					userDataReinstallWarningModifier{},
 					stringplanmodifier.UseStateForUnknown(),
-					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"raid": schema.StringAttribute{
@@ -131,6 +127,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Optional:            true,
 				PlanModifiers: []planmodifier.String{
 					raidReinstallWarningModifier{},
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"ipxe": schema.StringAttribute{
@@ -138,6 +135,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Optional:            true,
 				PlanModifiers: []planmodifier.String{
 					ipxeReinstallWarningModifier{},
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"billing": schema.StringAttribute{
