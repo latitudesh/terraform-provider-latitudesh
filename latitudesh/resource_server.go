@@ -846,12 +846,6 @@ func (m sshKeysReinstallWarningModifier) PlanModifyList(ctx context.Context, req
 		return
 	}
 
-	// var allowReinstall types.Bool
-	// resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
-	// if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
-	// 	return
-	// }
-
 	if !req.StateValue.Equal(req.PlanValue) {
 		// Check if SSH keys are being removed (state has keys, plan doesn't)
 		stateHasKeys := !req.StateValue.IsNull() && !req.StateValue.IsUnknown()
@@ -918,12 +912,6 @@ func (m userDataReinstallWarningModifier) PlanModifyString(ctx context.Context, 
 	if req.StateValue.IsNull() {
 		return
 	}
-
-	// var allowReinstall types.Bool
-	// resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
-	// if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
-	// 	return
-	// }
 
 	if !req.StateValue.Equal(req.PlanValue) {
 		resp.Diagnostics.AddWarning(
