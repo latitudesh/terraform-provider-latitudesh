@@ -8,6 +8,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -91,6 +93,8 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
 					operatingSystemReinstallWarningModifier{},
+					stringplanmodifier.UseStateForUnknown(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"hostname": schema.StringAttribute{
@@ -105,15 +109,21 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "SSH Keys to set on the server",
 				ElementType:         types.StringType,
 				Optional:            true,
+				//Computed:            true,
 				PlanModifiers: []planmodifier.List{
 					sshKeysReinstallWarningModifier{},
+					listplanmodifier.UseStateForUnknown(),
+					listplanmodifier.RequiresReplace(),
 				},
 			},
 			"user_data": schema.StringAttribute{
 				MarkdownDescription: "User data ID to assign to the server (reference to latitudesh_user_data resource)",
 				Optional:            true,
+
 				PlanModifiers: []planmodifier.String{
 					userDataReinstallWarningModifier{},
+					stringplanmodifier.UseStateForUnknown(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"raid": schema.StringAttribute{
@@ -143,6 +153,8 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			"allow_reinstall": schema.BoolAttribute{
 				MarkdownDescription: "Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe changes. If false, only in-place updates are allowed.",
 				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(true),
 			},
 			"primary_ipv4": schema.StringAttribute{
 				MarkdownDescription: "Primary IPv4 address of the server",
@@ -320,70 +332,10 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		}
 	}
 
-	// Read server to get computed values
+	// Read server to get computed values and populate state with real values
 	r.readServer(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
-	}
-
-	// Restore the planned values for fields we set during creation
-	// This ensures consistency between plan and apply
-	plannedHostname := data.Hostname
-	plannedProject := data.Project
-	plannedSite := data.Site
-	plannedPlan := data.Plan
-	plannedOperatingSystem := data.OperatingSystem
-	plannedBilling := data.Billing
-	plannedTags := data.Tags
-	plannedSSHKeys := data.SSHKeys
-	plannedUserData := data.UserData
-	plannedRaid := data.Raid
-	plannedIpxe := data.Ipxe
-	plannedAllowReinstall := data.AllowReinstall
-
-	// Read server to get computed values
-	r.readServer(ctx, &data, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// Restore the planned values for fields we set during creation
-	// This ensures consistency between plan and apply
-	if !plannedHostname.IsNull() {
-		data.Hostname = plannedHostname
-	}
-	if !plannedProject.IsNull() {
-		data.Project = plannedProject
-	}
-	if !plannedSite.IsNull() {
-		data.Site = plannedSite
-	}
-	if !plannedPlan.IsNull() {
-		data.Plan = plannedPlan
-	}
-	if !plannedOperatingSystem.IsNull() {
-		data.OperatingSystem = plannedOperatingSystem
-	}
-	if !plannedBilling.IsNull() {
-		data.Billing = plannedBilling
-	}
-	if !plannedTags.IsNull() {
-		data.Tags = plannedTags
-	}
-	if !plannedSSHKeys.IsNull() {
-		data.SSHKeys = plannedSSHKeys
-	}
-	if !plannedUserData.IsNull() {
-		data.UserData = plannedUserData
-	}
-	if !plannedRaid.IsNull() {
-		data.Raid = plannedRaid
-	}
-	if !plannedIpxe.IsNull() {
-		data.Ipxe = plannedIpxe
-	}
-	if !plannedAllowReinstall.IsNull() && !plannedAllowReinstall.IsUnknown() {
-		data.AllowReinstall = plannedAllowReinstall
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -414,7 +366,6 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
-	// Get current state to compare changes
 	resp.Diagnostics.Append(req.State.Get(ctx, &currentData)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -450,11 +401,11 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 			)
 
 			// Skip deploy config update until SDK is fixed
-			// err := r.updateDeployConfig(ctx, &data, &resp.Diagnostics)
-			// if err != nil {
-			// 	resp.Diagnostics.AddError("Deploy Config Update Error", "Unable to update deploy config: "+err.Error())
-			// 	return
-			// }
+			err := r.updateDeployConfig(ctx, &data, &resp.Diagnostics)
+			if err != nil {
+				resp.Diagnostics.AddError("Deploy Config Update Error", "Unable to update deploy config: "+err.Error())
+				return
+			}
 
 			// Read current server state
 			r.readServer(ctx, &data, &resp.Diagnostics)
@@ -467,8 +418,6 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 			return
 		}
-
-		// Performing reinstall due to: " + reason
 
 		// Perform reinstall for OS, SSH keys, user data, raid, or ipxe changes
 		err := r.reinstallServer(ctx, &data, &resp.Diagnostics)
@@ -510,7 +459,20 @@ func (r *ServerResource) needsReinstall(ctx context.Context, planned *ServerReso
 		reasons = append(reasons, "operating_system")
 	}
 
-	if !planned.SSHKeys.Equal(current.SSHKeys) {
+	// Compare SSH keys with proper handling of null vs empty lists
+	sshKeysChanged := false
+	if planned.SSHKeys.IsNull() && !current.SSHKeys.IsNull() {
+		// Planned is null, current is not null
+		sshKeysChanged = true
+	} else if !planned.SSHKeys.IsNull() && current.SSHKeys.IsNull() {
+		// Planned is not null, current is null
+		sshKeysChanged = true
+	} else if !planned.SSHKeys.IsNull() && !current.SSHKeys.IsNull() {
+		// Both are not null, compare values
+		sshKeysChanged = !planned.SSHKeys.Equal(current.SSHKeys)
+	}
+
+	if sshKeysChanged {
 		reasons = append(reasons, "ssh_keys")
 	}
 
@@ -556,7 +518,9 @@ func (r *ServerResource) reinstallServer(ctx context.Context, data *ServerResour
 		var sshKeys []string
 		convertDiags := data.SSHKeys.ElementsAs(ctx, &sshKeys, false)
 		diags.Append(convertDiags...)
-		if !convertDiags.HasError() && len(sshKeys) > 0 {
+		if !convertDiags.HasError() {
+			// Always send SSH keys list during reinstall, even if empty
+			// This ensures keys are removed if the list is empty
 			attrs.SSHKeys = sshKeys
 		}
 	}
@@ -606,12 +570,8 @@ func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerRe
 		attrs.Hostname = &hostname
 	}
 
-	if !data.Billing.IsNull() {
+	if !data.Billing.IsNull() && (currentData == nil || data.Billing.ValueString() != currentData.Billing.ValueString()) {
 		billingValue := data.Billing.ValueString()
-		billing := operations.UpdateServerServersRequestApplicationJSONBilling(billingValue)
-		attrs.Billing = &billing
-	} else if !currentData.Billing.IsNull() {
-		billingValue := currentData.Billing.ValueString()
 		billing := operations.UpdateServerServersRequestApplicationJSONBilling(billingValue)
 		attrs.Billing = &billing
 	}
@@ -673,15 +633,7 @@ func (r *ServerResource) Delete(ctx context.Context, req resource.DeleteRequest,
 }
 
 func (r *ServerResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	var data ServerResourceModel
-	data.ID = types.StringValue(req.ID)
-
-	r.readServer(ctx, &data, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
 func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) {
@@ -702,20 +654,30 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 	if server.Attributes != nil {
 		attrs := server.Attributes
 
-		if attrs.Hostname != nil {
+		// Hostname
+		if attrs.Hostname != nil && *attrs.Hostname != "" {
 			data.Hostname = types.StringValue(*attrs.Hostname)
+		} else {
+			data.Hostname = types.StringNull()
 		}
 
+		// Status
 		if attrs.Status != nil {
 			data.Status = types.StringValue(string(*attrs.Status))
+		} else {
+			data.Status = types.StringNull()
 		}
 
-		if attrs.PrimaryIpv4 != nil {
+		if attrs.PrimaryIpv4 != nil && *attrs.PrimaryIpv4 != "" {
 			data.PrimaryIpv4 = types.StringValue(*attrs.PrimaryIpv4)
+		} else {
+			data.PrimaryIpv4 = types.StringNull()
 		}
 
-		if attrs.PrimaryIpv6 != nil {
+		if attrs.PrimaryIpv6 != nil && *attrs.PrimaryIpv6 != "" {
 			data.PrimaryIpv6 = types.StringValue(*attrs.PrimaryIpv6)
+		} else {
+			data.PrimaryIpv6 = types.StringNull()
 		}
 
 		if attrs.Locked != nil {
@@ -745,7 +707,14 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 			}
 		}
 
-		// operating_system is preserved from user configuration, not overwritten from API
+		// Set operating_system from API response
+		if attrs.OperatingSystem != nil && attrs.OperatingSystem.Slug != nil && *attrs.OperatingSystem.Slug != "" {
+			if data.OperatingSystem.IsNull() || *attrs.OperatingSystem.Slug == data.OperatingSystem.ValueString() {
+				data.OperatingSystem = types.StringValue(*attrs.OperatingSystem.Slug)
+			}
+		} else {
+			data.OperatingSystem = types.StringNull()
+		}
 
 		if attrs.Project != nil && attrs.Project.ID != nil {
 			data.Project = types.StringValue(*attrs.Project.ID)
@@ -758,11 +727,40 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 		// Tags are handled separately - preserve existing tags if not returned by API
 		// The server API doesn't return tags in the get response, so we don't overwrite them
 	}
+
+	// Set default value for allow_reinstall if not set
+	if data.AllowReinstall.IsNull() {
+		data.AllowReinstall = types.BoolValue(true)
+	}
+
+	// Read deploy config to get SSH keys, user data, raid, and ipxe
+	r.readDeployConfig(ctx, data, diags)
 }
 
 func (r *ServerResource) readDeployConfig(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) {
-	// Deploy config reading is no longer needed since no fields are computed from it
-	return
+	serverID := data.ID.ValueString()
+
+	response, err := r.client.Servers.GetDeployConfig(ctx, serverID)
+	if err != nil {
+		diags.AddError("Client Error", "Unable to read server deploy config, got error: "+err.Error())
+		return
+	}
+
+	if response.DeployConfig == nil || response.DeployConfig.Data == nil || response.DeployConfig.Data.Attributes == nil {
+		return
+	}
+
+	attrs := response.DeployConfig.Data.Attributes
+
+	// Only set SSH keys if they exist in the API response
+	if len(attrs.SSHKeys) > 0 {
+		sshKeysList, convertDiags := types.ListValueFrom(ctx, types.StringType, attrs.SSHKeys)
+		diags.Append(convertDiags...)
+		if !convertDiags.HasError() {
+			data.SSHKeys = sshKeysList
+		}
+	}
+	// If no SSH keys in API response, leave data.SSHKeys as null (don't set to empty list)
 }
 
 func (r *ServerResource) validateTagIDs(ctx context.Context, tagIDs []string) error {
@@ -843,22 +841,33 @@ func (m sshKeysReinstallWarningModifier) MarkdownDescription(ctx context.Context
 }
 
 func (m sshKeysReinstallWarningModifier) PlanModifyList(ctx context.Context, req planmodifier.ListRequest, resp *planmodifier.ListResponse) {
-	// Only show warnings during updates (when state exists), not during creation
-	if req.StateValue.IsNull() {
+	// Only show reinstall warnings during updates (when state exists), not during creation
+	if req.StateValue.IsUnknown() {
 		return
 	}
 
-	var allowReinstall types.Bool
-	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
-	if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
-		return
-	}
+	// var allowReinstall types.Bool
+	// resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
+	// if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
+	// 	return
+	// }
 
 	if !req.StateValue.Equal(req.PlanValue) {
-		resp.Diagnostics.AddWarning(
-			"Server Reinstall Required",
-			"SSH key changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
-		)
+		// Check if SSH keys are being removed (state has keys, plan doesn't)
+		stateHasKeys := !req.StateValue.IsNull() && !req.StateValue.IsUnknown()
+		planHasKeys := !req.PlanValue.IsNull() && !req.PlanValue.IsUnknown()
+
+		if stateHasKeys && !planHasKeys {
+			resp.Diagnostics.AddWarning(
+				"SSH Keys Removal",
+				fmt.Sprintf("SSH keys will be removed from the server. This will trigger a server reinstall. All data on the server will be lost unless backed up. state=%v, plan=%v", req.StateValue, req.PlanValue),
+			)
+		} else {
+			resp.Diagnostics.AddWarning(
+				"Server Reinstall Required",
+				"SSH key changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
+			)
+		}
 	}
 }
 
@@ -910,11 +919,11 @@ func (m userDataReinstallWarningModifier) PlanModifyString(ctx context.Context, 
 		return
 	}
 
-	var allowReinstall types.Bool
-	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
-	if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
-		return
-	}
+	// var allowReinstall types.Bool
+	// resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
+	// if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
+	// 	return
+	// }
 
 	if !req.StateValue.Equal(req.PlanValue) {
 		resp.Diagnostics.AddWarning(
