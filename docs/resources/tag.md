@@ -36,8 +36,36 @@ resource "latitudesh_tag" "tag" {
 - `id` (String) The ID of this resource.
 
 ## Import
-Tag can be imported using the TagID along with the projectID that contains the Tag, e.g.,
+
+You can import a Tag resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_tag` resource can be imported by specifying the Tag ID:
 
 ```sh
-$ terraform import latitudesh_tag.tag TagID
+terraform import latitudesh_tag.tag <TAG_ID>
 ```
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration. This feature is experimental and may change in future Terraform releases. See the [Terraform documentation for details](https://developer.hashicorp.com/terraform/language/import).
+
+To use this method, create a file named `import.tf` (or any `.tf` file) with the following content:
+
+```hcl
+import {
+  to = latitudesh_tag.tag
+  id = "<TAG_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_tag.tf
+```
+
+This will generate the resource configuration for the imported tag resource.
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.

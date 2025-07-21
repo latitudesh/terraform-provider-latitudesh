@@ -40,8 +40,9 @@ resource "latitudesh_project" "project" {
 - `updated` (String) The timestamp for the last time the project was updated
 
 ## Import
-Project can be imported using the projectID, e.g.,
 
-```sh
-$ terraform import latitudesh_project.project projectID
+The `latitudesh_project` resource can be imported by specifying its ID:
+
+```bash
+$ terraform import latitudesh_project.my_project <PROJECT_ID>
 ```

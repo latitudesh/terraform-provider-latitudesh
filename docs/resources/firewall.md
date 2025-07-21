@@ -75,8 +75,36 @@ Read-Only:
 - `default` (Boolean) Whether this is a default rule
 
 ## Import
-Firewall can be imported using the firewallID, e.g.,
+
+You can import a Firewall resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_firewall` resource can be imported by specifying the Firewall ID:
 
 ```sh
-$ terraform import latitudesh_firewall.web_firewall firewallID
-``` 
+terraform import latitudesh_firewall.web_firewall <FIREWALL_ID>
+```
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration. This feature is experimental and may change in future Terraform releases. See the [Terraform documentation for details](https://developer.hashicorp.com/terraform/language/import).
+
+To use this method, create a file named `import.tf` (or any `.tf` file) with the following content:
+
+```hcl
+import {
+  to = latitudesh_firewall.web_firewall
+  id = "<FIREWALL_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_firewall.tf
+```
+
+This will generate the resource configuration for the imported firewall resource.
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.

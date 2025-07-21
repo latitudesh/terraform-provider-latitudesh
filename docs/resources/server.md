@@ -71,8 +71,36 @@ output "server_ipv6" {
 - `updated` (String) The timestamp for the last time the server was updated
 
 ## Import
-Server can be imported using the serverID, e.g.,
+
+You can import a Server resource using either the CLI method or the new [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_server` resource can be imported by specifying its ID:
 
 ```sh
-$ terraform import latitudesh_server.server serverID
+terraform import latitudesh_server.my_server <SERVER_ID>
 ```
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration. This feature is experimental and may change in future Terraform releases. See the [Terraform documentation for details](https://developer.hashicorp.com/terraform/language/import).
+
+To use this method, create a file named `import.tf` (or any `.tf` file) with the following content:
+
+```hcl
+import {
+  to = latitudesh_server.my_server
+  id = "<SERVER_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_server.tf
+```
+
+This will generate the resource configuration for the imported server resource.
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.
