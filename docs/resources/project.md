@@ -40,8 +40,36 @@ resource "latitudesh_project" "project" {
 - `updated` (String) The timestamp for the last time the project was updated
 
 ## Import
-Project can be imported using the projectID, e.g.,
+
+You can import a Project resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_project` resource can be imported by specifying the Project ID:
 
 ```sh
-$ terraform import latitudesh_project.project projectID
+terraform import latitudesh_project.my_project <PROJECT_ID>
 ```
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration. This feature is experimental and may change in future Terraform releases. See the [Terraform documentation for details](https://developer.hashicorp.com/terraform/language/import).
+
+To use this method, create a file named `import.tf` (or any `.tf` file) with the following content:
+
+```hcl
+import {
+  to = latitudesh_project.my_project
+  id = "<PROJECT_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_project.tf
+```
+
+This will generate the resource configuration for the imported project resource.
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.
