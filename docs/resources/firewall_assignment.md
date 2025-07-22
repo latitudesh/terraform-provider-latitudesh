@@ -63,8 +63,53 @@ resource "latitudesh_firewall_assignment" "web_assignment" {
 - `id` (String) The ID of this resource.
 
 ## Import
-Firewall assignment can be imported using the assignmentID, e.g.,
+
+You can import a Firewall Assignment resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_firewall_assignment` resource can be imported by specifying the [Firewall assignment](https://docs.latitude.sh/reference/get-firewall-assignments) ID:
 
 ```sh
-$ terraform import latitudesh_firewall_assignment.web_assignment assignmentID
-``` 
+terraform import latitudesh_firewall_assignment.web_assignment <FW_ASSIGNMENT_ID>
+```
+
+**Alternative: Composite ID Format**
+
+You can also import using the composite ID format (firewall ID and firewall assignment ID separated by a colon):
+
+```sh
+terraform import latitudesh_firewall_assignment.web_assignment <FIREWALL_ID>:<FW_ASSIGNMENT_ID>
+```
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration. This feature is experimental and may change in future Terraform releases. See the [Terraform documentation for details](https://developer.hashicorp.com/terraform/language/import).
+
+To use this method, create a file named `import.tf` (or any `.tf` file) with the following content:
+
+```hcl
+import {
+  to = latitudesh_firewall_assignment.web_assignment
+  id = "<FW_ASSIGNMENT_ID>"
+}
+```
+
+Or, using the composite ID format:
+
+```hcl
+import {
+  to = latitudesh_firewall_assignment.web_assignment
+  id = "<FIREWALL_ID>:<FW_ASSIGNMENT_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_firewall_assignment.tf
+```
+
+This will generate the resource configuration for the imported firewall assignment resource.
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions. 

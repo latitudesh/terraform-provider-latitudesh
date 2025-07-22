@@ -39,7 +39,36 @@ resource "latitudesh_member" "member" {
 - `mfa_enabled` (String) The member mfa status
 
 ## Import
-Member can be imported using the MemberID, e.g.,
+
+You can import a Member resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_member` resource can be imported by specifying the Member ID:
 
 ```sh
-$ terraform import latitudesh_member.member MemberID
+terraform import latitudesh_member.member <MEMBER_ID>
+```
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration. This feature is experimental and may change in future Terraform releases. See the [Terraform documentation for details](https://developer.hashicorp.com/terraform/language/import).
+
+To use this method, create a file named `import.tf` (or any `.tf` file) with the following content:
+
+```hcl
+import {
+  to = latitudesh_member.member
+  id = "<MEMBER_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_member.tf
+```
+
+This will generate the resource configuration for the imported member resource.
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.

@@ -39,8 +39,36 @@ resource "latitudesh_virtual_network" "virtual_network" {
 - `vid` (Number) The vlan ID of the virtual network
 
 ## Import
-VirtualNetwork can be imported using the VirtualNetworkID along with the projectID that contains the VirtualNetwork, e.g.,
+
+You can import a Virtual Network resource using either the CLI method or the new [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_virtual_network` resource can be imported by specifying its ID:
 
 ```sh
-$ terraform import latitudesh_virtual_network.virtual_network projectID:VirtualNetworkID
+terraform import latitudesh_virtual_network.virtual_network <VIRTUAL_NETWORK_ID>
 ```
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration. This feature is experimental and may change in future Terraform releases. See the [Terraform documentation for details](https://developer.hashicorp.com/terraform/language/import).
+
+To use this method, create a file named `import.tf` (or any `.tf` file) with the following content:
+
+```hcl
+import {
+  to = latitudesh_virtual_network.virtual_network
+  id = "<VIRTUAL_NETWORK_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_virtual_network.tf
+```
+
+This will generate the resource configuration for the imported virtual network resource.
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.

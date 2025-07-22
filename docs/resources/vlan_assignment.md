@@ -36,8 +36,9 @@ resource "latitudesh_vlan_assignment" "vlan_assignment" {
 - `vid` (Number) The vlan ID of the virtual network
 
 ## Import
-VlanAssignment can be imported using the VlanAssignmentID along with the projectID that contains the VirtualNetwork, e.g.,
+
+The `latitudesh_vlan_assignment` resource can be imported by specifying the project ID and VLAN assignment ID separated by a colon:
 
 ```sh
-$ terraform import latitudesh_vlan_assignment.vlan_assignment projectID:VlanAssignmentID
+terraform import latitudesh_vlan_assignment.vlan_assignment <PROJECT_ID>:<VLAN_ASSIGNMENT_ID>
 ```
