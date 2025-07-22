@@ -184,6 +184,9 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			"interfaces": schema.ListNestedAttribute{
 				MarkdownDescription: "List of network interfaces",
 				Computed:            true,
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"name": schema.StringAttribute{
