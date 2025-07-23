@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -50,6 +51,7 @@ type ServerResourceModel struct {
 	Locked          types.Bool   `tfsdk:"locked"`
 	CreatedAt       types.String `tfsdk:"created_at"`
 	Region          types.String `tfsdk:"region"`
+	Interfaces      types.List   `tfsdk:"interfaces"`
 }
 
 func (r *ServerResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -178,6 +180,29 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			"region": schema.StringAttribute{
 				MarkdownDescription: "The region where the server is deployed",
 				Computed:            true,
+			},
+			"interfaces": schema.ListNestedAttribute{
+				MarkdownDescription: "List of network interfaces",
+				Computed:            true,
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"name": schema.StringAttribute{
+							MarkdownDescription: "Interface name",
+							Computed:            true,
+						},
+						"mac_address": schema.StringAttribute{
+							MarkdownDescription: "MAC address",
+							Computed:            true,
+						},
+						"description": schema.StringAttribute{
+							MarkdownDescription: "Description",
+							Computed:            true,
+						},
+					},
+				},
 			},
 		},
 	}
@@ -722,9 +747,43 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 			data.Region = types.StringValue(*attrs.Region.Site.Slug)
 		}
 
-		// Tags are handled separately - preserve existing tags if not returned by API
-		// The server API doesn't return tags in the get response, so we don't overwrite them
+		if attrs.Interfaces != nil {
+			var ifaceObjs []attr.Value
+
+			for _, iface := range attrs.Interfaces {
+				var nameVal, macVal, descVal attr.Value
+
+				nameVal = optionalString(iface.Name)
+				macVal = optionalString(iface.MacAddress)
+				descVal = optionalString(iface.Description)
+
+				obj, _ := types.ObjectValue(
+					map[string]attr.Type{
+						"name":        types.StringType,
+						"mac_address": types.StringType,
+						"description": types.StringType,
+					},
+					map[string]attr.Value{
+						"name":        nameVal,
+						"mac_address": macVal,
+						"description": descVal,
+					},
+				)
+				ifaceObjs = append(ifaceObjs, obj)
+			}
+
+			list, diags2 := listIfaces(ifaceObjs)
+			diags.Append(diags2...)
+			data.Interfaces = list
+		} else {
+			data.Interfaces = emptyIfaces()
+		}
+	} else {
+		data.Interfaces = emptyIfaces()
 	}
+
+	// Tags are handled separately - preserve existing tags if not returned by API
+	// The server API doesn't return tags in the get response, so we don't overwrite them
 
 	// Set default value for allow_reinstall if not set
 	if data.AllowReinstall.IsNull() {
