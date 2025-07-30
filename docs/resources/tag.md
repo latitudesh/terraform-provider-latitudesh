@@ -7,15 +7,16 @@ description: |-
 
 # latitudesh_tag (Resource)
 
-
+Latitude.sh supports resource tagging to help you organize and manage your infrastructure more effectively.
+Tags allow you to categorize resources, making it easier to search, filter, and group them based on your specific needs.
 
 ## Example usage
 
-```terraform
+```hcl
 resource "latitudesh_tag" "tag" {
-  name          = "Tag Name"
-  description   = "Tag Description"
-  color         = "#ff0000"
+  name        = "Tag Name"
+  description = "Tag Description"
+  color       = "#ff0000"
 }
 ```
 
@@ -24,7 +25,7 @@ resource "latitudesh_tag" "tag" {
 
 ### Required
 
-- `color` (String) The tag color
+- `color` (String) The tag color (hex format, **lowercase**, e.g. `#ff0000`)
 - `name` (String) The tag name
 
 ### Optional
