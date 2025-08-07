@@ -177,7 +177,7 @@ func TestAccTag_UpdateColorOnlyCasing(t *testing.T) {
 			{
 				Config:             testAccCheckTagWithMixedCaseColor(),
 				PlanOnly:           true,
-				ExpectNonEmptyPlan: false, // Espera que nenhum diff ocorra
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})
