@@ -10,21 +10,43 @@ import (
 
 type LowercaseStringModifier struct{}
 
-var _ planmodifier.String = LowercaseStringModifier{}
+var _ planmodifier.String = &LowercaseStringModifier{}
 
-func (m LowercaseStringModifier) Description(_ context.Context) string {
-	return "Normalizes the string value to lowercase during the plan phase."
+func (m *LowercaseStringModifier) Description(_ context.Context) string {
+	return "Normalizes string values to lowercase in state, but keeps the original config casing when equivalent."
 }
 
-func (m LowercaseStringModifier) MarkdownDescription(ctx context.Context) string {
+func (m *LowercaseStringModifier) MarkdownDescription(ctx context.Context) string {
 	return m.Description(ctx)
 }
 
-func (m LowercaseStringModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
-	if req.PlanValue.IsUnknown() || req.PlanValue.IsNull() {
+func (m *LowercaseStringModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	if req.ConfigValue.IsUnknown() || req.ConfigValue.IsNull() {
+		resp.PlanValue = req.ConfigValue
 		return
 	}
 
-	val := req.PlanValue.ValueString()
-	resp.PlanValue = types.StringValue(strings.ToLower(val))
+	configRaw := req.ConfigValue.ValueString()
+	stateRaw := getStringIfKnown(req.StateValue)
+
+	switch {
+	case req.StateValue.IsNull() || req.StateValue.IsUnknown():
+		// New resource
+		resp.PlanValue = req.ConfigValue
+
+	case strings.EqualFold(configRaw, stateRaw):
+		// Same value
+		resp.PlanValue = req.StateValue
+
+	default:
+		// Different value
+		resp.PlanValue = req.ConfigValue
+	}
+}
+
+func getStringIfKnown(v types.String) string {
+	if v.IsNull() || v.IsUnknown() {
+		return ""
+	}
+	return v.ValueString()
 }

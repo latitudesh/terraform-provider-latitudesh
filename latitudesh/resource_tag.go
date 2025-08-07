@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -13,11 +14,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
-
 	"github.com/latitudesh/terraform-provider-latitudesh/internal/modifiers"
 )
 
@@ -64,16 +63,18 @@ func (r *TagResource) Schema(ctx context.Context, req resource.SchemaRequest, re
 				Optional:            true,
 			},
 			"color": schema.StringAttribute{
-				MarkdownDescription: "The tag color (hex color code)",
+				MarkdownDescription: "The tag color (hex color code, e.g., #ff0000). The API normalizes colors to lowercase.",
 				Optional:            true,
+				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+					&modifiers.LowercaseStringModifier{},
+				},
 				Validators: []validator.String{
 					stringvalidator.RegexMatches(
-						regexp.MustCompile(`^#[0-9a-f]{6}$`),
-						"must be a lowercase hex color (e.g., #ff0000)",
+						regexp.MustCompile(`^#[0-9a-fA-F]{6}$`),
+						"Color must be a valid 6-digit hexadecimal starting with #, like #ff0000",
 					),
-				},
-				PlanModifiers: []planmodifier.String{
-					modifiers.LowercaseStringModifier{},
 				},
 			},
 			"slug": schema.StringAttribute{
@@ -115,15 +116,26 @@ func (r *TagResource) Create(ctx context.Context, req resource.CreateRequest, re
 	name := data.Name.ValueString()
 	color := data.Color.ValueString()
 
-	attrs := &operations.CreateTagTagsAttributes{
-		Name:  &name,
-		Color: &color,
+	if color == "" {
+		resp.Diagnostics.AddError(
+			"Missing Required Field",
+			"The color field is required and cannot be empty.",
+		)
+		return
 	}
 
-	// Add optional description
+	attrs := &operations.CreateTagTagsAttributes{
+		Name: &name,
+	}
+
 	if !data.Description.IsNull() {
 		desc := data.Description.ValueString()
 		attrs.Description = &desc
+	}
+
+	if !data.Color.IsNull() {
+		color := normalizeHexColor(data.Color.ValueString())
+		attrs.Color = &color
 	}
 
 	createTagType := operations.CreateTagTagsTypeTags
@@ -154,7 +166,6 @@ func (r *TagResource) Create(ctx context.Context, req resource.CreateRequest, re
 		data.ID = types.StringValue(tagID)
 	}
 
-	// Read the resource to populate all attributes
 	r.readTag(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -191,15 +202,26 @@ func (r *TagResource) Update(ctx context.Context, req resource.UpdateRequest, re
 	name := data.Name.ValueString()
 	color := data.Color.ValueString()
 
-	attrs := &operations.UpdateTagTagsAttributes{
-		Name:  &name,
-		Color: &color,
+	if color == "" {
+		resp.Diagnostics.AddError(
+			"Missing Required Field",
+			"The color field is required and cannot be empty.",
+		)
+		return
 	}
 
-	// Add optional description
+	attrs := &operations.UpdateTagTagsAttributes{
+		Name: &name,
+	}
+
 	if !data.Description.IsNull() {
 		desc := data.Description.ValueString()
 		attrs.Description = &desc
+	}
+
+	if !data.Color.IsNull() {
+		color := normalizeHexColor(data.Color.ValueString())
+		attrs.Color = &color
 	}
 
 	updateTagType := operations.UpdateTagTagsTypeTags
@@ -217,7 +239,6 @@ func (r *TagResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		return
 	}
 
-	// Read the resource to populate all attributes
 	r.readTag(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -289,18 +310,35 @@ func (r *TagResource) readTag(ctx context.Context, data *TagResourceModel, diags
 			data.Name = types.StringValue(*foundTag.Attributes.Name)
 		}
 
-		if foundTag.Attributes.Description != nil {
-			data.Description = types.StringValue(*foundTag.Attributes.Description)
+		if foundTag.Attributes.Description != nil && *foundTag.Attributes.Description != "" {
+			data.Description = normalizeOptionalString(foundTag.Attributes.Description)
 		}
 
 		if foundTag.Attributes.Color != nil {
-			data.Color = types.StringValue(*foundTag.Attributes.Color)
+			apiColor := *foundTag.Attributes.Color
+			tfColor := data.Color.ValueString()
+
+			data.Color = preserveCasingIfEqualFold(apiColor, tfColor)
 		}
 
 		if foundTag.Attributes.Slug != nil {
 			data.Slug = types.StringValue(*foundTag.Attributes.Slug)
 		}
 	}
+}
+
+func normalizeOptionalString(value *string) types.String {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return types.StringNull()
+	}
+	return types.StringValue(*value)
+}
+
+func preserveCasingIfEqualFold(apiValue, tfValue string) types.String {
+	if strings.EqualFold(apiValue, tfValue) {
+		return types.StringValue(tfValue)
+	}
+	return types.StringValue(apiValue)
 }
 
 // findTagByName finds a tag by name and returns its ID
@@ -322,4 +360,13 @@ func (r *TagResource) findTagByName(ctx context.Context, name string) (string, e
 	}
 
 	return "", fmt.Errorf("tag with name '%s' not found", name)
+}
+
+// Normalizes hex color codes to lowercase for consistency with API
+func normalizeHexColor(color string) string {
+	if color == "" {
+		return color
+	}
+
+	return strings.ToLower(color)
 }
