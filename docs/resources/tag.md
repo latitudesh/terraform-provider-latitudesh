@@ -25,7 +25,7 @@ resource "latitudesh_tag" "tag" {
 
 ### Required
 
-- `color` (String) The tag color (hex format, **lowercase**, e.g. `#ff0000`)
+- `color` (String) The tag color (hex color code, e.g., #ff0000). The API normalizes colors to lowercase.
 - `name` (String) The tag name
 
 ### Optional
