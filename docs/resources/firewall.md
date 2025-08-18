@@ -22,22 +22,22 @@ resource "latitudesh_firewall" "web_firewall" {
   project = latitudesh_project.project.id
   
   rules {
-    from     = "0.0.0.0/0"
-    to       = "server"
+    from     = "ANY"
+    to       = "ANY"
     port     = "22"
     protocol = "tcp"
   }
   
   rules {
-    from     = "0.0.0.0/0"
-    to       = "server"
+    from     = "192.168.42.73"
+    to       = "192.168.43.51"
     port     = "80"
     protocol = "tcp"
   }
   
   rules {
-    from     = "0.0.0.0/0"
-    to       = "server"
+    from     = "192.168.1.16"
+    to       = "192.168.1.30"
     port     = "443"
     protocol = "tcp"
   }

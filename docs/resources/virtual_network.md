@@ -7,15 +7,29 @@ description: |-
 
 # latitudesh_virtual_network (Resource)
 
+Private networking lets you group servers within the same location, enabling private communication between them.
 
+See more in the Latitude.sh docs: https://www.latitude.sh/docs/networking/private-networks
 
 ## Example usage
 
 ```terraform
+data "latitudesh_region" "region" {
+  slug = "sao2"
+}
+
+resource "latitudesh_project" "project" {
+  name        = "Project name"
+  description = "Description of project"
+  environment = "Development" # Development, Production or Staging
+}
+
 resource "latitudesh_virtual_network" "virtual_network" {
-  description      = "Virtual Network description"
-  site             = data.latitudesh_region.region.slug # You can use the site id or slug
-  project          = latitudesh_project.project.id      # You can use the project id or slug
+  description = "Virtual Network description"
+
+  # You can use ID or slug for both:
+  site    = data.latitudesh_region.region.slug
+  project = latitudesh_project.project.id
 }
 ```
 
@@ -37,6 +51,21 @@ resource "latitudesh_virtual_network" "virtual_network" {
 - `assignments_count` (Number) Amount of devices assigned to the virtual network
 - `id` (String) The ID of this resource.
 - `vid` (Number) The vlan ID of the virtual network
+
+## Detecting changes made outside of Terraform
+
+If resources were modified in Latitude.sh (UI/API) or by other tools, you can reconcile state with **refresh-only**:
+
+1. Preview what changed:
+   ```sh
+   terraform plan -refresh-only
+   ```
+2. Apply the refresh to update state without changing real infrastructure:
+   ```sh
+   terraform apply -refresh-only
+   ```
+
+> **Heads-up on timing:** When assigning a device to a virtual network, the assignment status may take a short time to propagate. Running a refresh-only plan helps confirm when the assignment is completed.
 
 ## Import
 
