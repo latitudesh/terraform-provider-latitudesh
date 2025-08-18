@@ -583,7 +583,7 @@ func (r *ServerResource) reinstallServer(ctx context.Context, data *ServerResour
 
 func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerResourceModel, currentData *ServerResourceModel, diags *diag.Diagnostics) error {
 	serverID := data.ID.ValueString()
-	attrs := &operations.UpdateServerServersRequestApplicationJSONAttributes{}
+	attrs := &operations.UpdateServerServersAttributes{}
 
 	if !data.Hostname.IsNull() {
 		hostname := data.Hostname.ValueString()
@@ -595,8 +595,10 @@ func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerRe
 
 	if !data.Billing.IsNull() && (currentData == nil || data.Billing.ValueString() != currentData.Billing.ValueString()) {
 		billingValue := data.Billing.ValueString()
-		billing := operations.UpdateServerServersRequestApplicationJSONBilling(billingValue)
+		billing := operations.UpdateServerServersBilling(billingValue)
 		attrs.Billing = &billing
+	} else {
+		attrs.Billing = nil
 	}
 
 	// Handle tags update
@@ -625,7 +627,7 @@ func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerRe
 		}
 	}
 
-	updateType := operations.UpdateServerServersRequestApplicationJSONTypeServers
+	updateType := operations.UpdateServerServersTypeServers
 	updateRequest := operations.UpdateServerServersRequestBody{
 		Data: &operations.UpdateServerServersData{
 			ID:         &serverID,
@@ -851,7 +853,7 @@ func (r *ServerResource) validateTagIDs(ctx context.Context, tagIDs []string) er
 }
 
 func (r *ServerResource) updateServerTags(ctx context.Context, serverID string, tagIDs []string, hostname *string) error {
-	attrs := &operations.UpdateServerServersRequestApplicationJSONAttributes{
+	attrs := &operations.UpdateServerServersAttributes{
 		Tags: tagIDs,
 	}
 
@@ -860,7 +862,7 @@ func (r *ServerResource) updateServerTags(ctx context.Context, serverID string, 
 		attrs.Hostname = hostname
 	}
 
-	updateType := operations.UpdateServerServersRequestApplicationJSONTypeServers
+	updateType := operations.UpdateServerServersTypeServers
 	updateRequest := operations.UpdateServerServersRequestBody{
 		Data: &operations.UpdateServerServersData{
 			ID:         &serverID,

@@ -232,15 +232,11 @@ func (r *FirewallResource) findFirewallByProjectAndName(ctx context.Context, dat
 					if (firewall.Attributes.Project.ID != nil && *firewall.Attributes.Project.ID == project) ||
 						(firewall.Attributes.Project.Slug != nil && *firewall.Attributes.Project.Slug == project) {
 						data.ID = types.StringValue(*firewall.ID)
-						// Add debug info to confirm ID is set
-						diags.AddWarning("Debug", fmt.Sprintf("Firewall ID set to: %s for name: %s in project: %s", *firewall.ID, name, project))
 						return
 					}
 				} else {
 					// If no project info in attributes, assume it's the right one since we filtered by project
 					data.ID = types.StringValue(*firewall.ID)
-					// Add debug info to confirm ID is set
-					diags.AddWarning("Debug", fmt.Sprintf("Firewall ID set to: %s for name: %s (no project validation)", *firewall.ID, name))
 					return
 				}
 			}
@@ -388,40 +384,10 @@ func (r *FirewallResource) readFirewall(ctx context.Context, data *FirewallResou
 
 	firewall := result.Firewall
 
-	// Handle either direct attributes OR nested data structure, not both
-	var attributes *components.FirewallAttributes
-	if firewall.Attributes != nil {
-		// Use direct attributes if available
-		attributes = firewall.Attributes
-	} else if firewall.Data != nil && firewall.Data.Attributes != nil {
-		// Only fall back to nested data if direct attributes are not available
-		dataAttrs := firewall.Data.Attributes
-		attributes = &components.FirewallAttributes{
-			Name: dataAttrs.Name,
-		}
-
-		// Convert project if it exists
-		if dataAttrs.Project != nil {
-			attributes.Project = &components.FirewallProject{
-				ID:   dataAttrs.Project.ID,
-				Slug: dataAttrs.Project.Slug,
-				Name: dataAttrs.Project.Name,
-			}
-		}
-
-		// Convert rules
-		if dataAttrs.Rules != nil {
-			var rules []components.Rules
-			for _, rule := range dataAttrs.Rules {
-				rules = append(rules, components.Rules{
-					From:     rule.From,
-					To:       rule.To,
-					Port:     rule.Port,
-					Protocol: rule.Protocol,
-				})
-			}
-			attributes.Rules = rules
-		}
+	// Handle the new data structure
+	var attributes *components.FirewallDataAttributes
+	if firewall.Data != nil && firewall.Data.Attributes != nil {
+		attributes = firewall.Data.Attributes
 	}
 
 	if attributes != nil {
