@@ -10,7 +10,7 @@ require (
 	github.com/hashicorp/terraform-plugin-framework-validators v0.18.0
 	github.com/hashicorp/terraform-plugin-go v0.27.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.37.0
-	github.com/latitudesh/latitudesh-go-sdk v1.4.14
+	github.com/latitudesh/latitudesh-go-sdk v1.5.2
 	gopkg.in/dnaeon/go-vcr.v3 v3.1.2
 )
 
