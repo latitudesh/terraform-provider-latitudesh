@@ -3,6 +3,7 @@ package latitudesh
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -16,19 +17,22 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
 )
 
 const maxHostnameLength = 32
 
 var _ resource.Resource = &ServerResource{}
 var _ resource.ResourceWithImportState = &ServerResource{}
+var _ resource.ResourceWithModifyPlan = &ServerResource{}
 
 func NewServerResource() resource.Resource {
 	return &ServerResource{}
 }
 
 type ServerResource struct {
-	client *latitudeshgosdk.Latitudesh
+	client         *latitudeshgosdk.Latitudesh
+	defaultProject string
 }
 
 type ServerResourceModel struct {
@@ -71,9 +75,10 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			},
 			"project": schema.StringAttribute{
 				MarkdownDescription: "The project (ID or Slug) to deploy the server",
-				Required:            true,
+				Optional:            true,
+				Computed:            true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"site": schema.StringAttribute{
@@ -110,7 +115,6 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "SSH Keys to set on the server",
 				ElementType:         types.StringType,
 				Optional:            true,
-				//Computed:            true,
 				PlanModifiers: []planmodifier.List{
 					sshKeysReinstallWarningModifier{},
 					listplanmodifier.UseStateForUnknown(),
@@ -176,7 +180,11 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			"created_at": schema.StringAttribute{
 				MarkdownDescription: "The timestamp for when the server was created",
 				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
+
 			"region": schema.StringAttribute{
 				MarkdownDescription: "The region where the server is deployed",
 				Computed:            true,
@@ -208,21 +216,46 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 	}
 }
 
+func (r *ServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var cfg, plan ServerResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !cfg.Project.IsNull() && !cfg.Project.IsUnknown() && cfg.Project.ValueString() != "" {
+		plan.Project = cfg.Project
+		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+		return
+	}
+
+	if r.defaultProject != "" {
+		plan.Project = types.StringValue(r.defaultProject)
+		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+		return
+	}
+
+	resp.Diagnostics.AddError(
+		"Missing project",
+		"Set `project` on this resource or define a default in the provider block (provider `latitudesh` { project = \"...\" }).",
+	)
+}
+
 func (r *ServerResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
-
-	client, ok := req.ProviderData.(*latitudeshgosdk.Latitudesh)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			"Expected *latitudeshgosdk.Latitudesh, got: %T. Please report this issue to the provider developers.",
-		)
+	deps := iprovider.ConfigureFromProviderData(req.ProviderData, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	r.client = client
+	r.client = deps.Client
+	r.defaultProject = deps.DefaultProject
 }
 
 func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -233,17 +266,26 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	// Set default value for billing if not provided
 	if data.Billing.IsNull() {
 		data.Billing = types.StringValue("monthly")
 	}
 
 	attrs := &operations.CreateServerServersAttributes{}
 
-	if !data.Project.IsNull() {
-		project := data.Project.ValueString()
-		attrs.Project = &project
+	var project string
+	if !data.Project.IsNull() && !data.Project.IsUnknown() && data.Project.ValueString() != "" {
+		project = data.Project.ValueString()
+	} else if r.defaultProject != "" {
+		project = r.defaultProject
 	}
+
+	if project == "" {
+		resp.Diagnostics.AddError("Missing project",
+			"Defina 'project' no recurso ou 'project' no bloco do provider.")
+		return
+	}
+	attrs.Project = &project
+	data.Project = types.StringValue(project)
 
 	if !data.Plan.IsNull() {
 		planValue := data.Plan.ValueString()
@@ -282,9 +324,7 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	if !data.UserData.IsNull() {
-		// Convert user data ID to int64 as expected by API
-		// This is a simplification - in reality you'd need proper ID parsing
-		attrs.UserData = nil // For now, skip user data in reinstall
+		attrs.UserData = nil
 	}
 
 	if !data.Raid.IsNull() {
@@ -325,7 +365,6 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 
 	data.ID = types.StringValue(*result.Server.Data.ID)
 
-	// Apply tags if specified (server creation doesn't support tags)
 	if !data.Tags.IsNull() && !data.Tags.IsUnknown() {
 		var tagIDs []string
 		resp.Diagnostics.Append(data.Tags.ElementsAs(ctx, &tagIDs, false)...)
@@ -340,7 +379,6 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 				return
 			}
 
-			// Get current hostname to preserve it during tag update
 			var hostnamePtr *string
 			if !data.Hostname.IsNull() {
 				hostname := data.Hostname.ValueString()
@@ -355,7 +393,6 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		}
 	}
 
-	// Read server to get computed values and populate state with real values
 	r.readServer(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -458,7 +495,7 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		// Performing in-place update
 
 		// Perform in-place update for hostname, billing, tags, project changes
-		err := r.updateServerInPlace(ctx, &data, &currentData, &resp.Diagnostics)
+		changedProj, newProj, err := r.updateServerInPlace(ctx, &data, &currentData, &resp.Diagnostics)
 		if err != nil {
 			resp.Diagnostics.AddError("Update Error", "Unable to update server: "+err.Error())
 			return
@@ -468,6 +505,10 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		r.readServer(ctx, &data, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
+		}
+
+		if changedProj && newProj != "" {
+			data.Project = types.StringValue(newProj)
 		}
 	}
 
@@ -581,7 +622,7 @@ func (r *ServerResource) reinstallServer(ctx context.Context, data *ServerResour
 	return err
 }
 
-func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerResourceModel, currentData *ServerResourceModel, diags *diag.Diagnostics) error {
+func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerResourceModel, currentData *ServerResourceModel, diags *diag.Diagnostics) (bool, string, error) {
 	serverID := data.ID.ValueString()
 	attrs := &operations.UpdateServerServersRequestApplicationJSONAttributes{}
 
@@ -599,29 +640,43 @@ func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerRe
 		attrs.Billing = &billing
 	}
 
-	// Handle tags update
+	var newProj string
+	if !data.Project.IsNull() && !data.Project.IsUnknown() && data.Project.ValueString() != "" {
+		newProj = data.Project.ValueString()
+	} else if r.defaultProject != "" {
+		newProj = r.defaultProject
+	} else {
+		diags.AddError("Missing project", "Define 'project' in the resource or in the provider block.")
+		return false, "", fmt.Errorf("missing project")
+	}
+
+	var oldProj string
+	if !currentData.Project.IsNull() && !currentData.Project.IsUnknown() {
+		oldProj = currentData.Project.ValueString()
+	}
+
+	changedProj := newProj != "" && newProj != oldProj
+	if changedProj {
+		attrs.Project = &newProj
+	}
+
 	if !data.Tags.IsNull() && !data.Tags.IsUnknown() {
 		var tagIDs []string
 		convertDiags := data.Tags.ElementsAs(ctx, &tagIDs, false)
 		diags.Append(convertDiags...)
 		if convertDiags.HasError() {
-			return fmt.Errorf("failed to convert tag IDs")
+			return false, "", fmt.Errorf("failed to convert tag IDs")
 		}
-
-		err := r.validateTagIDs(ctx, tagIDs)
-		if err != nil {
-			return fmt.Errorf("tag validation failed: %w", err)
+		if err := r.validateTagIDs(ctx, tagIDs); err != nil {
+			return false, "", fmt.Errorf("tag validation failed: %w", err)
 		}
-
 		var hostname *string
 		if !data.Hostname.IsNull() {
-			hostnameVal := data.Hostname.ValueString()
-			hostname = &hostnameVal
+			hv := data.Hostname.ValueString()
+			hostname = &hv
 		}
-
-		err = r.updateServerTags(ctx, serverID, tagIDs, hostname)
-		if err != nil {
-			return fmt.Errorf("failed to update server tags: %w", err)
+		if err := r.updateServerTags(ctx, serverID, tagIDs, hostname); err != nil {
+			return false, "", fmt.Errorf("failed to update server tags: %w", err)
 		}
 	}
 
@@ -634,8 +689,17 @@ func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerRe
 		},
 	}
 
-	_, err := r.client.Servers.Update(ctx, serverID, updateRequest)
-	return err
+	result, err := r.client.Servers.Update(ctx, serverID, updateRequest)
+	if err != nil && err.Error() != "{}" {
+		return changedProj, newProj, fmt.Errorf("server update failed: %w", err)
+	}
+	if result != nil && result.HTTPMeta.Response != nil {
+		code := result.HTTPMeta.Response.StatusCode
+		if code < 200 || code >= 300 {
+			return changedProj, newProj, fmt.Errorf("server update failed with status code: %d", code)
+		}
+	}
+	return changedProj, newProj, nil
 }
 
 func (r *ServerResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -650,6 +714,10 @@ func (r *ServerResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 	_, err := r.client.Servers.Delete(ctx, serverID, nil)
 	if err != nil {
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not_found") {
+			resp.Diagnostics.AddWarning("Server Already Deleted", "Server appears to have been deleted outside of Terraform")
+			return
+		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete server, got error: "+err.Error())
 		return
 	}
@@ -677,14 +745,12 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 	if server.Attributes != nil {
 		attrs := server.Attributes
 
-		// Hostname
 		if attrs.Hostname != nil && *attrs.Hostname != "" {
 			data.Hostname = types.StringValue(*attrs.Hostname)
 		} else {
 			data.Hostname = types.StringNull()
 		}
 
-		// Status
 		if attrs.Status != nil {
 			data.Status = types.StringValue(string(*attrs.Status))
 		} else {
@@ -707,8 +773,14 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 			data.Locked = types.BoolValue(*attrs.Locked)
 		}
 
-		if attrs.CreatedAt != nil {
-			data.CreatedAt = types.StringValue(*attrs.CreatedAt)
+		if attrs.CreatedAt != nil && *attrs.CreatedAt != "" {
+			if data.CreatedAt.IsNull() || data.CreatedAt.IsUnknown() || data.CreatedAt.ValueString() == "" {
+				data.CreatedAt = types.StringValue(*attrs.CreatedAt)
+			}
+		} else {
+			if data.CreatedAt.IsNull() || data.CreatedAt.IsUnknown() || data.CreatedAt.ValueString() == "" {
+				data.CreatedAt = types.StringNull()
+			}
 		}
 
 		if attrs.Region != nil && attrs.Region.Site != nil && attrs.Region.Site.Slug != nil {
