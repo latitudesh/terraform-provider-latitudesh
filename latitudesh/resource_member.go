@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -12,6 +13,7 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -97,15 +99,11 @@ func (r *MemberResource) Configure(ctx context.Context, req resource.ConfigureRe
 	if req.ProviderData == nil {
 		return
 	}
-	client, ok := req.ProviderData.(*latitudeshgosdk.Latitudesh)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			"Expected *latitudeshgosdk.Latitudesh, got: %T. Please report this issue to the provider developers.",
-		)
+	deps := iprovider.ConfigureFromProviderData(req.ProviderData, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
-	r.client = client
+	r.client = deps.Client
 }
 
 func (r *MemberResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -169,13 +167,32 @@ func (r *MemberResource) Create(ctx context.Context, req resource.CreateRequest,
 
 	data.ID = types.StringValue(*result.Membership.Data.ID)
 
+	ensureKnownComputedMemberFields(&data)
+
 	// Read the resource to populate all attributes
 	r.readMember(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
+	ensureKnownComputedMemberFields(&data)
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func ensureKnownComputedMemberFields(m *MemberResourceModel) {
+	if m.MfaEnabled.IsNull() || m.MfaEnabled.IsUnknown() {
+		m.MfaEnabled = types.BoolNull()
+	}
+	if m.CreatedAt.IsNull() || m.CreatedAt.IsUnknown() {
+		m.CreatedAt = types.StringNull()
+	}
+	if m.UpdatedAt.IsNull() || m.UpdatedAt.IsUnknown() {
+		m.UpdatedAt = types.StringNull()
+	}
+	if m.LastLoginAt.IsNull() || m.LastLoginAt.IsUnknown() {
+		m.LastLoginAt = types.StringNull()
+	}
 }
 
 func (r *MemberResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -212,6 +229,11 @@ func (r *MemberResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 	_, err := r.client.TeamMembers.Delete(ctx, memberID)
 	if err != nil {
+		// If we get a 404, the resource is already deleted
+		if strings.Contains(err.Error(), "404") {
+			resp.Diagnostics.AddWarning("Team Member Already Deleted", "Team member appears to have been deleted outside of Terraform")
+			return
+		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete team member, got error: "+err.Error())
 		return
 	}
@@ -230,7 +252,17 @@ func (r *MemberResource) ImportState(ctx context.Context, req resource.ImportSta
 }
 
 func (r *MemberResource) readMember(ctx context.Context, data *MemberResourceModel, diags *diag.Diagnostics) {
-	memberID := data.ID.ValueString()
+	memberKey := ""
+	if !data.ID.IsNull() && !data.ID.IsUnknown() && data.ID.ValueString() != "" {
+		memberKey = data.ID.ValueString()
+	}
+	if (memberKey == "" || !strings.Contains(memberKey, "@")) && !data.Email.IsNull() && !data.Email.IsUnknown() && data.Email.ValueString() != "" {
+		memberKey = data.Email.ValueString()
+	}
+	if memberKey == "" {
+		diags.AddError("Missing Member Key", "Either ID or Email must be provided to identify the team member")
+		return
+	}
 
 	// Get all team members and find ours
 	response, err := r.client.Teams.Members.GetTeamMembers(ctx, nil, nil)
@@ -249,7 +281,7 @@ func (r *MemberResource) readMember(ctx context.Context, data *MemberResourceMod
 	for _, m := range response.TeamMembers.Data {
 		// Since the API doesn't provide IDs in team member listings,
 		// we'll need to use email for identification
-		if m.Email != nil && *m.Email == memberID {
+		if m.Email != nil && *m.Email == memberKey {
 			member = &m
 			break
 		}
@@ -263,24 +295,37 @@ func (r *MemberResource) readMember(ctx context.Context, data *MemberResourceMod
 	// Populate the data model
 	if member.FirstName != nil {
 		data.FirstName = types.StringValue(*member.FirstName)
+	} else {
+		data.FirstName = types.StringNull()
 	}
 
 	if member.LastName != nil {
 		data.LastName = types.StringValue(*member.LastName)
+	} else {
+		data.LastName = types.StringNull()
 	}
 
 	if member.Email != nil {
 		data.Email = types.StringValue(*member.Email)
+	} else {
+		data.Email = types.StringNull()
 	}
 
 	if member.Role != nil && member.Role.Name != nil {
 		data.Role = types.StringValue(*member.Role.Name)
+	} else {
+		data.Role = types.StringNull()
 	}
 
 	if member.MfaEnabled != nil {
 		data.MfaEnabled = types.BoolValue(*member.MfaEnabled)
+	} else {
+		data.MfaEnabled = types.BoolNull()
 	}
 
 	// Note: creation/update timestamps are not available in the current API response
 	// These would need to be populated if the API provides them
+	data.CreatedAt = types.StringNull()
+	data.UpdatedAt = types.StringNull()
+	data.LastLoginAt = types.StringNull()
 }
