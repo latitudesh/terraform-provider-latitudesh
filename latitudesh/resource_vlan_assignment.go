@@ -3,6 +3,7 @@ package latitudesh
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -14,6 +15,7 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
 )
 
 var _ resource.Resource = &VlanAssignmentResource{}
@@ -86,17 +88,11 @@ func (r *VlanAssignmentResource) Configure(ctx context.Context, req resource.Con
 	if req.ProviderData == nil {
 		return
 	}
-
-	client, ok := req.ProviderData.(*latitudeshgosdk.Latitudesh)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			"Expected *latitudeshgosdk.Latitudesh, got: %T. Please report this issue to the provider developers.",
-		)
+	deps := iprovider.ConfigureFromProviderData(req.ProviderData, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	r.client = client
+	r.client = deps.Client
 }
 
 func (r *VlanAssignmentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -143,7 +139,6 @@ func (r *VlanAssignmentResource) Create(ctx context.Context, req resource.Create
 		data.ID = types.StringValue(*result.VirtualNetworkAssignment.ID)
 	} else {
 		// If we can't get ID from response, use List endpoint to find it
-		resp.Diagnostics.AddWarning("Assignment ID Not in Response", "Virtual network assignment was created but ID not returned in response. Using List endpoint to find it.")
 
 		// Wait a moment for the assignment to be processed
 		time.Sleep(2 * time.Second)
@@ -192,18 +187,32 @@ func (r *VlanAssignmentResource) Update(ctx context.Context, req resource.Update
 
 func (r *VlanAssignmentResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var data VlanAssignmentResourceModel
-
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	assignmentID := data.ID.ValueString()
+	id := data.ID.ValueString()
 
-	_, err := r.client.PrivateNetworks.DeleteAssignment(ctx, assignmentID)
-	if err != nil {
+	result, err := r.client.PrivateNetworks.DeleteAssignment(ctx, id)
+	if err != nil && err.Error() != "{}" {
+		if strings.Contains(err.Error(), "404") {
+			return
+		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete virtual network assignment, got error: "+err.Error())
 		return
+	}
+
+	if result != nil && result.HTTPMeta.Response != nil {
+		code := result.HTTPMeta.Response.StatusCode
+		if code == 404 {
+			return
+		}
+		if code >= 400 {
+			resp.Diagnostics.AddError("Client Error",
+				fmt.Sprintf("Unable to delete virtual network assignment, status code: %d", code))
+			return
+		}
 	}
 }
 
