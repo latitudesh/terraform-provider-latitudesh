@@ -14,6 +14,7 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
 )
 
 var _ resource.Resource = &FirewallAssignmentResource{}
@@ -70,23 +71,14 @@ func (r *FirewallAssignmentResource) Schema(ctx context.Context, req resource.Sc
 }
 
 func (r *FirewallAssignmentResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
 	if req.ProviderData == nil {
 		return
 	}
-
-	client, ok := req.ProviderData.(*latitudeshgosdk.Latitudesh)
-
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			"Expected *latitudeshgosdk.Latitudesh, got: %T. Please report this issue to the provider developers.",
-		)
-
+	deps := iprovider.ConfigureFromProviderData(req.ProviderData, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	r.client = client
+	r.client = deps.Client
 }
 
 func (r *FirewallAssignmentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -252,6 +244,11 @@ func (r *FirewallAssignmentResource) Delete(ctx context.Context, req resource.De
 
 	_, err := r.client.Firewalls.DeleteAssignment(ctx, firewallID, assignmentID)
 	if err != nil {
+		// If we get a 404, the resource is already deleted
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not_found") {
+			resp.Diagnostics.AddWarning("Firewall Assignment Already Deleted", "Firewall assignment appears to have been deleted outside of Terraform")
+			return
+		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete firewall assignment, got error: "+err.Error())
 		return
 	}
