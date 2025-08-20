@@ -254,6 +254,11 @@ func (r *TagResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 
 	_, err := r.client.Tags.Delete(ctx, tagID)
 	if err != nil {
+		// If we get a 404, the resource is already deleted
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not_found") {
+			resp.Diagnostics.AddWarning("Tag Already Deleted", "Tag appears to have been deleted outside of Terraform")
+			return
+		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete tag, got error: "+err.Error())
 		return
 	}
