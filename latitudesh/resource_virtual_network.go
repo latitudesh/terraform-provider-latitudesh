@@ -14,17 +14,20 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	providerpkg "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
 )
 
 var _ resource.Resource = &VirtualNetworkResource{}
 var _ resource.ResourceWithImportState = &VirtualNetworkResource{}
+var _ resource.ResourceWithModifyPlan = &VirtualNetworkResource{}
 
 func NewVirtualNetworkResource() resource.Resource {
 	return &VirtualNetworkResource{}
 }
 
 type VirtualNetworkResource struct {
-	client *latitudeshgosdk.Latitudesh
+	client         *latitudeshgosdk.Latitudesh
+	defaultProject string
 }
 
 type VirtualNetworkResourceModel struct {
@@ -103,17 +106,42 @@ func (r *VirtualNetworkResource) Configure(ctx context.Context, req resource.Con
 	if req.ProviderData == nil {
 		return
 	}
+	deps := providerpkg.ConfigureFromProviderData(req.ProviderData, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	r.client = deps.Client
+	r.defaultProject = deps.DefaultProject
+}
 
-	client, ok := req.ProviderData.(*latitudeshgosdk.Latitudesh)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			"Expected *latitudeshgosdk.Latitudesh, got: %T. Please report this issue to the provider developers.",
-		)
+func (r *VirtualNetworkResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() {
 		return
 	}
 
-	r.client = client
+	var cfg, plan VirtualNetworkResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !cfg.Project.IsNull() && !cfg.Project.IsUnknown() && cfg.Project.ValueString() != "" {
+		plan.Project = cfg.Project
+		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+		return
+	}
+
+	if r.defaultProject != "" {
+		plan.Project = types.StringValue(r.defaultProject)
+		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+		return
+	}
+
+	resp.Diagnostics.AddError(
+		"Missing project",
+		"Set `project` on this resource or define a default in the provider block (provider `latitudesh` { project = \"...\" }).",
+	)
 }
 
 func (r *VirtualNetworkResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -124,20 +152,28 @@ func (r *VirtualNetworkResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	// Validate that project is provided during creation
-	if data.Project.IsNull() || data.Project.ValueString() == "" {
+	// Resolve "effective project": resource > provider; if absent, error
+	var effectiveProject string
+	if !data.Project.IsNull() && !data.Project.IsUnknown() && data.Project.ValueString() != "" {
+		effectiveProject = data.Project.ValueString()
+	} else if r.defaultProject != "" {
+		effectiveProject = r.defaultProject
+	}
+	if effectiveProject == "" {
 		resp.Diagnostics.AddError(
-			"Missing Required Field",
-			"The project field is required when creating a virtual network.",
+			"Missing project",
+			"Set `project` on this resource or define a default in the provider block (provider \"latitudesh\" { project = \"...\" }).",
 		)
 		return
 	}
+	// persist in state to avoid flapping of Optional+Computed
+	data.Project = types.StringValue(effectiveProject)
 
 	// Prepare attributes for creation
 	attrs := operations.CreateVirtualNetworkPrivateNetworksAttributes{}
 
 	// Required fields
-	attrs.Project = data.Project.ValueString()
+	attrs.Project = effectiveProject
 
 	if !data.Site.IsNull() {
 		siteValue := data.Site.ValueString()
@@ -353,9 +389,10 @@ func (r *VirtualNetworkResource) Delete(ctx context.Context, req resource.Delete
 		return
 	}
 
-	// First, try to read the virtual network to see if it still exists
-	// and to get the VID (numeric VLAN ID)
 	vlanID := data.ID.ValueString()
+	if vlanID == "" {
+		return
+	}
 
 	// Check if the virtual network still exists
 	response, err := r.client.PrivateNetworks.Get(ctx, vlanID)
