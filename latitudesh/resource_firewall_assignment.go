@@ -244,9 +244,7 @@ func (r *FirewallAssignmentResource) Delete(ctx context.Context, req resource.De
 
 	_, err := r.client.Firewalls.DeleteAssignment(ctx, firewallID, assignmentID)
 	if err != nil {
-		// If we get a 404, the resource is already deleted
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not_found") {
-			resp.Diagnostics.AddWarning("Firewall Assignment Already Deleted", "Firewall assignment appears to have been deleted outside of Terraform")
+		if strings.Contains(err.Error(), "404") {
 			return
 		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete firewall assignment, got error: "+err.Error())
