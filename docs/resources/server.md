@@ -7,15 +7,27 @@ description: |-
 
 # latitudesh_server (Resource)
 
-
+The `latitudesh_server` resource allows you to deploy and manage bare metal servers on [Latitude.sh](https://metal.new) via Terraform.
 
 ## Example usage
 
-```terraform
+```hcl
+terraform {
+  required_providers {
+    latitudesh = {
+      source  = "latitudesh/latitudesh"
+      version = "2.4.0"
+    }
+  }
+}
+
+provider "latitudesh" {}
+
+# Create a server
 resource "latitudesh_server" "server" {
-  hostname         = "terraform.latitude.sh"
-  operating_system = "ubuntu_22_04_x64_lts"
-  plan             = data.latitudesh_plan.plan.slug
+  hostname         = "terraform-latitude-sh"
+  operating_system = "ubuntu_24_04_x64_lts"
+  plan             = "monthly"
   project          = latitudesh_project.project.id      # You can use the project id or slug
   site             = data.latitudesh_region.region.slug # You can use the site id or slug
   ssh_keys         = [latitudesh_ssh_key.ssh_key.id]
@@ -23,13 +35,9 @@ resource "latitudesh_server" "server" {
   ipxe_url         = "" # URL to a boot.ipxe file. e.g. https://boot.netboot.xyz
 }
 
-# Access the server's IP addresses
-output "server_ipv4" {
-  value = latitudesh_server.server.primary_ipv4
-}
-
-output "server_ipv6" {
-  value = latitudesh_server.server.primary_ipv6
+# Access the server's attributes
+output "server" {
+  value = latitudesh_server.server
 }
 ```
 
@@ -38,13 +46,12 @@ output "server_ipv6" {
 
 ### Required
 
-- `hostname` (String) – The server hostname
+- `hostname` (String) The server hostname
   - Maximum length: 32 characters
   - Allowed characters: letters (a–z, A–Z), digits (0–9), dots (.), and hyphens (-)
   - Must not begin or end with a dot or hyphen
   - Underscores (_) are not allowed
-- `operating_system` (String) The server OS. 
-				Updating operating_system will trigger a reinstall if allow_reinstall is set to true.
+- `operating_system` (String) The server OS
 - `plan` (String) The server plan
 - `project` (String) The id or slug of the project
 - `site` (String) The server site
@@ -52,19 +59,19 @@ output "server_ipv6" {
 ### Optional
 
 - `allow_reinstall` (Boolean, Deprecated) Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe_url changes.
-				WARNING: The reinstall will be triggered even if Terraform reports an in-place update.
-- `billing` (String) The server billing type. 
-				Accepts hourly and monthly for on demand projects and yearly for reserved projects.
-- `ipxe_url` (String) Url for the iPXE script that will be used.	
-				Updating ipxe_url will trigger a reinstall if allow_reinstall is set to true.
+    WARNING: The reinstall will be triggered even if Terraform reports an in-place update.
+- `billing` (String) The server billing type.
+    Accepts hourly and monthly for on demand projects and yearly for reserved projects.
+- `ipxe_url` (String) Url for the iPXE script that will be used. 
+    Updating ipxe_url will trigger a reinstall if allow_reinstall is set to true.
 - `locked` (Boolean) Lock/unlock the server. A locked server cannot be deleted or updated.
-- `raid` (String) RAID mode for the server. 
-				Updating raid will trigger a reinstall if allow_reinstall is set to true.
-- `ssh_keys` (List of String) List of server SSH key ids. 
-				Any change to `ssh_keys` will force a resource replacement.
+- `raid` (String) RAID mode for the server.
+    Updating raid will trigger a reinstall if allow_reinstall is set to true.
+- `ssh_keys` (List of String) List of server SSH key ids.
+    Any change to `ssh_keys` will force a resource replacement.
 - `tags` (List of String) List of server tags
-- `user_data` (String) The id of user data to set on the server. 
-				Updating user_data will trigger a reinstall if allow_reinstall is set to true.
+- `user_data` (String) The id of user data to set on the server.
+    Updating user_data will trigger a reinstall if allow_reinstall is set to true.
 
 ### Read-Only
 
@@ -108,3 +115,4 @@ terraform plan -generate-config-out=generated_server.tf
 This will generate the resource configuration for the imported server resource.
 
 > **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.
+
