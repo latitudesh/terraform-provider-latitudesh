@@ -108,7 +108,6 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Computed:            true,
 				Validators: []validator.String{
 					stringvalidator.LengthAtMost(maxHostnameLength),
-					// only letters, numbers, dot and hyphen; underscore is not allowed
 					stringvalidator.RegexMatches(
 						regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$`),
 						"must contain only letters, digits, hyphens (-), and dots (.). Cannot start or end with a hyphen or dot; underscores (_) are not allowed",
