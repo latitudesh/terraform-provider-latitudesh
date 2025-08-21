@@ -10,13 +10,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
 )
-
-const (
-	userAgentForProvider = "Latitude-Terraform-Provider"
-)
-
-var currentVersion = "2.1.3"
 
 // Ensure latitudeshProvider satisfies various provider interfaces
 var _ provider.Provider = &latitudeshProvider{}
@@ -29,6 +24,7 @@ type latitudeshProvider struct {
 // latitudeshProviderModel describes the provider data model.
 type latitudeshProviderModel struct {
 	AuthToken types.String `tfsdk:"auth_token"`
+	Project   types.String `tfsdk:"project"`
 }
 
 func New(version string) func() provider.Provider {
@@ -51,6 +47,10 @@ func (p *latitudeshProvider) Schema(ctx context.Context, req provider.SchemaRequ
 				MarkdownDescription: "Latitude.sh API authentication token. Can also be set via the LATITUDESH_AUTH_TOKEN environment variable.",
 				Optional:            true,
 				Sensitive:           true,
+			},
+			"project": schema.StringAttribute{
+				MarkdownDescription: "The project ID to use for all resources. If not set, project must be defined in the resource.",
+				Optional:            true,
 			},
 		},
 	}
@@ -93,8 +93,15 @@ func (p *latitudeshProvider) Configure(ctx context.Context, req provider.Configu
 	sdkClient := latitudeshgosdk.New(
 		latitudeshgosdk.WithSecurity(authToken),
 	)
-	resp.DataSourceData = sdkClient
-	resp.ResourceData = sdkClient
+	project := data.Project.ValueString()
+
+	providerContext := &iprovider.ProviderContext{
+		Client:  sdkClient,
+		Project: project,
+	}
+
+	resp.ResourceData = providerContext
+	resp.DataSourceData = providerContext
 }
 
 func (p *latitudeshProvider) Resources(ctx context.Context) []func() resource.Resource {
