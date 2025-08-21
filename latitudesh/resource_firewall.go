@@ -151,18 +151,15 @@ func (r *FirewallResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
-	// Escreve APENAS o atributo 'project' no plano
 	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("project"), resolved)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// Se não é criação e o project mudou => ForceNew
 	if !req.State.Raw.IsNull() &&
 		!stateProject.IsNull() && !stateProject.IsUnknown() &&
 		!resolved.IsNull() && !resolved.IsUnknown() &&
 		stateProject.ValueString() != resolved.ValueString() {
-		// sua versão da framework usa slice (sem .Add)
 		resp.RequiresReplace = append(resp.RequiresReplace, path.Root("project"))
 	}
 }
@@ -387,7 +384,6 @@ func (r *FirewallResource) Delete(ctx context.Context, req resource.DeleteReques
 
 	_, err := r.client.Firewalls.Delete(ctx, firewallID)
 	if err != nil {
-		// If we get a 404, the resource is already deleted
 		if strings.Contains(err.Error(), "404") {
 			resp.Diagnostics.AddWarning("Firewall Already Deleted", "Firewall appears to have been deleted outside of Terraform")
 			return
