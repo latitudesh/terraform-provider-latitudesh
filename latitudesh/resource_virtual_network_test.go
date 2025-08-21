@@ -84,8 +84,9 @@ func testAccCheckVirtualNetworkExists(n string) resource.TestCheckFunc {
 		}
 
 		vnet := response.Object.Data
+		vnData := vnet.GetData()
 
-		if *vnet.ID != rs.Primary.ID {
+		if vnData == nil || vnData.GetID() == nil || *vnData.GetID() != rs.Primary.ID {
 			return fmt.Errorf("Record not found: %v", rs.Primary.ID)
 		}
 
