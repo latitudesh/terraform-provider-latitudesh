@@ -38,7 +38,11 @@ output "server_ipv6" {
 
 ### Required
 
-- `hostname` (String): The server hostname. **Maximum length: 32 characters.**
+- `hostname` (String) – The server hostname
+  - Maximum length: 32 characters
+  - Allowed characters: letters (a–z, A–Z), digits (0–9), dots (.), and hyphens (-)
+  - Must not begin or end with a dot or hyphen
+  - Underscores (_) are not allowed
 - `operating_system` (String) The server OS. 
 				Updating operating_system will trigger a reinstall if allow_reinstall is set to true.
 - `plan` (String) The server plan
