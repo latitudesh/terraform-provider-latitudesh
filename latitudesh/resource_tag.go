@@ -153,8 +153,8 @@ func (r *TagResource) Create(ctx context.Context, req resource.CreateRequest, re
 	}
 
 	// Try to get ID from response first
-	if result.CustomTag != nil && result.CustomTag.ID != nil {
-		data.ID = types.StringValue(*result.CustomTag.ID)
+	if result.CustomTag != nil && result.CustomTag.Data != nil && result.CustomTag.Data.ID != nil {
+		data.ID = types.StringValue(*result.CustomTag.Data.ID)
 	} else {
 		// Fallback: API might have created the tag but not returned the ID
 		// Use List to find the tag by name
