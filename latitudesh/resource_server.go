@@ -281,7 +281,7 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 
 	if project == "" {
 		resp.Diagnostics.AddError("Missing project",
-			"Defina 'project' no recurso ou 'project' no bloco do provider.")
+			"Set `project` on this resource or define a default in the provider block (provider `latitudesh` { project = \"...\" }).")
 		return
 	}
 	attrs.Project = &project
@@ -714,7 +714,7 @@ func (r *ServerResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 	_, err := r.client.Servers.Delete(ctx, serverID, nil)
 	if err != nil {
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not_found") {
+		if strings.Contains(err.Error(), "404") {
 			resp.Diagnostics.AddWarning("Server Already Deleted", "Server appears to have been deleted outside of Terraform")
 			return
 		}

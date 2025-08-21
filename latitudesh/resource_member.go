@@ -229,7 +229,6 @@ func (r *MemberResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 	_, err := r.client.TeamMembers.Delete(ctx, memberID)
 	if err != nil {
-		// If we get a 404, the resource is already deleted
 		if strings.Contains(err.Error(), "404") {
 			resp.Diagnostics.AddWarning("Team Member Already Deleted", "Team member appears to have been deleted outside of Terraform")
 			return
