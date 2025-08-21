@@ -3,7 +3,10 @@ package latitudesh
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -13,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
@@ -102,6 +106,14 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "The server hostname",
 				Optional:            true,
 				Computed:            true,
+				Validators: []validator.String{
+					stringvalidator.LengthAtMost(maxHostnameLength),
+					// only letters, numbers, dot and hyphen; underscore is not allowed
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$`),
+						"must contain only letters, numbers, dots (.) and hyphens (-); underscores (_) are not allowed",
+					),
+				},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -234,7 +246,7 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	// Set default value for billing if not provided
-	if data.Billing.IsNull() {
+	if data.Billing.IsNull() || data.Billing.IsUnknown() || strings.TrimSpace(data.Billing.ValueString()) == "" {
 		data.Billing = types.StringValue("monthly")
 	}
 
