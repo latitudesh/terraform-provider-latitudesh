@@ -423,7 +423,6 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 					"Set allow_reinstall=true to perform the actual reinstall.", reason),
 			)
 
-			// Skip deploy config update until SDK is fixed
 			err := r.updateDeployConfig(ctx, &data, &resp.Diagnostics)
 			if err != nil {
 				resp.Diagnostics.AddError("Deploy Config Update Error", "Unable to update deploy config: "+err.Error())
@@ -583,7 +582,7 @@ func (r *ServerResource) reinstallServer(ctx context.Context, data *ServerResour
 
 func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerResourceModel, currentData *ServerResourceModel, diags *diag.Diagnostics) error {
 	serverID := data.ID.ValueString()
-	attrs := &operations.UpdateServerServersRequestApplicationJSONAttributes{}
+	attrs := &operations.UpdateServerServersAttributes{}
 
 	if !data.Hostname.IsNull() {
 		hostname := data.Hostname.ValueString()
@@ -595,7 +594,7 @@ func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerRe
 
 	if !data.Billing.IsNull() && (currentData == nil || data.Billing.ValueString() != currentData.Billing.ValueString()) {
 		billingValue := data.Billing.ValueString()
-		billing := operations.UpdateServerServersRequestApplicationJSONBilling(billingValue)
+		billing := operations.UpdateServerServersBilling(billingValue)
 		attrs.Billing = &billing
 	}
 
@@ -625,7 +624,7 @@ func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerRe
 		}
 	}
 
-	updateType := operations.UpdateServerServersRequestApplicationJSONTypeServers
+	updateType := operations.UpdateServerServersTypeServers
 	updateRequest := operations.UpdateServerServersRequestBody{
 		Data: &operations.UpdateServerServersData{
 			ID:         &serverID,
@@ -851,7 +850,7 @@ func (r *ServerResource) validateTagIDs(ctx context.Context, tagIDs []string) er
 }
 
 func (r *ServerResource) updateServerTags(ctx context.Context, serverID string, tagIDs []string, hostname *string) error {
-	attrs := &operations.UpdateServerServersRequestApplicationJSONAttributes{
+	attrs := &operations.UpdateServerServersAttributes{
 		Tags: tagIDs,
 	}
 
@@ -860,7 +859,7 @@ func (r *ServerResource) updateServerTags(ctx context.Context, serverID string, 
 		attrs.Hostname = hostname
 	}
 
-	updateType := operations.UpdateServerServersRequestApplicationJSONTypeServers
+	updateType := operations.UpdateServerServersTypeServers
 	updateRequest := operations.UpdateServerServersRequestBody{
 		Data: &operations.UpdateServerServersData{
 			ID:         &serverID,
@@ -1010,7 +1009,7 @@ func (m raidReinstallWarningModifier) PlanModifyString(ctx context.Context, req 
 }
 
 func (r *ServerResource) updateDeployConfig(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) error {
-	// Skip actual API call until SDK is fixed
+
 	// Just return success so state can be updated with planned values
 	return nil
 }
