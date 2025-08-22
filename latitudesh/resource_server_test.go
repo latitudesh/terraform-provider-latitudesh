@@ -58,7 +58,7 @@ func TestAccServer_Basic(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckServerExists("latitudesh_server.test_item"),
 					resource.TestCheckResourceAttr(
-						"latitudesh_server.test_item", "hostname", "test"),
+						"latitudesh_server.test_item", "hostname", testServerHostname),
 					resource.TestCheckResourceAttrSet(
 						"latitudesh_server.test_item", "primary_ipv4"),
 					resource.TestCheckResourceAttrSet(
@@ -140,7 +140,7 @@ func TestAccServer_IPv6Support(t *testing.T) {
 						"latitudesh_server.test_item", "primary_ipv6"),
 					// Verify the field names are correct
 					resource.TestCheckResourceAttr(
-						"latitudesh_server.test_item", "hostname", "test"),
+						"latitudesh_server.test_item", "hostname", testServerHostname),
 				),
 			},
 		},
@@ -244,7 +244,7 @@ func testAccCheckServerExists(n string) resource.TestCheckFunc {
 		}
 
 		// Check if server meets all required conditions
-		if (status == "on" || status == "inventory") &&
+		if (status == "on" || status == "inventory" || status == "deploying") &&
 			serverProjectID == os.Getenv("LATITUDESH_TEST_PROJECT") &&
 			serverOS == testServerOperatingSystem {
 			return nil
@@ -257,6 +257,7 @@ func testAccCheckServerExists(n string) resource.TestCheckFunc {
 func testAccCheckServerBasic() string {
 	return fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
+	billing = "monthly"
 	project = "%s"
   	hostname = "%s"
 	plan     = "%s"
