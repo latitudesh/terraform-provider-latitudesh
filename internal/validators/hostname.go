@@ -1,10 +1,14 @@
 package validators
 
 import (
+	"context"
+	"fmt"
 	"regexp"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 const (
@@ -28,4 +32,26 @@ func Hostname() []validator.String {
 			"must contain only letters, digits, hyphens (-), and dots (.). Cannot start or end with a hyphen or dot; underscores (_) are not allowed",
 		),
 	}
+}
+
+// ValidateHostname runs the Hostname validators against the given string
+func ValidateHostname(s string) error {
+	ctx := context.Background()
+
+	req := validator.StringRequest{
+		Path:        path.Root("hostname"),
+		ConfigValue: types.StringValue(s),
+	}
+	var resp validator.StringResponse
+
+	for _, v := range Hostname() {
+		v.ValidateString(ctx, req, &resp)
+	}
+
+	if resp.Diagnostics.HasError() {
+		d := resp.Diagnostics[0]
+		return fmt.Errorf("%s: %s", d.Summary(), d.Detail())
+	}
+
+	return nil
 }
