@@ -3,10 +3,8 @@ package latitudesh
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -16,13 +14,11 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	"github.com/latitudesh/terraform-provider-latitudesh/internal/validators"
 )
-
-const maxHostnameLength = 32
 
 var _ resource.Resource = &ServerResource{}
 var _ resource.ResourceWithImportState = &ServerResource{}
@@ -106,13 +102,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "The server hostname",
 				Optional:            true,
 				Computed:            true,
-				Validators: []validator.String{
-					stringvalidator.LengthAtMost(maxHostnameLength),
-					stringvalidator.RegexMatches(
-						regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$`),
-						"must contain only letters, digits, hyphens (-), and dots (.). Cannot start or end with a hyphen or dot; underscores (_) are not allowed",
-					),
-				},
+				Validators:          validators.Hostname(),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -276,10 +266,6 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 
 	if !data.Hostname.IsNull() {
 		hostname := data.Hostname.ValueString()
-		if err := validateHostnameLength(hostname); err != nil {
-			resp.Diagnostics.AddError("Hostname Too Long", err.Error())
-			return
-		}
 		attrs.Hostname = &hostname
 	}
 
@@ -1055,11 +1041,4 @@ func (m ipxeReinstallWarningModifier) PlanModifyString(ctx context.Context, req 
 			"ipxe changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
 		)
 	}
-}
-
-func validateHostnameLength(hostname string) error {
-	if len(hostname) > maxHostnameLength {
-		return fmt.Errorf("hostname must not exceed %d characters; provided hostname has %d characters", maxHostnameLength, len(hostname))
-	}
-	return nil
 }
