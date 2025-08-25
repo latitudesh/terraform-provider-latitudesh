@@ -3,6 +3,7 @@ package latitudesh
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -16,9 +17,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	"github.com/latitudesh/terraform-provider-latitudesh/internal/validators"
 )
-
-const maxHostnameLength = 32
 
 var _ resource.Resource = &ServerResource{}
 var _ resource.ResourceWithImportState = &ServerResource{}
@@ -102,6 +102,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "The server hostname",
 				Optional:            true,
 				Computed:            true,
+				Validators:          validators.Hostname(),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -234,7 +235,7 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	// Set default value for billing if not provided
-	if data.Billing.IsNull() {
+	if data.Billing.IsNull() || data.Billing.IsUnknown() || strings.TrimSpace(data.Billing.ValueString()) == "" {
 		data.Billing = types.StringValue("monthly")
 	}
 
@@ -265,10 +266,6 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 
 	if !data.Hostname.IsNull() {
 		hostname := data.Hostname.ValueString()
-		if err := validateHostnameLength(hostname); err != nil {
-			resp.Diagnostics.AddError("Hostname Too Long", err.Error())
-			return
-		}
 		attrs.Hostname = &hostname
 	}
 
@@ -1043,11 +1040,4 @@ func (m ipxeReinstallWarningModifier) PlanModifyString(ctx context.Context, req 
 			"ipxe changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
 		)
 	}
-}
-
-func validateHostnameLength(hostname string) error {
-	if len(hostname) > maxHostnameLength {
-		return fmt.Errorf("hostname must not exceed %d characters; provided hostname has %d characters", maxHostnameLength, len(hostname))
-	}
-	return nil
 }

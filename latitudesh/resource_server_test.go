@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
+	"github.com/latitudesh/terraform-provider-latitudesh/internal/validators"
 )
 
 const (
@@ -20,24 +21,34 @@ const (
 )
 
 func TestValidateHostnameLength(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
+		name      string
 		hostname  string
 		shouldErr bool
-		name      string
 	}{
-		{"short-hostname", false, "shorter than max"},
-		{"abcdefghijklmnopqrstuvwxyzabcdef", false, "exactly max length"}, // 32 chars
-		{"abcdefghijklmnopqrstuvwxyzabcdefg", true, "longer than max"},    // 33 chars
+		{"shorter than max", "short-hostname", false},
+		{"exactly max length (32)", "abcdefghijklmnopqrstuvwxyzabcdef", false}, // 32
+		{"longer than max (33)", "abcdefghijklmnopqrstuvwxyzabcdefg", true},    // 33
+		{"starts with hyphen", "-abc", true},
+		{"ends with dot", "abc.", true},
+		{"contains underscore", "abc_def", true},
+		{"dots and hyphens ok", "terraform-ci-test.latitude.sh", false}, // 29 chars
 	}
 
 	for _, tc := range cases {
-		err := validateHostnameLength(tc.hostname)
-		if tc.shouldErr && err == nil {
-			t.Errorf("%s: expected error, got nil", tc.name)
-		}
-		if !tc.shouldErr && err != nil {
-			t.Errorf("%s: expected no error, got %v", tc.name, err)
-		}
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validators.ValidateHostname(tc.hostname)
+			if tc.shouldErr && err == nil {
+				t.Fatalf("expected error, got nil for %q", tc.hostname)
+			}
+			if !tc.shouldErr && err != nil {
+				t.Fatalf("expected no error, got %v for %q", err, tc.hostname)
+			}
+		})
 	}
 }
 
@@ -58,7 +69,7 @@ func TestAccServer_Basic(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckServerExists("latitudesh_server.test_item"),
 					resource.TestCheckResourceAttr(
-						"latitudesh_server.test_item", "hostname", "test"),
+						"latitudesh_server.test_item", "hostname", testServerHostname),
 					resource.TestCheckResourceAttrSet(
 						"latitudesh_server.test_item", "primary_ipv4"),
 					resource.TestCheckResourceAttrSet(
@@ -140,7 +151,7 @@ func TestAccServer_IPv6Support(t *testing.T) {
 						"latitudesh_server.test_item", "primary_ipv6"),
 					// Verify the field names are correct
 					resource.TestCheckResourceAttr(
-						"latitudesh_server.test_item", "hostname", "test"),
+						"latitudesh_server.test_item", "hostname", testServerHostname),
 				),
 			},
 		},
@@ -244,7 +255,7 @@ func testAccCheckServerExists(n string) resource.TestCheckFunc {
 		}
 
 		// Check if server meets all required conditions
-		if (status == "on" || status == "inventory") &&
+		if (status == "on" || status == "inventory" || status == "deploying") &&
 			serverProjectID == os.Getenv("LATITUDESH_TEST_PROJECT") &&
 			serverOS == testServerOperatingSystem {
 			return nil
@@ -257,6 +268,7 @@ func testAccCheckServerExists(n string) resource.TestCheckFunc {
 func testAccCheckServerBasic() string {
 	return fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
+	billing = "monthly"
 	project = "%s"
   	hostname = "%s"
 	plan     = "%s"
