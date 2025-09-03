@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -16,6 +17,7 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -95,23 +97,14 @@ func (r *SSHKeyResource) Schema(ctx context.Context, req resource.SchemaRequest,
 }
 
 func (r *SSHKeyResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
 	if req.ProviderData == nil {
 		return
 	}
-
-	client, ok := req.ProviderData.(*latitudeshgosdk.Latitudesh)
-
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			"Expected *latitudeshgosdk.Latitudesh, got: %T. Please report this issue to the provider developers.",
-		)
-
+	deps := iprovider.ConfigureFromProviderData(req.ProviderData, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	r.client = client
+	r.client = deps.Client
 }
 
 func (r *SSHKeyResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -226,6 +219,9 @@ func (r *SSHKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 	_, err := r.client.SSHKeys.Delete(ctx, keyID)
 	if err != nil {
+		if strings.Contains(err.Error(), "404") {
+			return
+		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete SSH key, got error: "+err.Error())
 		return
 	}

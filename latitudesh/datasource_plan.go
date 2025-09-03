@@ -10,6 +10,7 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -104,15 +105,11 @@ func (d *PlanDataSource) Configure(ctx context.Context, req datasource.Configure
 	if req.ProviderData == nil {
 		return
 	}
-	client, ok := req.ProviderData.(*latitudeshgosdk.Latitudesh)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			"Expected *latitudeshgosdk.Latitudesh, got: %T. Please report this issue to the provider developers.",
-		)
+	deps := iprovider.ConfigureFromProviderData(req.ProviderData, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
-	d.client = client
+	d.client = deps.Client
 }
 
 func (d *PlanDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {

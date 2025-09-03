@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -15,11 +16,13 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &FirewallResource{}
 var _ resource.ResourceWithImportState = &FirewallResource{}
+var _ resource.ResourceWithModifyPlan = &FirewallResource{}
 
 func NewFirewallResource() resource.Resource {
 	return &FirewallResource{}
@@ -27,7 +30,8 @@ func NewFirewallResource() resource.Resource {
 
 // FirewallResource defines the resource implementation.
 type FirewallResource struct {
-	client *latitudeshgosdk.Latitudesh
+	client         *latitudeshgosdk.Latitudesh
+	defaultProject string
 }
 
 // FirewallRuleModel describes a firewall rule.
@@ -67,9 +71,11 @@ func (r *FirewallResource) Schema(ctx context.Context, req resource.SchemaReques
 				Required:            true,
 			},
 			"project": schema.StringAttribute{
-				MarkdownDescription: "The project id or slug",
-				Required:            true,
+				MarkdownDescription: "The project id or slug. If not set, falls back to provider's project.",
+				Optional:            true,
+				Computed:            true,
 				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
@@ -103,23 +109,59 @@ func (r *FirewallResource) Schema(ctx context.Context, req resource.SchemaReques
 }
 
 func (r *FirewallResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
 	if req.ProviderData == nil {
 		return
 	}
+	deps := iprovider.ConfigureFromProviderData(req.ProviderData, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	r.client = deps.Client
+	r.defaultProject = deps.DefaultProject
+}
 
-	client, ok := req.ProviderData.(*latitudeshgosdk.Latitudesh)
-
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			"Expected *latitudeshgosdk.Latitudesh, got: %T. Please report this issue to the provider developers.",
-		)
-
+func (r *FirewallResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() { // destroy
 		return
 	}
 
-	r.client = client
+	// Read only the "project" attribute (avoids decoding blocks like "rules")
+	var cfgProject types.String
+	var planProject types.String
+	var stateProject types.String
+
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("project"), &cfgProject)...)
+	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("project"), &planProject)...)
+	resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("project"), &stateProject)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Resolve: resource > provider > erro
+	var resolved types.String
+	if !cfgProject.IsNull() && !cfgProject.IsUnknown() && cfgProject.ValueString() != "" {
+		resolved = cfgProject
+	} else if r.defaultProject != "" {
+		resolved = types.StringValue(r.defaultProject)
+	} else {
+		resp.Diagnostics.AddError(
+			"Missing project",
+			"Set `project` on this resource or define a default in the provider block (provider `latitudesh` { project = \"...\" }).",
+		)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("project"), resolved)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !req.State.Raw.IsNull() &&
+		!stateProject.IsNull() && !stateProject.IsUnknown() &&
+		!resolved.IsNull() && !resolved.IsUnknown() &&
+		stateProject.ValueString() != resolved.ValueString() {
+		resp.RequiresReplace = append(resp.RequiresReplace, path.Root("project"))
+	}
 }
 
 func (r *FirewallResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -232,15 +274,10 @@ func (r *FirewallResource) findFirewallByProjectAndName(ctx context.Context, dat
 					if (firewall.Attributes.Project.ID != nil && *firewall.Attributes.Project.ID == project) ||
 						(firewall.Attributes.Project.Slug != nil && *firewall.Attributes.Project.Slug == project) {
 						data.ID = types.StringValue(*firewall.ID)
-						// Add debug info to confirm ID is set
-						diags.AddWarning("Debug", fmt.Sprintf("Firewall ID set to: %s for name: %s in project: %s", *firewall.ID, name, project))
 						return
 					}
 				} else {
-					// If no project info in attributes, assume it's the right one since we filtered by project
 					data.ID = types.StringValue(*firewall.ID)
-					// Add debug info to confirm ID is set
-					diags.AddWarning("Debug", fmt.Sprintf("Firewall ID set to: %s for name: %s (no project validation)", *firewall.ID, name))
 					return
 				}
 			}
@@ -271,21 +308,19 @@ func (r *FirewallResource) Read(ctx context.Context, req resource.ReadRequest, r
 }
 
 func (r *FirewallResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data FirewallResourceModel
-
-	// Read Terraform plan data into the model
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	var plan FirewallResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	firewallID := data.ID.ValueString()
-	name := data.Name.ValueString()
+	firewallID := plan.ID.ValueString()
+	name := plan.Name.ValueString()
 
 	// Convert rules
 	var rules []operations.UpdateFirewallFirewallsRules
-	for _, rule := range data.Rules {
+	for _, rule := range plan.Rules {
 		from := rule.From.ValueString()
 		to := rule.To.ValueString()
 		port := rule.Port.ValueString()
@@ -320,20 +355,19 @@ func (r *FirewallResource) Update(ctx context.Context, req resource.UpdateReques
 		},
 	}
 
-	_, err := r.client.Firewalls.Update(ctx, firewallID, updateRequest)
-	if err != nil {
+	if _, err := r.client.Firewalls.Update(ctx, firewallID, updateRequest); err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to update firewall, got error: "+err.Error())
 		return
 	}
 
 	// Read the resource to populate all attributes
-	r.readFirewall(ctx, &data, &resp.Diagnostics)
+	r.readFirewall(ctx, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	// Save updated data into Terraform state
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *FirewallResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -350,6 +384,10 @@ func (r *FirewallResource) Delete(ctx context.Context, req resource.DeleteReques
 
 	_, err := r.client.Firewalls.Delete(ctx, firewallID)
 	if err != nil {
+		if strings.Contains(err.Error(), "404") {
+			resp.Diagnostics.AddWarning("Firewall Already Deleted", "Firewall appears to have been deleted outside of Terraform")
+			return
+		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete firewall, got error: "+err.Error())
 		return
 	}
