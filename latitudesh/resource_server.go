@@ -18,9 +18,8 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
+	"github.com/latitudesh/terraform-provider-latitudesh/internal/validators"
 )
-
-const maxHostnameLength = 32
 
 var _ resource.Resource = &ServerResource{}
 var _ resource.ResourceWithImportState = &ServerResource{}
@@ -107,6 +106,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "The server hostname",
 				Optional:            true,
 				Computed:            true,
+				Validators:          validators.Hostname(),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -266,7 +266,8 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	if data.Billing.IsNull() {
+	// Set default value for billing if not provided
+	if data.Billing.IsNull() || data.Billing.IsUnknown() || strings.TrimSpace(data.Billing.ValueString()) == "" {
 		data.Billing = types.StringValue("monthly")
 	}
 
@@ -307,10 +308,6 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 
 	if !data.Hostname.IsNull() {
 		hostname := data.Hostname.ValueString()
-		if err := validateHostnameLength(hostname); err != nil {
-			resp.Diagnostics.AddError("Hostname Too Long", err.Error())
-			return
-		}
 		attrs.Hostname = &hostname
 	}
 
@@ -460,7 +457,6 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 					"Set allow_reinstall=true to perform the actual reinstall.", reason),
 			)
 
-			// Skip deploy config update until SDK is fixed
 			err := r.updateDeployConfig(ctx, &data, &resp.Diagnostics)
 			if err != nil {
 				resp.Diagnostics.AddError("Deploy Config Update Error", "Unable to update deploy config: "+err.Error())
@@ -624,7 +620,7 @@ func (r *ServerResource) reinstallServer(ctx context.Context, data *ServerResour
 
 func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerResourceModel, currentData *ServerResourceModel, diags *diag.Diagnostics) (bool, string, error) {
 	serverID := data.ID.ValueString()
-	attrs := &operations.UpdateServerServersRequestApplicationJSONAttributes{}
+	attrs := &operations.UpdateServerServersAttributes{}
 
 	if !data.Hostname.IsNull() {
 		hostname := data.Hostname.ValueString()
@@ -636,7 +632,7 @@ func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerRe
 
 	if !data.Billing.IsNull() && (currentData == nil || data.Billing.ValueString() != currentData.Billing.ValueString()) {
 		billingValue := data.Billing.ValueString()
-		billing := operations.UpdateServerServersRequestApplicationJSONBilling(billingValue)
+		billing := operations.UpdateServerServersBilling(billingValue)
 		attrs.Billing = &billing
 	}
 
@@ -680,7 +676,7 @@ func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerRe
 		}
 	}
 
-	updateType := operations.UpdateServerServersRequestApplicationJSONTypeServers
+	updateType := operations.UpdateServerServersTypeServers
 	updateRequest := operations.UpdateServerServersRequestBody{
 		Data: &operations.UpdateServerServersData{
 			ID:         &serverID,
@@ -923,7 +919,7 @@ func (r *ServerResource) validateTagIDs(ctx context.Context, tagIDs []string) er
 }
 
 func (r *ServerResource) updateServerTags(ctx context.Context, serverID string, tagIDs []string, hostname *string) error {
-	attrs := &operations.UpdateServerServersRequestApplicationJSONAttributes{
+	attrs := &operations.UpdateServerServersAttributes{
 		Tags: tagIDs,
 	}
 
@@ -932,7 +928,7 @@ func (r *ServerResource) updateServerTags(ctx context.Context, serverID string, 
 		attrs.Hostname = hostname
 	}
 
-	updateType := operations.UpdateServerServersRequestApplicationJSONTypeServers
+	updateType := operations.UpdateServerServersTypeServers
 	updateRequest := operations.UpdateServerServersRequestBody{
 		Data: &operations.UpdateServerServersData{
 			ID:         &serverID,
@@ -1082,7 +1078,7 @@ func (m raidReinstallWarningModifier) PlanModifyString(ctx context.Context, req 
 }
 
 func (r *ServerResource) updateDeployConfig(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) error {
-	// Skip actual API call until SDK is fixed
+
 	// Just return success so state can be updated with planned values
 	return nil
 }
@@ -1116,11 +1112,4 @@ func (m ipxeReinstallWarningModifier) PlanModifyString(ctx context.Context, req 
 			"ipxe changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
 		)
 	}
-}
-
-func validateHostnameLength(hostname string) error {
-	if len(hostname) > maxHostnameLength {
-		return fmt.Errorf("hostname must not exceed %d characters; provided hostname has %d characters", maxHostnameLength, len(hostname))
-	}
-	return nil
 }

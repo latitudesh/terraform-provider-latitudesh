@@ -98,7 +98,40 @@ func testAccCheckVirtualNetworkDestroy(s *terraform.State) error {
 	return nil
 }
 
-func testAccConfigVirtualNetworkWithProviderProject(project, desc, site string) string {
+func testAccCheckVirtualNetworkExists(n string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[n]
+		if !ok {
+			return fmt.Errorf("Not found: %s", n)
+		}
+		if rs.Primary.ID == "" {
+			return fmt.Errorf("No Record ID is set")
+		}
+
+		client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+		ctx := context.Background()
+
+		response, err := client.PrivateNetworks.Get(ctx, rs.Primary.ID)
+		if err != nil {
+			return err
+		}
+
+		if response.Object == nil || response.Object.Data == nil {
+			return fmt.Errorf("virtual network not found")
+		}
+
+		vnet := response.Object.Data
+		vnData := vnet.GetData()
+
+		if vnData == nil || vnData.GetID() == nil || *vnData.GetID() != rs.Primary.ID {
+			return fmt.Errorf("Record not found: %v", rs.Primary.ID)
+		}
+
+		return nil
+	}
+}
+
+func testAccCheckVirtualNetworkBasic() string {
 	return fmt.Sprintf(`
 terraform {
   required_providers {

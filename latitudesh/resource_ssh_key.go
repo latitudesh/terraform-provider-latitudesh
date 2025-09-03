@@ -2,12 +2,15 @@ package latitudesh
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -72,6 +75,10 @@ func (r *SSHKeyResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "List of SSH key tags",
 				ElementType:         types.StringType,
 				Optional:            true,
+				Computed:            true,
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"fingerprint": schema.StringAttribute{
 				MarkdownDescription: "The SSH key fingerprint",
@@ -221,15 +228,7 @@ func (r *SSHKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 }
 
 func (r *SSHKeyResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	var data SSHKeyResourceModel
-	data.ID = types.StringValue(req.ID)
-
-	r.readSSHKey(ctx, &data, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
 func (r *SSHKeyResource) readSSHKey(ctx context.Context, data *SSHKeyResourceModel, diags *diag.Diagnostics) {
@@ -237,9 +236,12 @@ func (r *SSHKeyResource) readSSHKey(ctx context.Context, data *SSHKeyResourceMod
 
 	result, err := r.client.SSHKeys.Retrieve(ctx, keyID)
 	if err != nil {
-		// Check if the SSH key was deleted
 		if apiErr, ok := err.(*components.APIError); ok && apiErr.StatusCode == http.StatusNotFound {
 			data.ID = types.StringNull()
+			diags.AddError(
+				"SSH key not found",
+				fmt.Sprintf("No SSH key exists with ID %q", keyID),
+			)
 			return
 		}
 		diags.AddError("Client Error", "Unable to read SSH key, got error: "+err.Error())
@@ -252,8 +254,6 @@ func (r *SSHKeyResource) readSSHKey(ctx context.Context, data *SSHKeyResourceMod
 	}
 
 	sshKey := result.Object.Data
-
-	data.Tags = types.ListNull(types.StringType)
 
 	if sshKey.Attributes != nil {
 		if sshKey.Attributes.Name != nil {
@@ -274,6 +274,10 @@ func (r *SSHKeyResource) readSSHKey(ctx context.Context, data *SSHKeyResourceMod
 
 		if sshKey.Attributes.UpdatedAt != nil {
 			data.UpdatedAt = types.StringValue(*sshKey.Attributes.UpdatedAt)
+		}
+
+		if data.Tags.IsUnknown() {
+			data.Tags = types.ListNull(types.StringType)
 		}
 	}
 }

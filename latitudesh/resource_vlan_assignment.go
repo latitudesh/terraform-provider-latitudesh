@@ -135,8 +135,8 @@ func (r *VlanAssignmentResource) Create(ctx context.Context, req resource.Create
 	}
 
 	// Try to get ID from response first
-	if result.VirtualNetworkAssignment != nil && result.VirtualNetworkAssignment.ID != nil {
-		data.ID = types.StringValue(*result.VirtualNetworkAssignment.ID)
+	if result.VirtualNetworkAssignment != nil && result.VirtualNetworkAssignment.Data != nil && result.VirtualNetworkAssignment.Data.ID != nil {
+		data.ID = types.StringValue(*result.VirtualNetworkAssignment.Data.ID)
 	} else {
 		// If we can't get ID from response, use List endpoint to find it
 
@@ -260,10 +260,7 @@ func (r *VlanAssignmentResource) readVlanAssignment(ctx context.Context, data *V
 	if assignment.Attributes != nil {
 		attrs := assignment.Attributes
 
-		// Set server ID from the appropriate field
-		if attrs.ServerID != nil {
-			data.ServerID = types.StringValue(*attrs.ServerID)
-		} else if attrs.Server != nil && attrs.Server.ID != nil {
+		if attrs.Server != nil && attrs.Server.ID != nil {
 			data.ServerID = types.StringValue(*attrs.Server.ID)
 		}
 
@@ -307,13 +304,9 @@ func (r *VlanAssignmentResource) findAssignmentByServerAndVNet(ctx context.Conte
 		if a.Attributes != nil {
 			attrs := a.Attributes
 
-			// Check virtual network ID first
 			if attrs.VirtualNetworkID != nil && *attrs.VirtualNetworkID == vnetID {
-				// Check server ID - try both ServerID field and nested Server.ID
 				var assignmentServerID string
-				if attrs.ServerID != nil {
-					assignmentServerID = *attrs.ServerID
-				} else if attrs.Server != nil && attrs.Server.ID != nil {
+				if attrs.Server != nil && attrs.Server.ID != nil {
 					assignmentServerID = *attrs.Server.ID
 				}
 
@@ -334,10 +327,7 @@ func (r *VlanAssignmentResource) findAssignmentByServerAndVNet(ctx context.Conte
 				serverIDStr := "nil"
 				vnetIDStr := "nil"
 
-				// Try to get server ID from both possible locations
-				if attrs.ServerID != nil {
-					serverIDStr = *attrs.ServerID
-				} else if attrs.Server != nil && attrs.Server.ID != nil {
+				if attrs.Server != nil && attrs.Server.ID != nil {
 					serverIDStr = *attrs.Server.ID
 				}
 
@@ -367,10 +357,7 @@ func (r *VlanAssignmentResource) findAssignmentByServerAndVNet(ctx context.Conte
 	if assignment.Attributes != nil {
 		attrs := assignment.Attributes
 
-		// Set server ID from the appropriate field
-		if attrs.ServerID != nil {
-			data.ServerID = types.StringValue(*attrs.ServerID)
-		} else if attrs.Server != nil && attrs.Server.ID != nil {
+		if attrs.Server != nil && attrs.Server.ID != nil {
 			data.ServerID = types.StringValue(*attrs.Server.ID)
 		}
 
