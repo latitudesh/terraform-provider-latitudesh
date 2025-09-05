@@ -7,7 +7,7 @@ description: |-
 
 # latitudesh_tag (Resource)
 
-Latitude.sh supports resource tagging to help you organize and manage your infrastructure more effectively.
+[Latitude.sh](https://latitude.sh/) supports resource tagging to help you organize and manage your infrastructure more effectively.
 Tags allow you to categorize resources, making it easier to search, filter, and group them based on your specific needs.
 
 ## Example usage
@@ -25,7 +25,7 @@ resource "latitudesh_tag" "tag" {
 
 ### Required
 
-- `color` (String) The tag color (hex color code, e.g., #ff0000). The API normalizes colors to lowercase.
+- `color` (String) The tag color (hex color code, e.g., #ff0000).
 - `name` (String) The tag name
 
 ### Optional

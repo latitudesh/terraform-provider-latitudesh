@@ -7,14 +7,14 @@ description: |-
 
 # latitudesh_ssh_key (Resource)
 
-
+The SSH key resource allows you to create and manage SSH keys within your [Latitude.sh](https://latitude.sh/) account.
 
 ## Example usage
 
-```terraform
+```hcl
 resource "latitudesh_ssh_key" "ssh_key" {
   name       = "John's Key"
-  public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5..."
+  public_key = "ssh-ed25519 AAAA..."
 }
 ```
 

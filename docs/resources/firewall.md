@@ -7,37 +7,38 @@ description: |-
 
 # latitudesh_firewall (Resource)
 
-The firewall resource allows you to create and manage firewalls within your Latitude.sh account.
+The firewall resource allows you to create and manage firewalls within your [Latitude.sh](https://latitude.sh/) account.
 
 ## Example usage
 
-```terraform
+```hcl
 resource "latitudesh_project" "project" {
-  name        = "Production Environment"
-  environment = "Production"
+  name              = "Production Environment"
+  environment       = "Production"
+  provisioning_type = "reserved"
 }
 
 resource "latitudesh_firewall" "web_firewall" {
   name    = "Web Server Firewall"
   project = latitudesh_project.project.id
-  
+
   rules {
     from     = "0.0.0.0/0"
-    to       = "server"
+    to       = "0.0.0.0/0"
     port     = "22"
     protocol = "tcp"
   }
-  
+
   rules {
     from     = "0.0.0.0/0"
-    to       = "server"
+    to       = "0.0.0.0/0"
     port     = "80"
     protocol = "tcp"
   }
-  
+
   rules {
     from     = "0.0.0.0/0"
-    to       = "server"
+    to       = "0.0.0.0/0"
     port     = "443"
     protocol = "tcp"
   }

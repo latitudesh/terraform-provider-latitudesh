@@ -12,27 +12,15 @@ The `latitudesh_server` resource allows you to deploy and manage bare metal serv
 ## Example usage
 
 ```hcl
-terraform {
-  required_providers {
-    latitudesh = {
-      source  = "latitudesh/latitudesh"
-      version = ">= 2.4.0"
-    }
-  }
-}
-
-provider "latitudesh" {}
-
 # Create a server
 resource "latitudesh_server" "server" {
-  hostname         = "terraform-latitude-sh"
-  operating_system = "ubuntu_24_04_x64_lts"
-  plan             = "monthly"
-  project          = latitudesh_project.project.id      # You can use the project id or slug
-  site             = data.latitudesh_region.region.slug # You can use the site id or slug
-  ssh_keys         = [latitudesh_ssh_key.ssh_key.id]
-  user_data        = latitudesh_user_data.user_data.id
-  ipxe_url         = "" # URL to a boot.ipxe file. e.g. https://boot.netboot.xyz
+  billing           = "monthly"
+  hostname          = "my-server"
+  plan              = "c2-small-x86"
+  site              = "SAO2"
+  operating_system  = "ubuntu_24_04_x64_lts"
+  project           = "proj_..."
+  ssh_keys          = ["ssh_..."]
 }
 
 # Access the server's attributes
@@ -58,12 +46,12 @@ output "server" {
 
 ### Optional
 
-- `allow_reinstall` (Boolean, Deprecated) Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe_url changes.
+- `allow_reinstall` (Boolean, Deprecated) Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe changes.
     WARNING: The reinstall will be triggered even if Terraform reports an in-place update.
 - `billing` (String) The server billing type.
     Accepts hourly and monthly for on demand projects and yearly for reserved projects.
-- `ipxe_url` (String) Url for the iPXE script that will be used. 
-    Updating ipxe_url will trigger a reinstall if allow_reinstall is set to true.
+- `ipxe` (String) Url for the iPXE script that will be used. 
+    Updating ipxe will trigger a reinstall if allow_reinstall is set to true.
 - `locked` (Boolean) Lock/unlock the server. A locked server cannot be deleted or updated.
 - `raid` (String) RAID mode for the server.
     Updating raid will trigger a reinstall if allow_reinstall is set to true.

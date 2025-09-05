@@ -7,11 +7,21 @@ description: |-
 
 # latitudesh_virtual_network (Resource)
 
-
+The virtual network resource allows you to create and manage virtual networks within your [Latitude.sh](https://latitude.sh/) account.
 
 ## Example usage
 
-```terraform
+```hcl
+data "latitudesh_region" "region" {
+  slug = "SAO2"
+}
+
+resource "latitudesh_project" "project" {
+  name              = "Production Environment"
+  environment       = "Production"
+  provisioning_type = "on_demand"
+}
+
 resource "latitudesh_virtual_network" "virtual_network" {
   description      = "Virtual Network description"
   site             = data.latitudesh_region.region.slug # You can use the site id or slug

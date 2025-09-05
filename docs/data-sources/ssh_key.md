@@ -1,6 +1,6 @@
 ---
-page_title: "latitudesh_ssh_key Data Source - latitudesh"
-subcategory: "SSH"
+page_title: "latitudesh_ssh_key Data Source - terraform-provider-latitudesh"
+subcategory: ""
 description: |-
   Lookup an SSH key by id, name, or fingerprint.
 ---
