@@ -39,27 +39,24 @@ output "server" {
   - Allowed characters: letters (a–z, A–Z), digits (0–9), dots (.), and hyphens (-)
   - Must not begin or end with a dot or hyphen
   - Underscores (_) are not allowed
-- `operating_system` (String) The server OS
+- `operating_system` (String) The server OS. Updating OS will trigger a reinstall.
 - `plan` (String) The server plan
 - `project` (String) The id or slug of the project
 - `site` (String) The server site
 
 ### Optional
 
-- `allow_reinstall` (Boolean, Deprecated) Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe changes.
-    WARNING: The reinstall will be triggered even if Terraform reports an in-place update.
 - `billing` (String) The server billing type.
     Accepts hourly and monthly for on demand projects and yearly for reserved projects.
 - `ipxe` (String) Url for the iPXE script that will be used. 
-    Updating ipxe will trigger a reinstall if allow_reinstall is set to true.
+    Updating ipxe will trigger a reinstall.
 - `locked` (Boolean) Lock/unlock the server. A locked server cannot be deleted or updated.
-- `raid` (String) RAID mode for the server.
-    Updating raid will trigger a reinstall if allow_reinstall is set to true.
+- `raid` (String) RAID mode for the server. Updating raid will trigger a reinstall.
 - `ssh_keys` (List of String) List of server SSH key ids.
     Any change to `ssh_keys` will force a resource replacement.
 - `tags` (List of String) List of server tags
 - `user_data` (String) The id of user data to set on the server.
-    Updating user_data will trigger a reinstall if allow_reinstall is set to true.
+    Updating user_data will trigger a reinstall.
 
 ### Read-Only
 
