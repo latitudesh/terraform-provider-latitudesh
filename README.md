@@ -1,84 +1,81 @@
-Latitude.sh Terraform Provider
-==================
+# Terraform Provider for Latitude.sh
 
-- Documentation: https://registry.terraform.io/providers/latitudesh/latitudesh/latest/docs 
+[![GitHub release](https://img.shields.io/github/tag/latitudesh/terraform-provider-latitudesh.svg?label=release)](https://github.com/latitudesh/terraform-provider-latitudesh/releases/latest)
+[![Go Reference](https://pkg.go.dev/badge/github.com/latitudesh/terraform-provider-latitudesh.svg)](https://pkg.go.dev/github.com/latitudesh/terraform-provider-latitudesh)
+[![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](https://opensource.org/license/mpl-2-0/)
 
-Requirements for running the provider
-------------
+Provision and manage [Latitude.sh](https://www.latitude.sh/) bare metal infrastructure using [Terraform](https://developer.hashicorp.com/terraform).
 
--	[Terraform](https://www.terraform.io/downloads.html) >= 1.3.x
+## Getting Started
 
-Requirements for developing the provider
-------------
+Check the [latest releases](https://github.com/latitudesh/terraform-provider-latitudesh/releases/latest) for updates and changelogs.
 
--	[Terraform](https://www.terraform.io/downloads.html) >= 1.3.x
--	[Go](https://golang.org/doc/install) >= 1.23.x (to build the provider plugin)
+> **Note:** If you are upgrading from version 1.x to 2.x, please see the [Migration Guide](MIGRATION_GUIDE_v2.md).
 
-Migration Guide
-------------
+### Installation & Requirements
 
-**Upgrading to v2?** Please read the [Migration Guide to v2](https://github.com/latitudesh/terraform-provider-latitudesh/blob/main/MIGRATION_GUIDE_v2.md) for details on breaking changes and how to safely upgrade.
+To get started, make sure you have:
 
-Features
-------------
+- [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.6
+- A [Latitude.sh API key](https://www.latitude.sh/dashboard/api-keys)
 
-- **IPv6 Support**: The server resource now supports both IPv4 and IPv6 addresses. You can access the primary IPv6 address using the `primary_ipv6` attribute:
+Then add the provider to your `terraform` block:
 
 ```hcl
-resource "latitudesh_server" "example" {
-  hostname         = "example.latitude.sh"
-  operating_system = "ubuntu_22_04_x64_lts"
-  plan             = data.latitudesh_plan.plan.slug
-  project          = latitudesh_project.project.id
-  site             = data.latitudesh_region.region.slug
-}
-
-output "server_ipv4" {
-  value = latitudesh_server.example.primary_ipv4
-}
-
-output "server_ipv6" {
-  value = latitudesh_server.example.primary_ipv6
-}
-```
-
-Developing the provider locally
-------------
-
-- Download the latest [release](https://github.com/latitudesh/terraform-provider-latitudesh/releases) for your architecture
-
-Mac
-
-```sh
-$ mkdir -p ~/.terraform.d/plugins/latitude.sh/iac/latitudesh/[VERSION]/darwin_amd64
-$ mv terraform-provider-latitudesh ~/.terraform.d/plugins/latitude.sh/iac/latitudesh/[VERSION]/darwin_amd64
-```
-
-Linux
-
-```sh
-$ export OS_ARCH="$(go env GOHOSTOS)_$(go env GOHOSTARCH)"
-$ mkdir -p ~/.terraform.d/plugins/latitude.sh/iac/latitudesh/[VERSION]/$OS_ARCH
-```
-
-Windows
-
-```sh
-$ mkdir -p %APPDATA%\terraform.d\plugins\latitude.sh\iac\latitudesh\[VERSION]\[OS_ARCH]
-$ # Move the binary to the appropriate subdirectory within your user plugins directory, replacing [OS_ARCH] with your system's OS_ARCH
-```
-
-After installing the provider locally, create a Terraform project and on `main.tf` replace source with:
-
-```sh
 terraform {
   required_providers {
     latitudesh = {
-      source  = "latitude.sh/iac/latitudesh"
-      version = "2.1.3"
+      source  = "latitudesh/latitudesh"
+      version = ">= 2.5.0"
     }
   }
 }
 ```
 
-Create `variables.tf` and add your Latitude.sh token. Finally, initialize the project with `terraform init`
+### Authentication
+
+Export your API key:
+
+```sh
+export LATITUDESH_AUTH_TOKEN="<your-api-key-here>"
+```
+
+## Quick Example
+
+```hcl
+provider "latitudesh" {}
+
+resource "latitudesh_server" "example" {
+  billing           = "monthly"
+  hostname          = "my-server"
+  plan              = "c2-small-x86"
+  site              = "SAO2"
+  operating_system  = "ubuntu_24_04_x64_lts"
+  project           = "proj_..."
+  ssh_keys          = ["ssh_..."]
+}
+```
+
+Then run:
+
+```sh
+terraform init
+terraform apply
+```
+
+and type `yes` to confirm.
+
+## Resources
+
+Highlighted resources:
+
+- [latitudesh_server](https://registry.terraform.io/providers/latitudesh/latitudesh/latest/docs/resources/server)
+- [latitudesh_ssh_key](https://registry.terraform.io/providers/latitudesh/latitudesh/latest/docs/resources/ssh_key)
+- [latitudesh_firewall](https://registry.terraform.io/providers/latitudesh/latitudesh/latest/docs/resources/firewall)
+- [latitudesh_virtual_network](https://registry.terraform.io/providers/latitudesh/latitudesh/latest/docs/resources/virtual_network)
+
+For the complete list of resources and data sources, see the [Terraform Registry documentation](https://registry.terraform.io/providers/latitudesh/latitudesh/latest/docs).
+
+## Contributing
+
+We welcome all contributions, from small fixes to major improvements. See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.

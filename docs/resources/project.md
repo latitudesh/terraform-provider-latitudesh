@@ -7,7 +7,7 @@ description: |-
 
 # latitudesh_project (Resource)
 
-
+The project resource allows you to create and manage projects within your [Latitude.sh](https://latitude.sh/) account.
 
 ## Example usage
 

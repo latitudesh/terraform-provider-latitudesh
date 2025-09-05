@@ -7,14 +7,39 @@ description: |-
 
 # latitudesh_vlan_assignment (Resource)
 
-
+The VLAN assignment resource allows you to attach servers to a VLAN within your [Latitude.sh](https://latitude.sh/) account.
 
 ## Example usage
 
-```terraform
+```hcl
+data "latitudesh_region" "region" {
+  slug = "SAO2"
+}
+
+resource "latitudesh_project" "project" {
+  name              = "Test Environment Project"
+  environment       = "Production"
+  provisioning_type = "on_demand"
+}
+
+resource "latitudesh_virtual_network" "virtual_network" {
+  description = "Virtual Network description"
+  site        = data.latitudesh_region.region.slug # You can use the site id or slug
+  project     = latitudesh_project.project.id      # You can use the project id or slug
+}
+
+resource "latitudesh_server" "server" {
+  billing          = "monthly"
+  hostname         = "app-stg-01"
+  plan             = "c2-small-x86"
+  site             = data.latitudesh_region.region.slug
+  operating_system = "ubuntu_24_04_x64_lts"
+  project          = latitudesh_project.project.id
+}
+
 resource "latitudesh_vlan_assignment" "vlan_assignment" {
-    server_id          = latitudesh_server.server.id
-    virtual_network_id = latitudesh_virtual_network.id
+  server_id          = latitudesh_server.server.id
+  virtual_network_id = latitudesh_virtual_network.virtual_network.id
 }
 ```
 

@@ -7,20 +7,27 @@ description: |-
 
 # latitudesh_user_data (Resource)
 
-
+The user data resource allows you to define and manage reusable cloud-init scripts to bootstrap servers in your [Latitude.sh](https://latitude.sh/) account.
 
 ## Example usage
 
-```terraform
+```hcl
 resource "latitudesh_user_data" "setup" {
-  description = "Server initialization script"
-  content     = base64encode(<<-EOF
-    #!/bin/bash
-    apt-get update
-    apt-get install -y docker.io
-    systemctl enable docker
-    systemctl start docker
-  EOF
+  description = "Standard bootstrap (packages + files + commands)"
+  content = base64encode(<<-YAML
+    #cloud-config
+    packages:
+      - nginx
+
+    write_files:
+      - path: /etc/motd
+        permissions: '0644'
+        content: |
+          Welcome to your Latitude.sh server
+
+    runcmd:
+      - systemctl enable --now nginx
+  YAML
   )
 }
 ```

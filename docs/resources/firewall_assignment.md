@@ -7,39 +7,41 @@ description: |-
 
 # latitudesh_firewall_assignment (Resource)
 
-The firewall assignment resource allows you to assign firewalls to servers within your Latitude.sh account.
+The firewall assignment resource allows you to assign firewalls to servers within your [Latitude.sh](https://latitude.sh/) account.
 
 ## Example usage
 
-```terraform
+```hcl
 resource "latitudesh_project" "project" {
-  name        = "Production Environment"
-  environment = "Production"
+  name              = "Production Environment"
+  environment       = "Production"
+  provisioning_type = "on_demand"
 }
 
 resource "latitudesh_server" "web_server" {
-  hostname         = "web01.latitude.sh"
+  billing          = "monthly"
+  hostname         = "web-01"
   operating_system = "ubuntu_22_04_x64_lts"
   plan             = "c2-medium-x86"
   project          = latitudesh_project.project.id
-  site             = "NY1"
+  site             = "SAO2"
 }
 
 resource "latitudesh_firewall" "web_firewall" {
   name    = "Web Server Firewall"
   project = latitudesh_project.project.id
-  
+
   rules {
     from     = "0.0.0.0/0"
-    to       = "server"
+    to       = "0.0.0.0/0"
     port     = "22"
     protocol = "tcp"
   }
-  
+
   rules {
     from     = "0.0.0.0/0"
-    to       = "server"
-    port     = "80,443"
+    to       = "0.0.0.0/0"
+    port     = "80"
     protocol = "tcp"
   }
 }

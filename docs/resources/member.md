@@ -7,11 +7,15 @@ description: |-
 
 # latitudesh_member (Resource)
 
-
+The member resource allows you to create members within your [Latitude.sh](https://latitude.sh/) account.
 
 ## Example usage
 
-```terraform
+```hcl
+data "latitudesh_role" "role" {
+  name = "collaborator"
+}
+
 resource "latitudesh_member" "member" {
   first_name    = "Name"
   last_name     = "Surname"
