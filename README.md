@@ -74,8 +74,8 @@ Highlighted resources:
 - [latitudesh_firewall](https://registry.terraform.io/providers/latitudesh/latitudesh/latest/docs/resources/firewall)
 - [latitudesh_virtual_network](https://registry.terraform.io/providers/latitudesh/latitudesh/latest/docs/resources/virtual_network)
 
-Check the [documentation](https://registry.terraform.io/providers/latitudesh/latitudesh/latest/docs) for the full list of resources.
+For the complete list of resources and data sources, see the [Terraform Registry documentation](https://registry.terraform.io/providers/latitudesh/latitudesh/latest/docs).
 
 ## Contributing
 
-We welcome all contributions, from small fixes to major improvements. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
+We welcome all contributions, from small fixes to major improvements. See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
