@@ -6,6 +6,8 @@
 
 Provision and manage [Latitude.sh](https://www.latitude.sh/) bare metal infrastructure using [Terraform](https://developer.hashicorp.com/terraform).
 
+Full documentation is available on the [Terraform Registry](https://registry.terraform.io/providers/latitudesh/latitudesh/latest/docs).
+
 ## Getting Started
 
 Check the [latest releases](https://github.com/latitudesh/terraform-provider-latitudesh/releases/latest) for updates and changelogs.
