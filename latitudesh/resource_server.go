@@ -3,6 +3,7 @@ package latitudesh
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -321,7 +322,8 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	if !data.UserData.IsNull() {
-		attrs.UserData = nil
+		userDataValue := data.UserData.ValueString()
+		attrs.UserData = &userDataValue
 	}
 
 	if !data.Raid.IsNull() {
@@ -588,7 +590,20 @@ func (r *ServerResource) reinstallServer(ctx context.Context, data *ServerResour
 	if !data.UserData.IsNull() && !data.UserData.IsUnknown() {
 		userDataValue := data.UserData.ValueString()
 		if userDataValue != "" {
-			attrs.UserData = nil // Skip user data for now
+			var numericPart string
+			for _, char := range userDataValue {
+				if char >= '0' && char <= '9' {
+					numericPart += string(char)
+				}
+			}
+
+			if numericPart != "" {
+				userDataValueInt, err := strconv.ParseInt(numericPart, 10, 64)
+				if err != nil {
+					return fmt.Errorf("failed to convert user data numeric part to int64: %w", err)
+				}
+				attrs.UserData = &userDataValueInt
+			}
 		}
 	}
 
