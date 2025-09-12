@@ -3,7 +3,6 @@ package latitudesh
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -590,20 +589,10 @@ func (r *ServerResource) reinstallServer(ctx context.Context, data *ServerResour
 	if !data.UserData.IsNull() && !data.UserData.IsUnknown() {
 		userDataValue := data.UserData.ValueString()
 		if userDataValue != "" {
-			var numericPart string
-			for _, char := range userDataValue {
-				if char >= '0' && char <= '9' {
-					numericPart += string(char)
-				}
-			}
-
-			if numericPart != "" {
-				userDataValueInt, err := strconv.ParseInt(numericPart, 10, 64)
-				if err != nil {
-					return fmt.Errorf("failed to convert user data numeric part to int64: %w", err)
-				}
-				attrs.UserData = &userDataValueInt
-			}
+			// TODO: SDK inconsistency - reinstall API expects int64 but creation uses string IDs
+			// Temporarily skip user_data during reinstall to avoid API errors
+			// The user_data will remain in Terraform state but won't be reapplied during reinstall
+			// This is a known limitation that should be addressed when the API/SDK is standardized
 		}
 	}
 
