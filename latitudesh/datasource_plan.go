@@ -34,7 +34,7 @@ type PlanDataSourceModel struct {
 	CPUCores types.Float64 `tfsdk:"cpu_cores"`
 	CPUClock types.Float64 `tfsdk:"cpu_clock"`
 	CPUCount types.Float64 `tfsdk:"cpu_count"`
-	Memory   types.String  `tfsdk:"memory"`
+	Memory   types.Float64  `tfsdk:"memory"`
 	HasGPU   types.Bool    `tfsdk:"has_gpu"`
 	GPUType  types.String  `tfsdk:"gpu_type"`
 	GPUCount types.Float64 `tfsdk:"gpu_count"`
@@ -82,7 +82,7 @@ func (d *PlanDataSource) Schema(ctx context.Context, req datasource.SchemaReques
 				MarkdownDescription: "Number of CPUs",
 				Computed:            true,
 			},
-			"memory": schema.StringAttribute{
+			"memory": schema.Float64Attribute{
 				MarkdownDescription: "Total memory",
 				Computed:            true,
 			},
@@ -213,7 +213,7 @@ func (d *PlanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 
 			// Memory information
 			if specs.Memory != nil && specs.Memory.Total != nil {
-				data.Memory = types.StringValue(*specs.Memory.Total)
+				data.Memory = types.Float64Value(*specs.Memory.Total)
 			}
 
 			// GPU information
