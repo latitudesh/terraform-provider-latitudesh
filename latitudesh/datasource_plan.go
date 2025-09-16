@@ -152,7 +152,7 @@ func (d *PlanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
     req := operations.GetPlansRequest{ FilterSlug: &slug }
     result, err := d.client.Plans.List(ctx, req)
     if err != nil {
-        resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to search for plan with slug %q: %s", slug, err))
+        resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to search for plan with slug or name %q: %s", slug, err))
         return
     }
     if result.Object != nil && result.Object.Data != nil && len(result.Object.Data) > 0 {
