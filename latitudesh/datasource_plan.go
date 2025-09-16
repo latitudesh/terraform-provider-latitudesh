@@ -121,11 +121,11 @@ func (d *PlanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		return
 	}
 
-	// Check that either ID or slug is provided
+	// Check that either ID/slug/name is provided
 	if data.ID.IsNull() && data.Slug.IsNull() && data.Name.IsNull() {
 		resp.Diagnostics.AddError(
 			"Missing Required Attribute",
-			"Either 'id' or 'slug' must be provided to look up a plan.",
+			"Either 'id', 'slug' or 'name' must be provided to look up a plan.",
 		)
 		return
 	}
