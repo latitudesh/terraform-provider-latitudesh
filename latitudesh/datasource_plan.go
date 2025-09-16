@@ -59,6 +59,7 @@ func (d *PlanDataSource) Schema(ctx context.Context, req datasource.SchemaReques
 			"name": schema.StringAttribute{
 				MarkdownDescription: "Plan name",
 				Computed:            true,
+				Optional:            true,
 			},
 			"features": schema.ListAttribute{
 				MarkdownDescription: "List of plan features",
@@ -121,7 +122,7 @@ func (d *PlanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	}
 
 	// Check that either ID or slug is provided
-	if data.ID.IsNull() && data.Slug.IsNull() {
+	if data.ID.IsNull() && data.Slug.IsNull() && data.Name.IsNull() {
 		resp.Diagnostics.AddError(
 			"Missing Required Attribute",
 			"Either 'id' or 'slug' must be provided to look up a plan.",
@@ -143,19 +144,20 @@ func (d *PlanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 			plan = result.Plan.Data
 		}
 	} else {
-		// Look up by slug
+		// Look up by slug or name
 		slug := data.Slug.ValueString()
-		request := operations.GetPlansRequest{
-			FilterSlug: &slug,
+		if data.Slug.IsNull() {
+			slug = data.Name.ValueString()
 		}
-		result, err := d.client.Plans.List(ctx, request)
-		if err != nil {
-			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to search for plan with slug %s, got error: %s", slug, err.Error()))
-			return
-		}
-		if result.Object != nil && result.Object.Data != nil && len(result.Object.Data) > 0 {
-			plan = &result.Object.Data[0]
-		}
+    req := operations.GetPlansRequest{ FilterSlug: &slug }
+    result, err := d.client.Plans.List(ctx, req)
+    if err != nil {
+        resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to search for plan with slug %q: %s", slug, err))
+        return
+    }
+    if result.Object != nil && result.Object.Data != nil && len(result.Object.Data) > 0 {
+        plan = &result.Object.Data[0]
+    }
 	}
 
 	if plan == nil {
