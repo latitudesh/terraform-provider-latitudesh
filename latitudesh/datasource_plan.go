@@ -34,7 +34,7 @@ type PlanDataSourceModel struct {
 	CPUCores types.Float64 `tfsdk:"cpu_cores"`
 	CPUClock types.Float64 `tfsdk:"cpu_clock"`
 	CPUCount types.Float64 `tfsdk:"cpu_count"`
-	Memory   types.Float64  `tfsdk:"memory"`
+	Memory   types.Float64 `tfsdk:"memory"`
 	HasGPU   types.Bool    `tfsdk:"has_gpu"`
 	GPUType  types.String  `tfsdk:"gpu_type"`
 	GPUCount types.Float64 `tfsdk:"gpu_count"`
@@ -149,15 +149,16 @@ func (d *PlanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		if data.Slug.IsNull() {
 			slug = data.Name.ValueString()
 		}
-    req := operations.GetPlansRequest{ FilterSlug: &slug }
-    result, err := d.client.Plans.List(ctx, req)
-    if err != nil {
-        resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to search for plan with slug or name %q: %s", slug, err))
-        return
-    }
-    if result.Object != nil && result.Object.Data != nil && len(result.Object.Data) > 0 {
-        plan = &result.Object.Data[0]
-    }
+
+		req := operations.GetPlansRequest{FilterSlug: &slug}
+		result, err := d.client.Plans.List(ctx, req)
+		if err != nil {
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to search for plan with slug or name %q: %s", slug, err))
+			return
+		}
+		if result.Object != nil && result.Object.Data != nil && len(result.Object.Data) > 0 {
+			plan = &result.Object.Data[0]
+		}
 	}
 
 	if plan == nil {
