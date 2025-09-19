@@ -31,12 +31,11 @@ type VirtualNetworkResource struct {
 }
 
 type VirtualNetworkResourceModel struct {
-	ID          types.String `tfsdk:"id"`
-	Project     types.String `tfsdk:"project"`
-	Site        types.String `tfsdk:"site"`
-	Description types.String `tfsdk:"description"`
-	Tags        types.List   `tfsdk:"tags"`
-	// Computed fields
+	ID               types.String `tfsdk:"id"`
+	Project          types.String `tfsdk:"project"`
+	Site             types.String `tfsdk:"site"`
+	Description      types.String `tfsdk:"description"`
+	Tags             types.List   `tfsdk:"tags"`
 	Vid              types.Int64  `tfsdk:"vid"`
 	Region           types.String `tfsdk:"region"`
 	AssignmentsCount types.Int64  `tfsdk:"assignments_count"`
@@ -236,6 +235,11 @@ func (r *VirtualNetworkResource) Create(ctx context.Context, req resource.Create
 		}
 	}
 
+	r.readVirtualNetwork(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -256,12 +260,9 @@ func (r *VirtualNetworkResource) Read(ctx context.Context, req resource.ReadRequ
 }
 
 func (r *VirtualNetworkResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-
-	// Since description now requires replacement, updates should not happen
 	resp.Diagnostics.AddError("Update Not Supported",
 		"Virtual network updates are not supported due to SDK limitations. "+
-			"Changes to description require resource replacement. "+
-			"Tags can only be set during creation.")
+			"Changes to description require resource replacement.")
 }
 
 func (r *VirtualNetworkResource) findVirtualNetworkByProject(ctx context.Context, data *VirtualNetworkResourceModel, diags *diag.Diagnostics) {
@@ -361,6 +362,7 @@ func (r *VirtualNetworkResource) findVirtualNetworkByProject(ctx context.Context
 		region := attrs.GetRegion()
 		if region != nil && region.Site != nil && region.Site.Slug != nil {
 			data.Region = types.StringValue(*region.Site.Slug)
+			data.Site = types.StringValue(*region.Site.Slug)
 		} else {
 			data.Region = types.StringNull()
 		}
@@ -412,23 +414,38 @@ func (r *VirtualNetworkResource) ImportState(ctx context.Context, req resource.I
 
 func (r *VirtualNetworkResource) readVirtualNetwork(ctx context.Context, data *VirtualNetworkResourceModel, diags *diag.Diagnostics) {
 	vlanID := data.ID.ValueString()
+	project := data.Project.ValueString()
 
-	response, err := r.client.PrivateNetworks.Get(ctx, vlanID)
+	listRequest := operations.GetVirtualNetworksRequest{
+		FilterProject: &project,
+	}
+
+	response, err := r.client.PrivateNetworks.List(ctx, listRequest)
 	if err != nil {
-		diags.AddError("Client Error", "Unable to read virtual network, got error: "+err.Error())
+		diags.AddError("Client Error", "Unable to list virtual networks, got error: "+err.Error())
 		return
 	}
 
-	if response.Object == nil || response.Object.Data == nil {
+	if response.VirtualNetworks == nil || response.VirtualNetworks.Data == nil {
 		data.ID = types.StringNull()
 		return
 	}
 
-	vnet := response.Object.Data
-	vnData := vnet.GetData()
+	var foundVnet *components.VirtualNetworkData
+	for _, vnet := range response.VirtualNetworks.Data {
+		if vnet.GetID() != nil && *vnet.GetID() == vlanID {
+			foundVnet = &vnet
+			break
+		}
+	}
 
-	if vnData != nil && vnData.GetAttributes() != nil {
-		attrs := vnData.GetAttributes()
+	if foundVnet == nil {
+		data.ID = types.StringNull()
+		return
+	}
+
+	if foundVnet.GetAttributes() != nil {
+		attrs := foundVnet.GetAttributes()
 
 		if attrs.GetVid() != nil {
 			data.Vid = types.Int64Value(*attrs.GetVid())
@@ -458,12 +475,17 @@ func (r *VirtualNetworkResource) readVirtualNetwork(ctx context.Context, data *V
 			data.Region = types.StringNull()
 		}
 
-		data.Tags = types.ListNull(types.StringType)
+		if data.Tags.IsNull() || data.Tags.IsUnknown() {
+			data.Tags = types.ListNull(types.StringType)
+		}
 	} else {
 		data.Vid = types.Int64Null()
 		data.AssignmentsCount = types.Int64Null()
 		data.Region = types.StringNull()
-		data.Tags = types.ListNull(types.StringType)
+
+		if data.Tags.IsNull() || data.Tags.IsUnknown() {
+			data.Tags = types.ListNull(types.StringType)
+		}
 
 		if data.Description.IsUnknown() {
 			data.Description = types.StringNull()
