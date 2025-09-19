@@ -2,40 +2,102 @@ package latitudesh
 
 import (
 	"fmt"
+	"os"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 )
 
-const testPlanName = "c2.small.x86"
+const testPlanName = "c2-small-x86"
+const (
+	validSlugForNVME  = "f4-metal-medium"
+	invalidSlugByName = "f4.metal.medium"
+)
 
-func TestAccPlan_Basic(t *testing.T) {
+func TestAccDataSourcePlan(t *testing.T) {
+	if os.Getenv("TF_ACC") == "" {
+		t.Fatalf("TF_ACC must be set for acceptance tests")
+	}
 
-	recorder, teardown := createTestRecorder(t)
+	_, teardown := createTestRecorder(t)
 	defer teardown()
-	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
+
+	notFoundRe := regexp.MustCompile(`(?i)(plan\s*not\s*found|specified\s*plan\s*was\s*not\s*found|not\s*found|404)`)
 
 	resource.Test(t, resource.TestCase{
-		PreCheck:  func() { testAccTokenCheck(t) },
-		Providers: testAccProviders,
+		PreCheck:                 func() { testAccTokenCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCheckPlanBasic(),
+				Config: testAccConfigPlanBasic(),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(
-						"data.latitudesh_plan.test", "slug", testPlanName),
+						"data.latitudesh_plan.test", "slug", testPlanName,
+					),
+					resource.TestCheckResourceAttrSet(
+						"data.latitudesh_plan.test", "memory",
+					),
+					resource.TestMatchResourceAttr(
+						"data.latitudesh_plan.test", "memory",
+						regexp.MustCompile(`^32(\.0+)?$`),
+					),
+				),
+			},
+			{
+				Config:      testAccConfigPlanByName(),
+				ExpectError: notFoundRe,
+			},
+			{
+				Config:      testAccConfigPlanNameAsSlug(),
+				ExpectError: notFoundRe,
+			},
+			{
+				Config: testAccConfigPlanSlugWithNVME(),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("data.latitudesh_plan.slug_with_nvme", "slug", validSlugForNVME),
+					resource.TestCheckResourceAttrSet("data.latitudesh_plan.slug_with_nvme", "id"),
+					resource.TestCheckResourceAttrSet("data.latitudesh_plan.slug_with_nvme", "name"),
+					resource.TestCheckResourceAttrSet("data.latitudesh_plan.slug_with_nvme", "cpu_count"),
+					resource.TestCheckResourceAttrSet("data.latitudesh_plan.slug_with_nvme", "cpu_cores"),
+					resource.TestCheckResourceAttrSet("data.latitudesh_plan.slug_with_nvme", "cpu_clock"),
+					resource.TestCheckResourceAttrSet("data.latitudesh_plan.slug_with_nvme", "memory"),
+					resource.TestMatchResourceAttr("data.latitudesh_plan.slug_with_nvme", "features.#", regexp.MustCompile(`^[1-9]\d*$`)),
+					resource.TestCheckResourceAttrSet("data.latitudesh_plan.slug_with_nvme", "has_gpu"),
 				),
 			},
 		},
 	})
 }
 
-func testAccCheckPlanBasic() string {
+func testAccConfigPlanBasic() string {
 	return fmt.Sprintf(`
 data "latitudesh_plan" "test" {
-	slug = "%s"
+  slug = "%s"
 }
-`,
-		testPlanName,
-	)
+`, testPlanName)
+}
+
+func testAccConfigPlanByName() string {
+	return `
+data "latitudesh_plan" "by_name" {
+  name = "f4.metal.medium"
+}
+`
+}
+
+func testAccConfigPlanNameAsSlug() string {
+	return fmt.Sprintf(`
+data "latitudesh_plan" "name_as_slug" {
+  slug = "%s"
+}
+`, invalidSlugByName)
+}
+
+func testAccConfigPlanSlugWithNVME() string {
+	return fmt.Sprintf(`
+data "latitudesh_plan" "slug_with_nvme" {
+  slug = "%s"
+}
+`, validSlugForNVME)
 }

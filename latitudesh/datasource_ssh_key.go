@@ -16,6 +16,8 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+
+	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
 )
 
 var (
@@ -49,18 +51,11 @@ func (d *SSHKeyDataSource) Metadata(ctx context.Context, req datasource.Metadata
 }
 
 func (d *SSHKeyDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	if req.ProviderData == nil {
+	deps := iprovider.ConfigureFromProviderData(req.ProviderData, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
-	client, ok := req.ProviderData.(*latitudeshgosdk.Latitudesh)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *latitudeshgosdk.Latitudesh, got: %T", req.ProviderData),
-		)
-		return
-	}
-	d.client = client
+	d.client = deps.Client
 }
 
 func (d *SSHKeyDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {

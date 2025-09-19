@@ -34,7 +34,7 @@ type PlanDataSourceModel struct {
 	CPUCores types.Float64 `tfsdk:"cpu_cores"`
 	CPUClock types.Float64 `tfsdk:"cpu_clock"`
 	CPUCount types.Float64 `tfsdk:"cpu_count"`
-	Memory   types.String  `tfsdk:"memory"`
+	Memory   types.Float64 `tfsdk:"memory"`
 	HasGPU   types.Bool    `tfsdk:"has_gpu"`
 	GPUType  types.String  `tfsdk:"gpu_type"`
 	GPUCount types.Float64 `tfsdk:"gpu_count"`
@@ -59,6 +59,7 @@ func (d *PlanDataSource) Schema(ctx context.Context, req datasource.SchemaReques
 			"name": schema.StringAttribute{
 				MarkdownDescription: "Plan name",
 				Computed:            true,
+				Optional:            true,
 			},
 			"features": schema.ListAttribute{
 				MarkdownDescription: "List of plan features",
@@ -81,7 +82,7 @@ func (d *PlanDataSource) Schema(ctx context.Context, req datasource.SchemaReques
 				MarkdownDescription: "Number of CPUs",
 				Computed:            true,
 			},
-			"memory": schema.StringAttribute{
+			"memory": schema.Float64Attribute{
 				MarkdownDescription: "Total memory",
 				Computed:            true,
 			},
@@ -120,11 +121,11 @@ func (d *PlanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		return
 	}
 
-	// Check that either ID or slug is provided
-	if data.ID.IsNull() && data.Slug.IsNull() {
+	// Check that either ID/slug/name is provided
+	if data.ID.IsNull() && data.Slug.IsNull() && data.Name.IsNull() {
 		resp.Diagnostics.AddError(
 			"Missing Required Attribute",
-			"Either 'id' or 'slug' must be provided to look up a plan.",
+			"Either 'id', 'slug' or 'name' must be provided to look up a plan.",
 		)
 		return
 	}
@@ -143,14 +144,16 @@ func (d *PlanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 			plan = result.Plan.Data
 		}
 	} else {
-		// Look up by slug
+		// Look up by slug or name
 		slug := data.Slug.ValueString()
-		request := operations.GetPlansRequest{
-			FilterSlug: &slug,
+		if data.Slug.IsNull() {
+			slug = data.Name.ValueString()
 		}
-		result, err := d.client.Plans.List(ctx, request)
+
+		req := operations.GetPlansRequest{FilterSlug: &slug}
+		result, err := d.client.Plans.List(ctx, req)
 		if err != nil {
-			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to search for plan with slug %s, got error: %s", slug, err.Error()))
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to search for plan with slug or name %q: %s", slug, err))
 			return
 		}
 		if result.Object != nil && result.Object.Data != nil && len(result.Object.Data) > 0 {
@@ -211,7 +214,7 @@ func (d *PlanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 
 			// Memory information
 			if specs.Memory != nil && specs.Memory.Total != nil {
-				data.Memory = types.StringValue(*specs.Memory.Total)
+				data.Memory = types.Float64Value(*specs.Memory.Total)
 			}
 
 			// GPU information
