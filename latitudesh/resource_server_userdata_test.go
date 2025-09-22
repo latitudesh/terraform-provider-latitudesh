@@ -28,7 +28,7 @@ func TestAccServer_WithUserData(t *testing.T) {
 					resource.TestCheckResourceAttr(
 						"latitudesh_server.test_item", "hostname", testServerHostname),
 					resource.TestCheckResourceAttr(
-						"latitudesh_server.test_item", "user_data", "ud_test123456789"),
+						"latitudesh_server.test_item", "user_data", "ud_R82A0y9L06mMY"),
 					resource.TestCheckResourceAttrSet(
 						"latitudesh_server.test_item", "primary_ipv4"),
 				),
