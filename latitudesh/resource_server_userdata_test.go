@@ -119,7 +119,7 @@ resource "latitudesh_server" "test_item" {
 	plan     = "%s"
 	site     = "%s"
 	operating_system = "%s"
-	user_data = "ud_test123456789"
+	user_data = "ud_R82A0y9L06mMY"
 	allow_reinstall = true
 }
 `,
