@@ -321,7 +321,8 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	if !data.UserData.IsNull() {
-		attrs.UserData = nil
+		userDataValue := data.UserData.ValueString()
+		attrs.UserData = &userDataValue
 	}
 
 	if !data.Raid.IsNull() {
@@ -588,7 +589,10 @@ func (r *ServerResource) reinstallServer(ctx context.Context, data *ServerResour
 	if !data.UserData.IsNull() && !data.UserData.IsUnknown() {
 		userDataValue := data.UserData.ValueString()
 		if userDataValue != "" {
-			attrs.UserData = nil // Skip user data for now
+			// TODO: SDK inconsistency - reinstall API expects int64 but creation uses string IDs
+			// Temporarily skip user_data during reinstall to avoid API errors
+			// The user_data will remain in Terraform state but won't be reapplied during reinstall
+			// This is a known limitation that should be addressed when the API/SDK is standardized
 		}
 	}
 
