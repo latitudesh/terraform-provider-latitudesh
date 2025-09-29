@@ -35,14 +35,14 @@ output "server" {
 ### Required
 
 - `hostname` (String) The server hostname
-  - Maximum length: 32 characters
-  - Allowed characters: letters (a–z, A–Z), digits (0–9), dots (.), and hyphens (-)
-  - Must not begin or end with a dot or hyphen
-  - Underscores (_) are not allowed
-- `operating_system` (String) The server OS. Updating OS will trigger a reinstall.
-- `plan` (String) The server plan
-- `project` (String) The id or slug of the project
-- `site` (String) The server site
+  - Maximum length: 32 characters;
+  - Allowed characters: letters (a–z, A–Z), digits (0–9), dots (.), and hyphens (-);
+  - Must not begin or end with a dot or hyphen;
+  - Underscores (_) are not allowed;
+- `operating_system` (String) The server OS. Updating OS will trigger a reinstall. Valid values are: `ipxe`, `windows_server_2019_std_v1`, `ubuntu_22_04_x64_lts`, `debian_11`, `debian_10`, `rhel8`, `windows_server_2012_r2_std_v28`, `windows_server_2012_r2_dc_v5`, `esxi_6_7`, `debian_9_4_x64`, `centos_7_4_x64`, `centos_8_x64`, `ubuntu_16_04_x64_lts`, `ubuntu_20_04_x64_lts`, `windows_server_2016_std_v1`, `windows_server_2016_dc_v1`, `windows_server_2019_dc_v1`, `debian_12`, `ubuntu22_ml_in_a_box`, `ubuntu_18_04_x64_lts`, `windows_server_2019_std_uefi`, `windows_2022_std_uefi`, `windows_2022_std`, `ubuntu_24_04_x64_lts`, `rockylinux_8`
+- `plan` (String) The server plan. Valid values are: `c2.small.x86`, `c2.medium.x86`, `c2.large.x86`, `c1.tiny.x86`, `s3.large.x86`, `c3.small.x86`, `m3.large.x86`, `c3.large.x86`, `g3.a100.large`, `g3.h100.large`, `s2.small.x86`, `g3.h100.medium`, `g3.h100.small`, `g3.l40s.large`, `m4.metal.small`, `m4.metal.medium`, `m4.metal.large`, `rs4.metal.large`, `rs4.metal.xlarge`, `f4.metal.medium`, `f4.metal.large`, `f4.metal.small`
+- `project` (String) The id or slug of the project.
+- `site` (String) The server site. Valid values are: `ASH`, `BGT`, `BUE`, `CHI`, `DAL`, `FRA`, `LAX`, `LON`, `MEX`, `MEX2`, `MIA`, `MIA2`, `NYC`, `SAN`, `SAO`, `SAO2`, `SYD`, `TYO`, `TYO2`
 
 ### Optional
 
