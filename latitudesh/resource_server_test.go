@@ -389,7 +389,7 @@ resource "latitudesh_server" "test_item" {
 	)
 }
 
-func TestAccServer_UserDataValidation(t *testing.T) {
+func TestAccServerUserDataValidation(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccTokenCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),

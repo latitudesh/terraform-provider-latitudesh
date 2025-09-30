@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-var userDataPrefixRegex = regexp.MustCompile(`^ud_`)
+var userDataPrefixRegex = regexp.MustCompile(`^ud_[A-Za-z0-9]+$`)
 
 // UserData returns validators that enforce user_data format:
 // - must start with 'ud_' prefix
