@@ -123,6 +123,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			"user_data": schema.StringAttribute{
 				MarkdownDescription: "User data ID to assign to the server (reference to latitudesh_user_data resource)",
 				Optional:            true,
+				Validators:          validators.UserData(),
 				PlanModifiers: []planmodifier.String{
 					userDataReinstallWarningModifier{},
 					stringplanmodifier.UseStateForUnknown(),

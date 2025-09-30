@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
@@ -47,6 +48,41 @@ func TestValidateHostnameLength(t *testing.T) {
 			}
 			if !tc.shouldErr && err != nil {
 				t.Fatalf("expected no error, got %v for %q", err, tc.hostname)
+			}
+		})
+	}
+}
+
+func TestValidateUserData(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		userData  string
+		shouldErr bool
+	}{
+		{"valid with ud_ prefix", "ud_12345", false},
+		{"valid with ud_ and alphanumeric", "ud_abc123def", false},
+		{"valid with ud_ and underscores", "ud_test_user_data", false},
+		{"valid with ud_ and hyphens", "ud_test-user-data", false},
+		{"invalid without prefix", "12345", true},
+		{"invalid with wrong prefix", "user_data_12345", true},
+		{"invalid with partial prefix", "u_12345", true},
+		{"invalid empty string", "", true},
+		{"valid only prefix", "ud_", false}, // Empty after prefix should be valid
+		{"valid long string with prefix", "ud_very_long_user_data_identifier_with_many_characters", false},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validators.ValidateUserData(tc.userData)
+			if tc.shouldErr && err == nil {
+				t.Fatalf("expected error, got nil for %q", tc.userData)
+			}
+			if !tc.shouldErr && err != nil {
+				t.Fatalf("expected no error, got %v for %q", err, tc.userData)
 			}
 		})
 	}
@@ -351,4 +387,39 @@ resource "latitudesh_server" "test_item" {
 `,
 		os.Getenv("LATITUDESH_TEST_PROJECT"),
 	)
+}
+
+func TestAccServer_UserDataValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccTokenCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			// Test invalid user_data (should fail)
+			{
+				Config:      testAccServerConfigUserDataInvalid(),
+				ExpectError: regexp.MustCompile("user_data must start with 'ud_' prefix"),
+			},
+		},
+	})
+}
+
+func testAccServerConfigUserDataInvalid() string {
+	return fmt.Sprintf(`
+provider "latitudesh" {
+	project = "%s"
+}
+
+resource "latitudesh_server" "test" {
+	site             = "%s"
+	plan             = "%s"
+	operating_system = "%s"
+	hostname         = "%s"
+	user_data        = "invalid_user_data"  # Should fail validation
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testServerSite,
+		testServerPlan,
+		testServerOperatingSystem,
+		testServerHostname)
 }
