@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -259,6 +260,109 @@ func (r *ServerResource) Configure(ctx context.Context, req resource.ConfigureRe
 	r.defaultProject = deps.DefaultProject
 }
 
+func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string, diags *diag.Diagnostics, operation string) {
+	// Configs
+	timeout := 30 * time.Minute
+	pollInterval := 10 * time.Second
+	maxRetries := 5
+	deadline := time.Now().Add(timeout)
+
+	consecutiveErrors := 0
+
+	for time.Now().Before(deadline) {
+		response, err := r.client.Servers.Get(ctx, serverID, nil)
+		if err != nil {
+			consecutiveErrors++
+
+			// Check if it's a temporary error that we should retry
+			errStr := err.Error()
+			isTemporaryError := strings.Contains(errStr, "502") ||
+				strings.Contains(errStr, "503") ||
+				strings.Contains(errStr, "504") ||
+				strings.Contains(errStr, "429") ||
+				strings.Contains(errStr, "timeout") ||
+				strings.Contains(errStr, "connection reset")
+
+			if isTemporaryError && consecutiveErrors <= maxRetries {
+				// Calculate backoff with exponential delay
+				backoff := time.Duration(consecutiveErrors) * 5 * time.Second
+				if backoff > 30*time.Second {
+					backoff = 30 * time.Second
+				}
+
+				// Wait before retry with backoff
+				select {
+				case <-ctx.Done():
+					diags.AddError("Context Cancelled", fmt.Sprintf("Server %s was cancelled", operation))
+					return
+				case <-time.After(backoff):
+					// Continue to next iteration
+					continue
+				}
+			}
+
+			// If it's not a temporary error or we've exceeded retries, fail
+			if consecutiveErrors > maxRetries {
+				diags.AddError(
+					"Client Error",
+					fmt.Sprintf("Unable to check server status during %s after %d retries. Last error: %s", operation, maxRetries, err.Error()),
+				)
+			} else {
+				diags.AddError(
+					"Client Error",
+					fmt.Sprintf("Unable to check server status during %s: %s", operation, err.Error()),
+				)
+			}
+			return
+		}
+
+		// Reset consecutive errors on success
+		consecutiveErrors = 0
+
+		if response.Server == nil || response.Server.Data == nil || response.Server.Data.Attributes == nil {
+			diags.AddError("API Error", fmt.Sprintf("Invalid server response during %s", operation))
+			return
+		}
+
+		attrs := response.Server.Data.Attributes
+		if attrs.Status == nil {
+			diags.AddError("API Error", fmt.Sprintf("Server status is null during %s", operation))
+			return
+		}
+
+		status := string(*attrs.Status)
+
+		// Check for failure states
+		if status == "failed_disk_erasing" || status == "failed_deployment" {
+			diags.AddError(
+				fmt.Sprintf("Server %s Failed", operation),
+				fmt.Sprintf("Server entered failed state: %s. Please check the server in the Latitude.sh dashboard.", status),
+			)
+			return
+		}
+
+		// Check for success states
+		if status == "on" {
+			return
+		}
+
+		// Wait before next check
+		select {
+		case <-ctx.Done():
+			diags.AddError("Context Cancelled", fmt.Sprintf("Server %s was cancelled", operation))
+			return
+		case <-time.After(pollInterval):
+			// Continue to next iteration
+		}
+	}
+
+	// Timeout reached
+	diags.AddError(
+		fmt.Sprintf("Server %s Timeout", operation),
+		fmt.Sprintf("Server did not reach 'on' state within %v. Check server status in Latitude.sh dashboard.", timeout),
+	)
+}
+
 func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data ServerResourceModel
 
@@ -392,6 +496,11 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		}
 	}
 
+	r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "creation")
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	r.readServer(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -481,6 +590,12 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		err := r.reinstallServer(ctx, &data, &resp.Diagnostics)
 		if err != nil {
 			resp.Diagnostics.AddError("Reinstall Error", "Unable to reinstall server: "+err.Error())
+			return
+		}
+
+		// Wait for server to be ready after reinstall
+		r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "reinstall")
+		if resp.Diagnostics.HasError() {
 			return
 		}
 
