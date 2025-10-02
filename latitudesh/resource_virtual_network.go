@@ -61,7 +61,7 @@ func (r *VirtualNetworkResource) Schema(ctx context.Context, req resource.Schema
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"site": schema.StringAttribute{
@@ -83,6 +83,7 @@ func (r *VirtualNetworkResource) Schema(ctx context.Context, req resource.Schema
 				MarkdownDescription: "List of virtual network tags",
 				ElementType:         types.StringType,
 				Optional:            true,
+				Computed:            true,
 			},
 			// Computed attributes
 			"vid": schema.Int64Attribute{
@@ -260,9 +261,87 @@ func (r *VirtualNetworkResource) Read(ctx context.Context, req resource.ReadRequ
 }
 
 func (r *VirtualNetworkResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Update Not Supported",
-		"Virtual network updates are not supported due to SDK limitations. "+
-			"Changes to description require resource replacement.")
+	var plan, state VirtualNetworkResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	vlanID := state.ID.ValueString()
+	if vlanID == "" {
+		resp.Diagnostics.AddError("Update Error", "Virtual network ID is missing")
+		return
+	}
+
+	projectChanged := !plan.Project.Equal(state.Project)
+	tagsChanged := !plan.Tags.Equal(state.Tags)
+
+	// Prevent changing project after creation (no-op and warn)
+	if projectChanged {
+		resp.Diagnostics.AddWarning(
+			"Project Change Ignored",
+			"Virtual network project cannot be changed after creation. The project will remain unchanged. "+
+				"To move a virtual network to a different project, you must create a new resource.",
+		)
+		plan.Project = state.Project
+	}
+
+	// TODO: Prevent changing site after creation (no-op and warn)
+
+	// TODO: Add support for description update without resource replacement
+
+	// Handle tag updates
+	if tagsChanged {
+		// Convert tags to string slice for API call
+		var tagsList []string
+		if !plan.Tags.IsNull() && !plan.Tags.IsUnknown() {
+			diags := plan.Tags.ElementsAs(ctx, &tagsList, false)
+			if diags.HasError() {
+				resp.Diagnostics.Append(diags...)
+				return
+			}
+		}
+
+		// Prepare update request body
+		updateRequestBody := operations.UpdateVirtualNetworkPrivateNetworksRequestBody{
+			Data: operations.UpdateVirtualNetworkPrivateNetworksData{
+				ID:   vlanID,
+				Type: "virtual_networks",
+				Attributes: &operations.UpdateVirtualNetworkPrivateNetworksAttributes{
+					Tags: tagsList,
+				},
+			},
+		}
+
+		// Call the update API
+		updateResp, err := r.client.PrivateNetworks.Update(ctx, vlanID, updateRequestBody)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error updating virtual network tags",
+				fmt.Sprintf("Could not update virtual network %s tags: %s", vlanID, err.Error()),
+			)
+			return
+		}
+
+		// Check for successful status codes
+		if updateResp.HTTPMeta.Response.StatusCode != 200 {
+			resp.Diagnostics.AddError(
+				"Error updating virtual network tags",
+				fmt.Sprintf("API returned status %d when updating virtual network %s tags", updateResp.HTTPMeta.Response.StatusCode, vlanID),
+			)
+			return
+		}
+	}
+
+	// Read the updated resource to get the latest state
+	r.readVirtualNetwork(ctx, &plan, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *VirtualNetworkResource) findVirtualNetworkByProject(ctx context.Context, data *VirtualNetworkResourceModel, diags *diag.Diagnostics) {
@@ -475,6 +554,7 @@ func (r *VirtualNetworkResource) readVirtualNetwork(ctx context.Context, data *V
 			data.Region = types.StringNull()
 		}
 
+		// TODO: SDK should expose tags in read operations
 		if data.Tags.IsNull() || data.Tags.IsUnknown() {
 			data.Tags = types.ListNull(types.StringType)
 		}
