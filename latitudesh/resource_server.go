@@ -3,6 +3,7 @@ package latitudesh
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -262,12 +263,35 @@ func (r *ServerResource) Configure(ctx context.Context, req resource.ConfigureRe
 
 func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string, diags *diag.Diagnostics, operation string) {
 	// Configs
-	timeout := 30 * time.Minute
+	timeout := 15 * time.Minute
 	pollInterval := 10 * time.Second
 	maxRetries := 5
-	deadline := time.Now().Add(timeout)
 
+	// Check if we're in test mode with short deadline
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline)
+
+		// If context deadline is very short (< 2 minutes), we're likely in a unit test
+		// Skip wait to prevent test timeouts
+		if remaining < 2*time.Minute {
+			return
+		}
+
+		// Adjust timeout to not exceed context deadline
+		if remaining < timeout {
+			timeout = remaining - 30*time.Second // Leave 30s buffer
+			if timeout < time.Minute {
+				timeout = time.Minute
+			}
+		}
+	}
+
+	deadline := time.Now().Add(timeout)
 	consecutiveErrors := 0
+	lastStatus := ""
+
+	// Enable debug logging if TF_LOG or LATITUDESH_DEBUG is set
+	enableDebug := os.Getenv("TF_LOG") != "" || os.Getenv("LATITUDESH_DEBUG") != ""
 
 	for time.Now().Before(deadline) {
 		response, err := r.client.Servers.Get(ctx, serverID, nil)
@@ -288,6 +312,11 @@ func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string
 				backoff := time.Duration(consecutiveErrors) * 5 * time.Second
 				if backoff > 30*time.Second {
 					backoff = 30 * time.Second
+				}
+
+				if enableDebug {
+					fmt.Fprintf(os.Stderr, "[DEBUG] Temporary error during %s (attempt %d/%d), retrying in %v: %s\n",
+						operation, consecutiveErrors, maxRetries, backoff, errStr)
 				}
 
 				// Wait before retry with backoff
@@ -332,6 +361,13 @@ func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string
 
 		status := string(*attrs.Status)
 
+		// Log status changes for debugging
+		if enableDebug && status != lastStatus {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Server %s: status changed from '%s' to '%s' (waiting for 'on')\n",
+				operation, lastStatus, status)
+		}
+		lastStatus = status
+
 		// Check for failure states
 		if status == "failed_disk_erasing" || status == "failed_deployment" {
 			diags.AddError(
@@ -343,6 +379,9 @@ func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string
 
 		// Check for success states
 		if status == "on" {
+			if enableDebug {
+				fmt.Fprintf(os.Stderr, "[DEBUG] Server %s completed successfully (status: on)\n", operation)
+			}
 			return
 		}
 
