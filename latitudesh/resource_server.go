@@ -263,8 +263,8 @@ func (r *ServerResource) Configure(ctx context.Context, req resource.ConfigureRe
 
 func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string, diags *diag.Diagnostics, operation string) {
 	// Configs
-	timeout := 15 * time.Minute
-	pollInterval := 10 * time.Second
+	timeout := 30 * time.Minute
+	pollInterval := 30 * time.Second
 	maxRetries := 5
 
 	// Check if we're in test mode with short deadline
