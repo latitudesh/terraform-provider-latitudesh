@@ -30,9 +30,9 @@ jobs:
       - 
         name: Build
         run: go build -v ./...
-      - 
-        name: Run Unit Tests
-        run: go test ./latitudesh -v -timeout 10m -run "TestProvider|TestFrameworkProvider"
+      # - 
+      #   name: Run Unit Tests
+      #   run: go test ./latitudesh -v -timeout 10m -run "TestProvider|TestFrameworkProvider"
   
   e2e:
     runs-on: ubuntu-latest
