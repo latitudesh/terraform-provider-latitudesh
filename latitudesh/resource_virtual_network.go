@@ -212,12 +212,6 @@ func (r *VirtualNetworkResource) Create(ctx context.Context, req resource.Create
 	// Try to get ID from response first
 	if result.VirtualNetwork != nil && result.VirtualNetwork.Data != nil && result.VirtualNetwork.Data.ID != nil {
 		data.ID = types.StringValue(*result.VirtualNetwork.Data.ID)
-
-		// Read the resource to populate all attributes
-		r.readVirtualNetwork(ctx, &data, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
 	} else {
 		// If we can't get ID from response, use List endpoint to find it
 		resp.Diagnostics.AddWarning("Virtual Network ID Not in Response", "Virtual network was created but ID not returned in response. Using List endpoint to find it.")
@@ -235,6 +229,7 @@ func (r *VirtualNetworkResource) Create(ctx context.Context, req resource.Create
 		}
 	}
 
+	// Read the resource to populate all attributes
 	r.readVirtualNetwork(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
