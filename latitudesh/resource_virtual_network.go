@@ -83,7 +83,6 @@ func (r *VirtualNetworkResource) Schema(ctx context.Context, req resource.Schema
 				MarkdownDescription: "List of virtual network tags",
 				ElementType:         types.StringType,
 				Optional:            true,
-				Computed:            true,
 			},
 			// Computed attributes
 			"vid": schema.Int64Attribute{
@@ -119,29 +118,55 @@ func (r *VirtualNetworkResource) ModifyPlan(ctx context.Context, req resource.Mo
 		return
 	}
 
-	var cfg, plan VirtualNetworkResourceModel
+	var cfg, state, plan VirtualNetworkResourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+
+	// state only exists for update operation
+	if !req.State.Raw.IsNull() {
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	}
+
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if !cfg.Project.IsNull() && !cfg.Project.IsUnknown() && cfg.Project.ValueString() != "" {
-		plan.Project = cfg.Project
-		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
-		return
+	planModified := false
+
+	// For updates: ignore project changes
+	if !req.State.Raw.IsNull() && !state.Project.IsNull() {
+		if !plan.Project.Equal(state.Project) {
+			// Project change detected: ignore it by reverting to state value
+			plan.Project = state.Project
+			planModified = true
+
+			resp.Diagnostics.AddWarning(
+				"Project Change Ignored",
+				"Virtual network project cannot be changed after creation. The project will remain unchanged. "+
+					"To move a virtual network to a different project, you must create a new resource.",
+			)
+		}
+	} else {
+		// For creation: handle project resolution
+		if !cfg.Project.IsNull() && !cfg.Project.IsUnknown() && cfg.Project.ValueString() != "" {
+			plan.Project = cfg.Project
+			planModified = true
+		} else if r.defaultProject != "" {
+			plan.Project = types.StringValue(r.defaultProject)
+			planModified = true
+		} else {
+			resp.Diagnostics.AddError(
+				"Missing project",
+				"Set `project` on this resource or define a default in the provider block (provider `latitudesh` { project = \"...\" }).",
+			)
+			return
+		}
 	}
 
-	if r.defaultProject != "" {
-		plan.Project = types.StringValue(r.defaultProject)
+	// Apply the modified plan if made changes
+	if planModified {
 		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
-		return
 	}
-
-	resp.Diagnostics.AddError(
-		"Missing project",
-		"Set `project` on this resource or define a default in the provider block (provider `latitudesh` { project = \"...\" }).",
-	)
 }
 
 func (r *VirtualNetworkResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -185,8 +210,6 @@ func (r *VirtualNetworkResource) Create(ctx context.Context, req resource.Create
 	if !data.Description.IsNull() {
 		attrs.Description = data.Description.ValueString()
 	}
-
-	// Note: Tags are not supported in the create operation, only in update
 
 	createRequest := operations.CreateVirtualNetworkPrivateNetworksRequestBody{
 		Data: operations.CreateVirtualNetworkPrivateNetworksData{
@@ -261,87 +284,9 @@ func (r *VirtualNetworkResource) Read(ctx context.Context, req resource.ReadRequ
 }
 
 func (r *VirtualNetworkResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan, state VirtualNetworkResourceModel
-
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	vlanID := state.ID.ValueString()
-	if vlanID == "" {
-		resp.Diagnostics.AddError("Update Error", "Virtual network ID is missing")
-		return
-	}
-
-	projectChanged := !plan.Project.Equal(state.Project)
-	tagsChanged := !plan.Tags.Equal(state.Tags)
-
-	// Prevent changing project after creation (no-op and warn)
-	if projectChanged {
-		resp.Diagnostics.AddWarning(
-			"Project Change Ignored",
-			"Virtual network project cannot be changed after creation. The project will remain unchanged. "+
-				"To move a virtual network to a different project, you must create a new resource.",
-		)
-		plan.Project = state.Project
-	}
-
-	// TODO: Prevent changing site after creation (no-op and warn)
-
-	// TODO: Add support for description update without resource replacement
-
-	// Handle tag updates
-	if tagsChanged {
-		// Convert tags to string slice for API call
-		var tagsList []string
-		if !plan.Tags.IsNull() && !plan.Tags.IsUnknown() {
-			diags := plan.Tags.ElementsAs(ctx, &tagsList, false)
-			if diags.HasError() {
-				resp.Diagnostics.Append(diags...)
-				return
-			}
-		}
-
-		// Prepare update request body
-		updateRequestBody := operations.UpdateVirtualNetworkPrivateNetworksRequestBody{
-			Data: operations.UpdateVirtualNetworkPrivateNetworksData{
-				ID:   vlanID,
-				Type: "virtual_networks",
-				Attributes: &operations.UpdateVirtualNetworkPrivateNetworksAttributes{
-					Tags: tagsList,
-				},
-			},
-		}
-
-		// Call the update API
-		updateResp, err := r.client.PrivateNetworks.Update(ctx, vlanID, updateRequestBody)
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error updating virtual network tags",
-				fmt.Sprintf("Could not update virtual network %s tags: %s", vlanID, err.Error()),
-			)
-			return
-		}
-
-		// Check for successful status codes
-		if updateResp.HTTPMeta.Response.StatusCode != 200 {
-			resp.Diagnostics.AddError(
-				"Error updating virtual network tags",
-				fmt.Sprintf("API returned status %d when updating virtual network %s tags", updateResp.HTTPMeta.Response.StatusCode, vlanID),
-			)
-			return
-		}
-	}
-
-	// Read the updated resource to get the latest state
-	r.readVirtualNetwork(ctx, &plan, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	resp.Diagnostics.AddError("Update Not Supported",
+		"Virtual network updates are not supported due to SDK limitations. "+
+			"Changes to description require resource replacement.")
 }
 
 func (r *VirtualNetworkResource) findVirtualNetworkByProject(ctx context.Context, data *VirtualNetworkResourceModel, diags *diag.Diagnostics) {
