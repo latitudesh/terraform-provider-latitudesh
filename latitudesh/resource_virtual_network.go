@@ -285,8 +285,7 @@ func (r *VirtualNetworkResource) Read(ctx context.Context, req resource.ReadRequ
 
 func (r *VirtualNetworkResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	resp.Diagnostics.AddError("Update Not Supported",
-		"Virtual network updates are not supported due to SDK limitations. "+
-			"Changes to description require resource replacement.")
+		"Virtual network updates are not supported due to SDK limitations.")
 }
 
 func (r *VirtualNetworkResource) findVirtualNetworkByProject(ctx context.Context, data *VirtualNetworkResourceModel, diags *diag.Diagnostics) {
