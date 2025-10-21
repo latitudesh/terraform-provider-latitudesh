@@ -565,6 +565,11 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
+	// Ensure allow_reinstall has a known value (default to true if not set)
+	if data.AllowReinstall.IsNull() || data.AllowReinstall.IsUnknown() {
+		data.AllowReinstall = types.BoolValue(true)
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
