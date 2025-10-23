@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -84,7 +85,6 @@ func (r *VirtualNetworkResource) Schema(ctx context.Context, req resource.Schema
 				ElementType:         types.StringType,
 				Optional:            true,
 			},
-			// Computed attributes
 			"vid": schema.Int64Attribute{
 				MarkdownDescription: "VLAN ID of the virtual network",
 				Computed:            true,
@@ -246,7 +246,8 @@ func (r *VirtualNetworkResource) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	r.readVirtualNetwork(ctx, &data, &resp.Diagnostics)
+	// Use readVirtualNetworkByID which uses the Get endpoint directly
+	r.readVirtualNetworkByID(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -396,15 +397,201 @@ func (r *VirtualNetworkResource) Delete(ctx context.Context, req resource.Delete
 }
 
 func (r *VirtualNetworkResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	var data VirtualNetworkResourceModel
-	data.ID = types.StringValue(req.ID)
-
-	r.readVirtualNetwork(ctx, &data, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	vlanID := req.ID
+	if vlanID == "" {
+		resp.Diagnostics.AddError("Invalid Import ID", "Virtual network ID cannot be empty")
 		return
 	}
 
+	listRequest := operations.GetVirtualNetworksRequest{}
+	listResponse, err := r.client.PrivateNetworks.List(ctx, listRequest)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Unable to list virtual networks, got error: "+err.Error())
+		return
+	}
+
+	if listResponse.VirtualNetworks == nil || listResponse.VirtualNetworks.Data == nil {
+		resp.Diagnostics.AddError("API Error", "No virtual networks found")
+		return
+	}
+
+	// Find the virtual network with the matching ID
+	var foundVnet *components.VirtualNetworkData
+	for _, vnet := range listResponse.VirtualNetworks.Data {
+		if vnet.GetID() != nil && *vnet.GetID() == vlanID {
+			foundVnet = &vnet
+			break
+		}
+	}
+
+	if foundVnet == nil {
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Virtual network %s not found", vlanID))
+		return
+	}
+
+	// Create the resource model with all attributes
+	var data VirtualNetworkResourceModel
+	data.ID = types.StringValue(vlanID)
+	data.Tags = types.ListNull(types.StringType)
+
+	if foundVnet.GetAttributes() != nil {
+		attrs := foundVnet.GetAttributes()
+
+		// Project
+		if attrs.GetProject() != nil && attrs.GetProject().GetID() != nil {
+			data.Project = types.StringValue(*attrs.GetProject().GetID())
+		}
+
+		// Description
+		if attrs.GetDescription() != nil {
+			data.Description = types.StringValue(*attrs.GetDescription())
+		} else {
+			data.Description = types.StringNull()
+		}
+
+		// VID
+		if attrs.GetVid() != nil {
+			data.Vid = types.Int64Value(*attrs.GetVid())
+		} else {
+			data.Vid = types.Int64Null()
+		}
+
+		// Assignments Count
+		if attrs.GetAssignmentsCount() != nil {
+			data.AssignmentsCount = types.Int64Value(*attrs.GetAssignmentsCount())
+		} else {
+			data.AssignmentsCount = types.Int64Null()
+		}
+
+		// Region and Site
+		region := attrs.GetRegion()
+		if region != nil && region.Site != nil && region.Site.Slug != nil {
+			data.Region = types.StringValue(*region.Site.Slug)
+			data.Site = types.StringValue(*region.Site.Slug)
+		} else {
+			data.Region = types.StringNull()
+			data.Site = types.StringNull()
+		}
+
+		tags := attrs.GetTags()
+		if len(tags) > 0 {
+			tagNames := make([]attr.Value, 0, len(tags))
+			for _, tag := range tags {
+				if tag.GetName() != nil {
+					tagNames = append(tagNames, types.StringValue(*tag.GetName()))
+				}
+			}
+			tagList, diagErr := types.ListValue(types.StringType, tagNames)
+			if diagErr.HasError() {
+				resp.Diagnostics.Append(diagErr...)
+			} else {
+				data.Tags = tagList
+			}
+		} else {
+			data.Tags = types.ListNull(types.StringType)
+		}
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *VirtualNetworkResource) readVirtualNetworkByID(ctx context.Context, data *VirtualNetworkResourceModel, diags *diag.Diagnostics) {
+	vlanID := data.ID.ValueString()
+	if vlanID == "" {
+		diags.AddError("Invalid ID", "Virtual network ID is empty")
+		return
+	}
+
+	listRequest := operations.GetVirtualNetworksRequest{}
+	listResponse, err := r.client.PrivateNetworks.List(ctx, listRequest)
+	if err != nil {
+		diags.AddError("Client Error", "Unable to list virtual networks, got error: "+err.Error())
+		return
+	}
+
+	if listResponse.VirtualNetworks == nil || listResponse.VirtualNetworks.Data == nil {
+		data.ID = types.StringNull()
+		return
+	}
+
+	// Find the virtual network with the matching ID
+	var foundVnet *components.VirtualNetworkData
+	for _, vnet := range listResponse.VirtualNetworks.Data {
+		if vnet.GetID() != nil && *vnet.GetID() == vlanID {
+			foundVnet = &vnet
+			break
+		}
+	}
+
+	if foundVnet == nil {
+		data.ID = types.StringNull()
+		return
+	}
+
+	if foundVnet.GetAttributes() == nil {
+		diags.AddError("API Error", "Virtual network attributes are nil")
+		return
+	}
+
+	attrs := foundVnet.GetAttributes()
+
+	// Ensure ID is preserved
+	if foundVnet.GetID() != nil {
+		data.ID = types.StringValue(*foundVnet.GetID())
+	}
+
+	// Extract project from attributes
+	if attrs.GetProject() != nil && attrs.GetProject().GetID() != nil {
+		data.Project = types.StringValue(*attrs.GetProject().GetID())
+	}
+
+	// Description
+	if attrs.GetDescription() != nil {
+		data.Description = types.StringValue(*attrs.GetDescription())
+	} else {
+		data.Description = types.StringNull()
+	}
+
+	// VID
+	if attrs.GetVid() != nil {
+		data.Vid = types.Int64Value(*attrs.GetVid())
+	} else {
+		data.Vid = types.Int64Null()
+	}
+
+	// Assignments Count
+	if attrs.GetAssignmentsCount() != nil {
+		data.AssignmentsCount = types.Int64Value(*attrs.GetAssignmentsCount())
+	} else {
+		data.AssignmentsCount = types.Int64Null()
+	}
+
+	// Region and Site
+	region := attrs.GetRegion()
+	if region != nil && region.Site != nil && region.Site.Slug != nil {
+		data.Region = types.StringValue(*region.Site.Slug)
+		data.Site = types.StringValue(*region.Site.Slug)
+	} else {
+		data.Region = types.StringNull()
+	}
+
+	tags := attrs.GetTags()
+	if len(tags) > 0 {
+		tagNames := make([]attr.Value, 0, len(tags))
+		for _, tag := range tags {
+			if tag.GetName() != nil {
+				tagNames = append(tagNames, types.StringValue(*tag.GetName()))
+			}
+		}
+		tagList, diagErr := types.ListValue(types.StringType, tagNames)
+		if diagErr.HasError() {
+			diags.Append(diagErr...)
+		} else {
+			data.Tags = tagList
+		}
+	} else {
+		data.Tags = types.ListNull(types.StringType)
+	}
 }
 
 func (r *VirtualNetworkResource) readVirtualNetwork(ctx context.Context, data *VirtualNetworkResourceModel, diags *diag.Diagnostics) {
