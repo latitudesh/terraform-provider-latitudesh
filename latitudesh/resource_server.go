@@ -12,7 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -151,6 +151,9 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "The server billing type (hourly, monthly, yearly). Defaults to monthly.",
 				Optional:            true,
 				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"tags": schema.ListAttribute{
 				MarkdownDescription: "List of server tag IDs",
@@ -161,24 +164,38 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe changes. If false, only in-place updates are allowed.",
 				Optional:            true,
 				Computed:            true,
-				Default:             booldefault.StaticBool(true),
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"primary_ipv4": schema.StringAttribute{
 				MarkdownDescription: "Primary IPv4 address of the server",
 				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"primary_ipv6": schema.StringAttribute{
 				MarkdownDescription: "Primary IPv6 address of the server",
 				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"status": schema.StringAttribute{
 				MarkdownDescription: "Server power status",
 				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"locked": schema.BoolAttribute{
 				MarkdownDescription: "Whether the server is locked",
 				Computed:            true,
 				Optional:            true,
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"created_at": schema.StringAttribute{
 				MarkdownDescription: "The timestamp for when the server was created",
@@ -191,6 +208,9 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			"region": schema.StringAttribute{
 				MarkdownDescription: "The region where the server is deployed",
 				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"interfaces": schema.ListNestedAttribute{
 				MarkdownDescription: "List of network interfaces",
@@ -543,6 +563,11 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	r.readServer(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// Ensure allow_reinstall has a known value (default to true if not set)
+	if data.AllowReinstall.IsNull() || data.AllowReinstall.IsUnknown() {
+		data.AllowReinstall = types.BoolValue(true)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
