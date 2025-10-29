@@ -125,5 +125,6 @@ func (p *latitudeshProvider) DataSources(ctx context.Context) []func() datasourc
 		NewRegionDataSource,
 		NewRoleDataSource,
 		NewSSHKeyDataSource,
+		NewTagDataSource,
 	}
 }
