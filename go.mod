@@ -11,7 +11,7 @@ require (
 	github.com/hashicorp/terraform-plugin-go v0.28.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.37.0
 	github.com/hashicorp/terraform-plugin-testing v1.13.3
-	github.com/latitudesh/latitudesh-go-sdk v1.6.0
+	github.com/latitudesh/latitudesh-go-sdk v1.8.1
 	gopkg.in/dnaeon/go-vcr.v3 v3.1.2
 )
 
@@ -28,7 +28,6 @@ require (
 	github.com/bgentry/speakeasy v0.1.0 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.8.1 // indirect
 	github.com/cloudflare/circl v1.6.1 // indirect
-	github.com/ericlagergren/decimal v0.0.0-20240411145413-00de7ca16731 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
