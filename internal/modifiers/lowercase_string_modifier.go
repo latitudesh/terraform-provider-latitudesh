@@ -31,16 +31,16 @@ func (m *LowercaseStringModifier) PlanModifyString(ctx context.Context, req plan
 
 	switch {
 	case req.StateValue.IsNull() || req.StateValue.IsUnknown():
-		// New resource
-		resp.PlanValue = req.ConfigValue
+		// New resource - normalize to lowercase
+		resp.PlanValue = types.StringValue(strings.ToLower(configRaw))
 
 	case strings.EqualFold(configRaw, stateRaw):
-		// Same value
+		// Same value (case-insensitive) - keep state value
 		resp.PlanValue = req.StateValue
 
 	default:
-		// Different value
-		resp.PlanValue = req.ConfigValue
+		// Different value - normalize to lowercase
+		resp.PlanValue = types.StringValue(strings.ToLower(configRaw))
 	}
 }
 

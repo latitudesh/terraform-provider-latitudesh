@@ -19,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	"github.com/latitudesh/terraform-provider-latitudesh/internal/modifiers"
 	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
 	"github.com/latitudesh/terraform-provider-latitudesh/internal/validators"
 )
@@ -86,6 +87,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "The site to deploy the server",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
+					&modifiers.LowercaseStringModifier{},
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
@@ -459,7 +461,7 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	if !data.Site.IsNull() {
-		siteValue := data.Site.ValueString()
+		siteValue := strings.ToLower(data.Site.ValueString())
 		site := operations.CreateServerSite(siteValue)
 		attrs.Site = &site
 	}

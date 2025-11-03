@@ -3,6 +3,7 @@ package latitudesh
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -118,7 +119,7 @@ func (d *RegionDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		}
 		if result.Regions != nil && result.Regions.Data != nil {
 			for _, r := range result.Regions.Data {
-				if r.Attributes != nil && r.Attributes.Slug != nil && *r.Attributes.Slug == slug {
+				if r.Attributes != nil && r.Attributes.Slug != nil && strings.EqualFold(*r.Attributes.Slug, slug) {
 					// Convert RegionsData to RegionData format
 					var regionCountry *components.RegionCountry
 					if r.Attributes.Country != nil {

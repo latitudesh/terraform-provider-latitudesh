@@ -15,6 +15,7 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	"github.com/latitudesh/terraform-provider-latitudesh/internal/modifiers"
 	providerpkg "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
 )
 
@@ -69,6 +70,7 @@ func (r *VirtualNetworkResource) Schema(ctx context.Context, req resource.Schema
 				MarkdownDescription: "The site to deploy the virtual network",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
+					&modifiers.LowercaseStringModifier{},
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
@@ -175,7 +177,7 @@ func (r *VirtualNetworkResource) Create(ctx context.Context, req resource.Create
 	attrs.Project = effectiveProject
 
 	if !data.Site.IsNull() {
-		siteValue := data.Site.ValueString()
+		siteValue := strings.ToLower(data.Site.ValueString())
 		site := operations.CreateVirtualNetworkPrivateNetworksSite(siteValue)
 		attrs.Site = &site
 	}
@@ -297,7 +299,7 @@ func (r *VirtualNetworkResource) findVirtualNetworkByProject(ctx context.Context
 			region := attrs.GetRegion()
 
 			if region != nil && region.Site != nil && region.Site.Slug != nil {
-				if *region.Site.Slug == site {
+				if strings.EqualFold(*region.Site.Slug, site) {
 					score += 50
 				}
 			}
