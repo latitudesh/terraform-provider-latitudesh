@@ -16,16 +16,16 @@ func TestCaseInsensitiveDiff_PlanModifyString(t *testing.T) {
 		expected    types.String
 	}{
 		{
-			name:        "new resource - no state, normalize to uppercase",
+			name:        "new resource - no state, keep as-is",
 			configValue: types.StringValue("sao2"),
 			stateValue:  types.StringNull(),
-			expected:    types.StringValue("SAO2"), // normalized to uppercase
+			expected:    types.StringValue("sao2"), // keeps user input
 		},
 		{
 			name:        "new resource - already uppercase",
 			configValue: types.StringValue("SAO2"),
 			stateValue:  types.StringNull(),
-			expected:    types.StringValue("SAO2"), // stays uppercase
+			expected:    types.StringValue("SAO2"), // keeps user input
 		},
 		{
 			name:        "existing resource - same case",
@@ -55,7 +55,7 @@ func TestCaseInsensitiveDiff_PlanModifyString(t *testing.T) {
 			name:        "existing resource - actually different value",
 			configValue: types.StringValue("ash"),
 			stateValue:  types.StringValue("SAO2"),
-			expected:    types.StringValue("ASH"), // values differ, normalize to uppercase
+			expected:    types.StringValue("ash"), // values differ, use config value
 		},
 	}
 

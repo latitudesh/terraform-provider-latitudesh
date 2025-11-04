@@ -19,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	"github.com/latitudesh/terraform-provider-latitudesh/internal/planmodifiers"
 	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
 	"github.com/latitudesh/terraform-provider-latitudesh/internal/validators"
 )
@@ -83,9 +84,10 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"site": schema.StringAttribute{
-				MarkdownDescription: "The site to deploy the server",
+				MarkdownDescription: "The site to deploy the server (case-insensitive)",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
+					planmodifiers.CaseInsensitiveDiff{},
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
@@ -249,6 +251,24 @@ func (r *ServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// Check if only the case of 'site' has changed (only for existing resources)
+	if !req.State.Raw.IsNull() {
+		var state ServerResourceModel
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+
+		if !cfg.Site.IsNull() && !state.Site.IsNull() {
+			if strings.EqualFold(cfg.Site.ValueString(), state.Site.ValueString()) &&
+				cfg.Site.ValueString() != state.Site.ValueString() {
+				// Only the case changed - this is not a real change, suppress it
+				resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+				return
+			}
+		}
 	}
 
 	if !cfg.Project.IsNull() && !cfg.Project.IsUnknown() && cfg.Project.ValueString() != "" {
@@ -459,7 +479,9 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	if !data.Site.IsNull() {
-		siteValue := data.Site.ValueString()
+		// Convert site to uppercase for API compatibility (case-insensitive input)
+		// Keep original case in state, only uppercase for API call
+		siteValue := strings.ToUpper(data.Site.ValueString())
 		site := operations.CreateServerSite(siteValue)
 		attrs.Site = &site
 	}
@@ -964,7 +986,7 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 		}
 
 		if attrs.Region != nil && attrs.Region.Site != nil && attrs.Region.Site.Slug != nil {
-			data.Site = types.StringValue(*attrs.Region.Site.Slug)
+			// Don't update Site - preserve the user's input case
 		}
 
 		if attrs.Plan != nil {
