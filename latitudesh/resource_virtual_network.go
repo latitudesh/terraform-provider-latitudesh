@@ -15,6 +15,7 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	"github.com/latitudesh/terraform-provider-latitudesh/internal/planmodifiers"
 	providerpkg "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
 )
 
@@ -66,9 +67,10 @@ func (r *VirtualNetworkResource) Schema(ctx context.Context, req resource.Schema
 				},
 			},
 			"site": schema.StringAttribute{
-				MarkdownDescription: "The site to deploy the virtual network",
+				MarkdownDescription: "The site to deploy the virtual network (case-insensitive)",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
+					planmodifiers.CaseInsensitiveDiff{},
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
@@ -125,6 +127,27 @@ func (r *VirtualNetworkResource) ModifyPlan(ctx context.Context, req resource.Mo
 		return
 	}
 
+	// Check if only the case of 'site' has changed (only for existing resources)
+	if !req.State.Raw.IsNull() {
+		var state VirtualNetworkResourceModel
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+
+		if !cfg.Site.IsNull() && !state.Site.IsNull() {
+			if strings.EqualFold(cfg.Site.ValueString(), state.Site.ValueString()) &&
+				cfg.Site.ValueString() != state.Site.ValueString() {
+				// Only the case changed - preserve computed values from state
+				plan.Vid = state.Vid
+				plan.Region = state.Region
+				plan.AssignmentsCount = state.AssignmentsCount
+				resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+				return
+			}
+		}
+	}
+
 	if !cfg.Project.IsNull() && !cfg.Project.IsUnknown() && cfg.Project.ValueString() != "" {
 		plan.Project = cfg.Project
 		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
@@ -175,7 +198,9 @@ func (r *VirtualNetworkResource) Create(ctx context.Context, req resource.Create
 	attrs.Project = effectiveProject
 
 	if !data.Site.IsNull() {
-		siteValue := data.Site.ValueString()
+		// Convert site to uppercase for API compatibility (case-insensitive input)
+		// Keep original case in state, only uppercase for API call
+		siteValue := strings.ToUpper(data.Site.ValueString())
 		site := operations.CreateVirtualNetworkPrivateNetworksSite(siteValue)
 		attrs.Site = &site
 	}
@@ -297,7 +322,8 @@ func (r *VirtualNetworkResource) findVirtualNetworkByProject(ctx context.Context
 			region := attrs.GetRegion()
 
 			if region != nil && region.Site != nil && region.Site.Slug != nil {
-				if *region.Site.Slug == site {
+				// Case-insensitive comparison for site
+				if strings.EqualFold(*region.Site.Slug, site) {
 					score += 50
 				}
 			}
@@ -358,7 +384,7 @@ func (r *VirtualNetworkResource) findVirtualNetworkByProject(ctx context.Context
 		region := attrs.GetRegion()
 		if region != nil && region.Site != nil && region.Site.Slug != nil {
 			data.Region = types.StringValue(*region.Site.Slug)
-			data.Site = types.StringValue(*region.Site.Slug)
+			// Don't update Site - preserve the user's input case
 		} else {
 			data.Region = types.StringNull()
 		}
@@ -467,10 +493,15 @@ func (r *VirtualNetworkResource) ImportState(ctx context.Context, req resource.I
 		region := attrs.GetRegion()
 		if region != nil && region.Site != nil && region.Site.Slug != nil {
 			data.Region = types.StringValue(*region.Site.Slug)
-			data.Site = types.StringValue(*region.Site.Slug)
+			// Only set Site if not already present (during import)
+			if data.Site.IsNull() || data.Site.IsUnknown() {
+				data.Site = types.StringValue(*region.Site.Slug)
+			}
 		} else {
 			data.Region = types.StringNull()
-			data.Site = types.StringNull()
+			if data.Site.IsNull() || data.Site.IsUnknown() {
+				data.Site = types.StringNull()
+			}
 		}
 
 		tags := attrs.GetTags()
@@ -570,7 +601,7 @@ func (r *VirtualNetworkResource) readVirtualNetworkByID(ctx context.Context, dat
 	region := attrs.GetRegion()
 	if region != nil && region.Site != nil && region.Site.Slug != nil {
 		data.Region = types.StringValue(*region.Site.Slug)
-		data.Site = types.StringValue(*region.Site.Slug)
+		// Don't update Site - preserve the user's input case
 	} else {
 		data.Region = types.StringNull()
 	}
@@ -652,7 +683,7 @@ func (r *VirtualNetworkResource) readVirtualNetwork(ctx context.Context, data *V
 		region := attrs.GetRegion()
 		if region != nil && region.Site != nil && region.Site.Slug != nil {
 			data.Region = types.StringValue(*region.Site.Slug)
-			data.Site = types.StringValue(*region.Site.Slug)
+			// Don't update Site - preserve the user's input case
 		} else {
 			data.Region = types.StringNull()
 		}
