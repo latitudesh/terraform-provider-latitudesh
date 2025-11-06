@@ -88,6 +88,87 @@ func TestValidateUserData(t *testing.T) {
 	}
 }
 
+func TestValidateBilling(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		billing   string
+		shouldErr bool
+	}{
+		{"valid hourly", "hourly", false},
+		{"valid monthly", "monthly", false},
+		{"valid yearly", "yearly", false},
+		{"invalid value", "invalid", true},
+		{"invalid empty string", "", true},
+		{"invalid daily", "daily", true},
+		{"case sensitive - uppercase fails", "HOURLY", true},
+		{"case sensitive - uppercase monthly fails", "MONTHLY", true},
+		{"case sensitive - uppercase yearly fails", "YEARLY", true},
+		{"case sensitive - mixed case fails", "Hourly", true},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validators.ValidateBilling(tc.billing)
+			if tc.shouldErr && err == nil {
+				t.Fatalf("expected error, got nil for %q", tc.billing)
+			}
+			if !tc.shouldErr && err != nil {
+				t.Fatalf("expected no error, got %v for %q", err, tc.billing)
+			}
+		})
+	}
+}
+
+func TestValidateBillingChange(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		current    string
+		newBilling string
+		shouldErr  bool
+	}{
+		// Valid upgrades
+		{"hourly to monthly", "hourly", "monthly", false},
+		{"hourly to yearly", "hourly", "yearly", false},
+		{"monthly to yearly", "monthly", "yearly", false},
+		{"no current value (new)", "", "hourly", false},
+		{"no current value (new monthly)", "", "monthly", false},
+		{"no current value (new yearly)", "", "yearly", false},
+		{"same value hourly", "hourly", "hourly", false},
+		{"same value monthly", "monthly", "monthly", false},
+		{"same value yearly", "yearly", "yearly", false},
+		// Invalid downgrades
+		{"yearly to monthly", "yearly", "monthly", true},
+		{"yearly to hourly", "yearly", "hourly", true},
+		{"monthly to hourly", "monthly", "hourly", true},
+		// Invalid values
+		{"invalid current value", "invalid", "monthly", true},
+		{"invalid new value", "hourly", "invalid", true},
+		{"case insensitive current", "Hourly", "monthly", false},
+		{"case insensitive new", "hourly", "Monthly", false},
+		{"whitespace handling", "  hourly  ", "  monthly  ", false},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validators.ValidateBillingChange(tc.current, tc.newBilling)
+			if tc.shouldErr && err == nil {
+				t.Fatalf("expected error for change from %q to %q, got nil", tc.current, tc.newBilling)
+			}
+			if !tc.shouldErr && err != nil {
+				t.Fatalf("expected no error for change from %q to %q, got %v", tc.current, tc.newBilling, err)
+			}
+		})
+	}
+}
+
 func TestAccServer_Basic(t *testing.T) {
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()

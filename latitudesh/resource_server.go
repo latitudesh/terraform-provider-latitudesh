@@ -151,6 +151,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "The server billing type (hourly, monthly, yearly). Defaults to monthly.",
 				Optional:            true,
 				Computed:            true,
+				Validators:          validators.Billing(),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -244,11 +245,30 @@ func (r *ServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 		return
 	}
 
-	var cfg, plan ServerResourceModel
+	var cfg, plan, state ServerResourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if !req.State.Raw.IsNull() {
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	}
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// Validate billing change during plan phase
+	if !req.State.Raw.IsNull() && !plan.Billing.IsNull() && !plan.Billing.IsUnknown() {
+		if !state.Billing.IsNull() && !state.Billing.IsUnknown() {
+			currentBilling := state.Billing.ValueString()
+			newBilling := plan.Billing.ValueString()
+			
+			// Only validate if billing is actually changing
+			if currentBilling != newBilling {
+				if err := validators.ValidateBillingChange(currentBilling, newBilling); err != nil {
+					resp.Diagnostics.AddError("Billing Change Validation Error", err.Error())
+					return
+				}
+			}
+		}
 	}
 
 	if !cfg.Project.IsNull() && !cfg.Project.IsUnknown() && cfg.Project.ValueString() != "" {
@@ -816,6 +836,16 @@ func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerRe
 
 	if !data.Billing.IsNull() && (currentData == nil || data.Billing.ValueString() != currentData.Billing.ValueString()) {
 		billingValue := data.Billing.ValueString()
+		
+		// Validate billing change if we have current billing data
+		if currentData != nil && !currentData.Billing.IsNull() && !currentData.Billing.IsUnknown() {
+			currentBilling := currentData.Billing.ValueString()
+			if err := validators.ValidateBillingChange(currentBilling, billingValue); err != nil {
+				diags.AddError("Billing Change Validation Error", err.Error())
+				return false, "", fmt.Errorf("billing change validation failed: %w", err)
+			}
+		}
+		
 		billing := operations.UpdateServerServersBilling(billingValue)
 		attrs.Billing = &billing
 	}
