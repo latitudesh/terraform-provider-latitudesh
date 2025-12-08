@@ -102,7 +102,6 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "The operating system for the new server",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
-					operatingSystemReinstallWarningModifier{},
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
@@ -120,7 +119,6 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				ElementType:         types.StringType,
 				Optional:            true,
 				PlanModifiers: []planmodifier.List{
-					sshKeysReinstallWarningModifier{},
 					listplanmodifier.UseStateForUnknown(),
 				},
 			},
@@ -129,7 +127,6 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Optional:            true,
 				Validators:          validators.UserData(),
 				PlanModifiers: []planmodifier.String{
-					userDataReinstallWarningModifier{},
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
@@ -137,7 +134,6 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "RAID mode for the server (raid-0, raid-1)",
 				Optional:            true,
 				PlanModifiers: []planmodifier.String{
-					raidReinstallWarningModifier{},
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
@@ -145,7 +141,6 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "URL where iPXE script is stored on, OR the iPXE script encoded in base64",
 				Optional:            true,
 				PlanModifiers: []planmodifier.String{
-					ipxeReinstallWarningModifier{},
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
@@ -641,18 +636,12 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 
 	// Determine what changed to decide between reinstall vs in-place update
 	// Compare planned config vs current state
-	needsReinstall, reason := r.needsReinstall(ctx, &data, &currentData, &resp.Diagnostics)
+	needsReinstall, _ := r.needsReinstall(ctx, &data, &currentData, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	if needsReinstall {
-		// Add warning about reinstall
-		resp.Diagnostics.AddWarning(
-			"Server Reinstall Required",
-			fmt.Sprintf("Changes detected (%s) will trigger a server reinstall. All data on the server will be lost unless backed up.", reason),
-		)
-
 		// Check if reinstall is allowed
 		allowReinstall := true // Default to true for backward compatibility
 		if !data.AllowReinstall.IsNull() && !data.AllowReinstall.IsUnknown() {
@@ -661,19 +650,6 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 
 		if !allowReinstall {
 			// When reinstall is not allowed, just update the state
-			resp.Diagnostics.AddWarning(
-				"State Updated Without Server Changes",
-				fmt.Sprintf("Changes detected (%s) would normally trigger a server reinstall, but allow_reinstall is set to false. "+
-					"The Terraform state has been updated to match your configuration, but no actual server changes were made. "+
-					"Set allow_reinstall=true to perform the actual reinstall.", reason),
-			)
-
-			err := r.updateDeployConfig(ctx, &data, &resp.Diagnostics)
-			if err != nil {
-				resp.Diagnostics.AddError("Deploy Config Update Error", "Unable to update deploy config: "+err.Error())
-				return
-			}
-
 			// Read current server state
 			r.readServer(ctx, &data, &resp.Diagnostics)
 			if resp.Diagnostics.HasError() {
@@ -1191,164 +1167,4 @@ func (r *ServerResource) updateServerTags(ctx context.Context, serverID string, 
 	}
 
 	return nil
-}
-
-// sshKeysReinstallWarningModifier shows warning when SSH keys change during plan phase
-type sshKeysReinstallWarningModifier struct{}
-
-func (m sshKeysReinstallWarningModifier) Description(ctx context.Context) string {
-	return "Shows warning when SSH key changes trigger server reinstall"
-}
-
-func (m sshKeysReinstallWarningModifier) MarkdownDescription(ctx context.Context) string {
-	return "Shows warning when SSH key changes trigger server reinstall"
-}
-
-func (m sshKeysReinstallWarningModifier) PlanModifyList(ctx context.Context, req planmodifier.ListRequest, resp *planmodifier.ListResponse) {
-	// Only show reinstall warnings during updates (when state exists), not during creation
-	if req.StateValue.IsNull() {
-		return
-	}
-
-	if !req.StateValue.Equal(req.PlanValue) {
-		// Check if SSH keys are being removed (state has keys, plan doesn't)
-		stateHasKeys := !req.StateValue.IsNull() && !req.StateValue.IsUnknown()
-		planHasKeys := !req.PlanValue.IsNull() && !req.PlanValue.IsUnknown()
-
-		if stateHasKeys && !planHasKeys {
-			resp.Diagnostics.AddWarning(
-				"SSH Keys Removal",
-				fmt.Sprintf("SSH keys will be removed from the server. This will trigger a server reinstall. All data on the server will be lost unless backed up. state=%v, plan=%v", req.StateValue, req.PlanValue),
-			)
-		} else {
-			resp.Diagnostics.AddWarning(
-				"Server Reinstall Required",
-				"SSH key changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
-			)
-		}
-	}
-}
-
-// operatingSystemReinstallWarningModifier shows warning when operating_system changes during plan phase
-type operatingSystemReinstallWarningModifier struct{}
-
-func (m operatingSystemReinstallWarningModifier) Description(ctx context.Context) string {
-	return "Shows warning when operating_system changes trigger server reinstall"
-}
-
-func (m operatingSystemReinstallWarningModifier) MarkdownDescription(ctx context.Context) string {
-	return "Shows warning when operating_system changes trigger server reinstall"
-}
-
-func (m operatingSystemReinstallWarningModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
-	// Only show warnings during updates (when state exists), not during creation
-	if req.StateValue.IsNull() {
-		return
-	}
-
-	var allowReinstall types.Bool
-	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
-	if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
-		return
-	}
-
-	if !req.StateValue.Equal(req.PlanValue) {
-		resp.Diagnostics.AddWarning(
-			"Server Reinstall Required",
-			"operating_system changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
-		)
-	}
-}
-
-// userDataReinstallWarningModifier shows warning when user_data changes during plan phase
-type userDataReinstallWarningModifier struct{}
-
-func (m userDataReinstallWarningModifier) Description(ctx context.Context) string {
-	return "Shows warning when user_data changes trigger server reinstall"
-}
-
-func (m userDataReinstallWarningModifier) MarkdownDescription(ctx context.Context) string {
-	return "Shows warning when user_data changes trigger server reinstall"
-}
-
-func (m userDataReinstallWarningModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
-	// Only show warnings during updates (when state exists), not during creation
-	if req.StateValue.IsNull() {
-		return
-	}
-
-	if !req.StateValue.Equal(req.PlanValue) {
-		resp.Diagnostics.AddWarning(
-			"Server Reinstall Required",
-			"user_data changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
-		)
-	}
-}
-
-// raidReinstallWarningModifier shows warning when raid changes during plan phase
-type raidReinstallWarningModifier struct{}
-
-func (m raidReinstallWarningModifier) Description(ctx context.Context) string {
-	return "Shows warning when raid changes trigger server reinstall"
-}
-
-func (m raidReinstallWarningModifier) MarkdownDescription(ctx context.Context) string {
-	return "Shows warning when raid changes trigger server reinstall"
-}
-
-func (m raidReinstallWarningModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
-	// Only show warnings during updates (when state exists), not during creation
-	if req.StateValue.IsNull() {
-		return
-	}
-
-	var allowReinstall types.Bool
-	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
-	if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
-		return
-	}
-
-	if !req.StateValue.Equal(req.PlanValue) {
-		resp.Diagnostics.AddWarning(
-			"Server Reinstall Required",
-			"raid changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
-		)
-	}
-}
-
-func (r *ServerResource) updateDeployConfig(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) error {
-
-	// Just return success so state can be updated with planned values
-	return nil
-}
-
-// ipxeReinstallWarningModifier shows warning when ipxe changes during plan phase
-type ipxeReinstallWarningModifier struct{}
-
-func (m ipxeReinstallWarningModifier) Description(ctx context.Context) string {
-	return "Shows warning when ipxe changes trigger server reinstall"
-}
-
-func (m ipxeReinstallWarningModifier) MarkdownDescription(ctx context.Context) string {
-	return "Shows warning when ipxe changes trigger server reinstall"
-}
-
-func (m ipxeReinstallWarningModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
-	// Only show warnings during updates (when state exists), not during creation
-	if req.StateValue.IsNull() {
-		return
-	}
-
-	var allowReinstall types.Bool
-	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("allow_reinstall"), &allowReinstall)...)
-	if !allowReinstall.IsNull() && !allowReinstall.IsUnknown() && !allowReinstall.ValueBool() {
-		return
-	}
-
-	if !req.StateValue.Equal(req.PlanValue) {
-		resp.Diagnostics.AddWarning(
-			"Server Reinstall Required",
-			"ipxe changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
-		)
-	}
 }
