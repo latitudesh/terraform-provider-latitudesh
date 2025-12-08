@@ -852,7 +852,7 @@ func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerRe
 
 	if !data.Billing.IsNull() && (currentData == nil || data.Billing.ValueString() != currentData.Billing.ValueString()) {
 		billingValue := data.Billing.ValueString()
-		
+
 		// Validate billing change if we have current billing data
 		if currentData != nil && !currentData.Billing.IsNull() && !currentData.Billing.IsUnknown() {
 			currentBilling := currentData.Billing.ValueString()
@@ -861,7 +861,7 @@ func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerRe
 				return false, "", fmt.Errorf("billing change validation failed: %w", err)
 			}
 		}
-		
+
 		billing := operations.UpdateServerServersBilling(billingValue)
 		attrs.Billing = &billing
 	}
@@ -1197,7 +1197,7 @@ func (m sshKeysReinstallWarningModifier) MarkdownDescription(ctx context.Context
 
 func (m sshKeysReinstallWarningModifier) PlanModifyList(ctx context.Context, req planmodifier.ListRequest, resp *planmodifier.ListResponse) {
 	// Only show reinstall warnings during updates (when state exists), not during creation
-	if req.StateValue.IsUnknown() {
+	if req.StateValue.IsNull() {
 		return
 	}
 
