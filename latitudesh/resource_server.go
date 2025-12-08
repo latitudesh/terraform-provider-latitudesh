@@ -707,6 +707,9 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 	} else {
 		// Performing in-place update
 
+		// Preserve planned values that were updated
+		plannedHostname := data.Hostname
+
 		// Perform in-place update for hostname, billing, tags, project changes
 		changedProj, newProj, err := r.updateServerInPlace(ctx, &data, &currentData, &resp.Diagnostics)
 		if err != nil {
@@ -718,6 +721,12 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		r.readServer(ctx, &data, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
+		}
+
+		// Restore planned hostname if it was explicitly set
+		// This handles cases where API may return stale data
+		if !plannedHostname.IsNull() && !plannedHostname.IsUnknown() {
+			data.Hostname = plannedHostname
 		}
 
 		if changedProj && newProj != "" {
