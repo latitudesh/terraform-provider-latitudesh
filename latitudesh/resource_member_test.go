@@ -83,8 +83,6 @@ resource "latitudesh_member" "test_item" {
 	)
 }
 
-// Adicionar após a linha 82
-
 func TestMemberStateUpgrade_EmailFallback(t *testing.T) {
 	testCases := []struct {
 		name          string
