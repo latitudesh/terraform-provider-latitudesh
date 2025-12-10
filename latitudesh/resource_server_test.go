@@ -15,7 +15,7 @@ import (
 const (
 	testServerHostname        = "terraform-ci-test.latitude.sh"
 	testServerPlan            = "c2-small-x86"
-	testServerSite            = "SAO2"
+	testServerSite            = "NYC"
 	testServerOperatingSystem = "ubuntu_24_04_x64_lts"
 	testMaxRetries            = 10 // Maximum number of retries
 	testRetryDelay            = 30 // Delay between retries in seconds

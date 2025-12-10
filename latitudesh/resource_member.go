@@ -19,6 +19,7 @@ import (
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &MemberResource{}
 var _ resource.ResourceWithImportState = &MemberResource{}
+var _ resource.ResourceWithUpgradeState = &MemberResource{}
 
 func NewMemberResource() resource.Resource {
 	return &MemberResource{}
@@ -41,12 +42,23 @@ type MemberResourceModel struct {
 	LastLoginAt types.String `tfsdk:"last_login_at"`
 }
 
+// MemberResourceModelV0 represents the state schema from provider version 2.5.0 and earlier
+// This is used for state migration from schema version 0 to version 1
+type MemberResourceModelV0 struct {
+	ID        types.String `tfsdk:"id"`
+	FirstName types.String `tfsdk:"first_name"`
+	LastName  types.String `tfsdk:"last_name"`
+	Email     types.String `tfsdk:"email"`
+	Role      types.String `tfsdk:"role"`
+}
+
 func (r *MemberResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_member"
 }
 
 func (r *MemberResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Version:             1,
 		MarkdownDescription: "Team Member resource",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -327,4 +339,70 @@ func (r *MemberResource) readMember(ctx context.Context, data *MemberResourceMod
 	data.CreatedAt = types.StringNull()
 	data.UpdatedAt = types.StringNull()
 	data.LastLoginAt = types.StringNull()
+}
+
+// UpgradeState implements state migration from older schema versions
+func (r *MemberResource) UpgradeState(ctx context.Context) map[int64]resource.StateUpgrader {
+	return map[int64]resource.StateUpgrader{
+		// Upgrade from version 0 (provider v2.5.0 and earlier) to version 1
+		0: {
+			PriorSchema: &schema.Schema{
+				Attributes: map[string]schema.Attribute{
+					"id": schema.StringAttribute{
+						Computed: true,
+					},
+					"first_name": schema.StringAttribute{
+						Optional: true,
+					},
+					"last_name": schema.StringAttribute{
+						Optional: true,
+					},
+					"email": schema.StringAttribute{
+						Optional: true,
+						Computed: true,
+					},
+					"role": schema.StringAttribute{
+						Optional: true,
+						Computed: true,
+					},
+				},
+			},
+			StateUpgrader: func(ctx context.Context, req resource.UpgradeStateRequest, resp *resource.UpgradeStateResponse) {
+				var priorState MemberResourceModelV0
+
+				resp.Diagnostics.Append(req.State.Get(ctx, &priorState)...)
+				if resp.Diagnostics.HasError() {
+					return
+				}
+
+				// Migrate to new state format
+				upgradedState := MemberResourceModel{
+					ID:        priorState.ID,
+					FirstName: priorState.FirstName,
+					LastName:  priorState.LastName,
+					Email:     priorState.Email,
+					Role:      priorState.Role,
+					// Initialize computed fields as null
+					MfaEnabled:  types.BoolNull(),
+					CreatedAt:   types.StringNull(),
+					UpdatedAt:   types.StringNull(),
+					LastLoginAt: types.StringNull(),
+				}
+
+				// Fallback: if email is empty but ID contains @, use ID as email
+				// This handles cases where the old provider stored email as ID
+				hasNoEmail := upgradedState.Email.IsNull() || upgradedState.Email.IsUnknown()
+				hasEmptyEmail := !hasNoEmail && upgradedState.Email.ValueString() == ""
+
+				if (hasNoEmail || hasEmptyEmail) && !upgradedState.ID.IsNull() && !upgradedState.ID.IsUnknown() {
+					idValue := upgradedState.ID.ValueString()
+					if strings.Contains(idValue, "@") {
+						upgradedState.Email = types.StringValue(idValue)
+					}
+				}
+
+				resp.Diagnostics.Append(resp.State.Set(ctx, upgradedState)...)
+			},
+		},
+	}
 }
