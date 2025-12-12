@@ -253,6 +253,9 @@ func (r *MemberResource) Delete(ctx context.Context, req resource.DeleteRequest,
 func (r *MemberResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	var data MemberResourceModel
 	data.ID = types.StringValue(req.ID)
+	if strings.Contains(req.ID, "@") {
+		data.Email = types.StringValue(req.ID)
+	}
 
 	r.readMember(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
