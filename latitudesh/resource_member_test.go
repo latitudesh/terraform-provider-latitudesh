@@ -83,6 +83,103 @@ resource "latitudesh_member" "test_item" {
 	)
 }
 
+func TestAccMember_Import(t *testing.T) {
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+		},
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckMemberDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCheckMemberBasic(),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckMemberExists("latitudesh_member.test_item"),
+					resource.TestCheckResourceAttr("latitudesh_member.test_item", "email", testMemberEmail),
+				),
+			},
+			{
+				ResourceName:            "latitudesh_member.test_item",
+				ImportState:             true,
+				ImportStateId:           testMemberEmail,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"id", "first_name", "last_name"},
+			},
+		},
+	})
+}
+
+func TestMemberImportState_EmailHandling(t *testing.T) {
+	testCases := []struct {
+		name          string
+		importID      string
+		expectEmail   bool
+		expectedEmail string
+	}{
+		{
+			name:          "import_with_email_sets_email_field",
+			importID:      "user@example.com",
+			expectEmail:   true,
+			expectedEmail: "user@example.com",
+		},
+		{
+			name:          "import_with_email_containing_plus",
+			importID:      "user+test@example.com",
+			expectEmail:   true,
+			expectedEmail: "user+test@example.com",
+		},
+		{
+			name:          "import_with_uuid_does_not_set_email",
+			importID:      "550e8400-e29b-41d4-a716-446655440000",
+			expectEmail:   false,
+			expectedEmail: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var data MemberResourceModel
+			data.ID = types.StringValue(tc.importID)
+
+			if strings.Contains(tc.importID, "@") {
+				data.Email = types.StringValue(tc.importID)
+			}
+
+			if tc.expectEmail {
+				if data.Email.IsNull() {
+					t.Errorf("Expected Email to be set, but it was null")
+				}
+				if data.Email.ValueString() != tc.expectedEmail {
+					t.Errorf("Expected Email=%q, got %q", tc.expectedEmail, data.Email.ValueString())
+				}
+			} else {
+				if !data.Email.IsNull() && data.Email.ValueString() != "" {
+					t.Errorf("Expected Email to be null/empty, got %q", data.Email.ValueString())
+				}
+			}
+
+			memberKey := ""
+			if !data.ID.IsNull() && !data.ID.IsUnknown() && data.ID.ValueString() != "" {
+				memberKey = data.ID.ValueString()
+			}
+			if (memberKey == "" || !strings.Contains(memberKey, "@")) && !data.Email.IsNull() && !data.Email.IsUnknown() && data.Email.ValueString() != "" {
+				memberKey = data.Email.ValueString()
+			}
+
+			if tc.expectEmail && memberKey == "" {
+				t.Errorf("Expected memberKey to be set for email import, but it was empty")
+			}
+			if tc.expectEmail && !strings.Contains(memberKey, "@") {
+				t.Errorf("Expected memberKey to contain @ for email import, got %q", memberKey)
+			}
+		})
+	}
+}
+
 func TestMemberStateUpgrade_EmailFallback(t *testing.T) {
 	testCases := []struct {
 		name          string

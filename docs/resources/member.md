@@ -48,10 +48,10 @@ You can import a Member resource using either the CLI method or the [experimenta
 
 **CLI Import**
 
-The `latitudesh_member` resource can be imported by specifying the Member ID:
+The `latitudesh_member` resource can be imported by specifying the member's email address:
 
 ```sh
-terraform import latitudesh_member.member <MEMBER_ID>
+terraform import latitudesh_member.member user@example.com
 ```
 
 **Import Block (Experimental)**
@@ -63,7 +63,7 @@ To use this method, create a file named `import.tf` (or any `.tf` file) with the
 ```hcl
 import {
   to = latitudesh_member.member
-  id = "<MEMBER_ID>"
+  id = "user@example.com"
 }
 ```
 

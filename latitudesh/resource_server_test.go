@@ -462,7 +462,7 @@ resource "latitudesh_server" "test_item" {
   operating_system = "ubuntu_24_04_x64_lts"
   plan             = "c2-small-x86"
   project          = "%s"
-  site             = "SAO2"
+  site             = "NYC"
   billing          = "monthly"
 }
 `,
