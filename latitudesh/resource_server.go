@@ -1085,10 +1085,21 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 		if attrs.Region != nil && attrs.Region.Site != nil && attrs.Region.Site.Slug != nil {
 			data.Site = types.StringValue(*attrs.Region.Site.Slug)
 			data.Region = types.StringValue(*attrs.Region.Site.Slug)
+		} else {
+			// Ensure region is set to a known value even if API doesn't return it
+			// This prevents "unknown value after apply" errors
+			if data.Region.IsUnknown() {
+				data.Region = types.StringNull()
+			}
 		}
 
 		if attrs.Plan != nil {
-			data.Plan = types.StringValue(*attrs.Plan.Slug)
+			if attrs.Plan.Slug != nil {
+				data.Plan = types.StringValue(*attrs.Plan.Slug)
+			}
+			if attrs.Plan.Billing != nil {
+				data.Billing = types.StringValue(*attrs.Plan.Billing)
+			}
 		}
 
 		if attrs.Interfaces != nil {
@@ -1132,6 +1143,11 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 	// Set default value for allow_reinstall if not set
 	if data.AllowReinstall.IsNull() {
 		data.AllowReinstall = types.BoolValue(true)
+	}
+
+	// Ensure billing is set to a known value to prevent "unknown value after apply" errors
+	if data.Billing.IsUnknown() {
+		data.Billing = types.StringNull()
 	}
 
 	// Read deploy config to get SSH keys, user data, raid, and ipxe
