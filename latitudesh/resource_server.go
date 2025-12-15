@@ -1084,6 +1084,7 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 
 		if attrs.Region != nil && attrs.Region.Site != nil && attrs.Region.Site.Slug != nil {
 			data.Site = types.StringValue(*attrs.Region.Site.Slug)
+			data.Region = types.StringValue(*attrs.Region.Site.Slug)
 		}
 
 		if attrs.Plan != nil {
