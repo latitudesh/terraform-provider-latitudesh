@@ -460,13 +460,15 @@ func testAccServerConfigWithSSHKeys() string {
 resource "latitudesh_server" "test_item" {
   hostname         = "terraform-ci-test.latitude.sh"
   operating_system = "ubuntu_24_04_x64_lts"
-  plan             = "c2-small-x86"
+  plan             = "%s"
   project          = "%s"
-  site             = "SAO2"
+  site             = "%s"
   billing          = "monthly"
 }
 `,
+		testServerPlan,
 		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testServerSite,
 	)
 }
 
