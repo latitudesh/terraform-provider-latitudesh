@@ -17,8 +17,6 @@ const (
 	testServerPlan            = "c2-small-x86"
 	testServerSite            = "NYC"
 	testServerOperatingSystem = "ubuntu_24_04_x64_lts"
-	testMaxRetries            = 10 // Maximum number of retries
-	testRetryDelay            = 30 // Delay between retries in seconds
 )
 
 func TestValidateHostnameLength(t *testing.T) {
@@ -460,13 +458,15 @@ func testAccServerConfigWithSSHKeys() string {
 resource "latitudesh_server" "test_item" {
   hostname         = "terraform-ci-test.latitude.sh"
   operating_system = "ubuntu_24_04_x64_lts"
-  plan             = "c2-small-x86"
+  plan             = "%s"
   project          = "%s"
-  site             = "SAO2"
+  site             = "%s"
   billing          = "monthly"
 }
 `,
+		testServerPlan,
 		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testServerSite,
 	)
 }
 

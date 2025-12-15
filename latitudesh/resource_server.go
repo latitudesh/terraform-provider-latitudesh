@@ -912,7 +912,7 @@ func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerRe
 
 	if !data.Billing.IsNull() && (currentData == nil || data.Billing.ValueString() != currentData.Billing.ValueString()) {
 		billingValue := data.Billing.ValueString()
-		
+
 		// Validate billing change if we have current billing data
 		if currentData != nil && !currentData.Billing.IsNull() && !currentData.Billing.IsUnknown() {
 			currentBilling := currentData.Billing.ValueString()
@@ -921,7 +921,7 @@ func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerRe
 				return false, "", fmt.Errorf("billing change validation failed: %w", err)
 			}
 		}
-		
+
 		billing := operations.UpdateServerServersBilling(billingValue)
 		attrs.Billing = &billing
 	}
@@ -1069,25 +1069,6 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 			}
 		}
 
-		if attrs.Region != nil && attrs.Region.Site != nil && attrs.Region.Site.Slug != nil {
-			// Don't update Site - preserve the user's input case
-		}
-
-		if attrs.Plan != nil {
-			if attrs.Plan.Slug != nil {
-				data.Plan = types.StringValue(*attrs.Plan.Slug)
-			} else if attrs.Plan.ID != nil {
-				data.Plan = types.StringValue(*attrs.Plan.ID)
-			} else if attrs.Plan.Name != nil {
-				data.Plan = types.StringValue(*attrs.Plan.Name)
-			}
-
-			// Extract billing from plan
-			if attrs.Plan.Billing != nil {
-				data.Billing = types.StringValue(*attrs.Plan.Billing)
-			}
-		}
-
 		// Set operating_system from API response
 		if attrs.OperatingSystem != nil && attrs.OperatingSystem.Slug != nil && *attrs.OperatingSystem.Slug != "" {
 			if data.OperatingSystem.IsNull() || *attrs.OperatingSystem.Slug == data.OperatingSystem.ValueString() {
@@ -1102,7 +1083,12 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 		}
 
 		if attrs.Region != nil && attrs.Region.Site != nil && attrs.Region.Site.Slug != nil {
+			data.Site = types.StringValue(*attrs.Region.Site.Slug)
 			data.Region = types.StringValue(*attrs.Region.Site.Slug)
+		}
+
+		if attrs.Plan != nil {
+			data.Plan = types.StringValue(*attrs.Plan.Slug)
 		}
 
 		if attrs.Interfaces != nil {
