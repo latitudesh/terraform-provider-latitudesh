@@ -181,10 +181,15 @@ func (r *MemberResource) Create(ctx context.Context, req resource.CreateRequest,
 
 	ensureKnownComputedMemberFields(&data)
 
-	// Read the resource to populate all attributes
+	originalID := data.ID
+
 	r.readMember(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	if data.ID.IsNull() || data.ID.IsUnknown() || data.ID.ValueString() == "" {
+		data.ID = originalID
 	}
 
 	ensureKnownComputedMemberFields(&data)
@@ -252,10 +257,29 @@ func (r *MemberResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 func (r *MemberResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	var data MemberResourceModel
-	data.ID = types.StringValue(req.ID)
+
+	importID := req.ID
+	if strings.Contains(importID, "@") {
+		data.Email = types.StringValue(importID)
+	} else {
+		resp.Diagnostics.AddError(
+			"Invalid Import ID",
+			"Team members must be imported using their email address, not user ID. "+
+				"Example: terraform import latitudesh_member.example user@example.com",
+		)
+		return
+	}
 
 	r.readMember(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if data.Email.IsNull() || data.Email.ValueString() == "" {
+		resp.Diagnostics.AddError(
+			"Member Not Found",
+			"No team member found with email: "+importID,
+		)
 		return
 	}
 
@@ -301,6 +325,12 @@ func (r *MemberResource) readMember(ctx context.Context, data *MemberResourceMod
 	if member == nil {
 		data.ID = types.StringNull()
 		return
+	}
+
+	if data.ID.IsNull() || data.ID.IsUnknown() || data.ID.ValueString() == "" {
+		if member.Email != nil {
+			data.ID = types.StringValue(*member.Email)
+		}
 	}
 
 	// Populate the data model
