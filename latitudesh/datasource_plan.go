@@ -182,7 +182,7 @@ func (d *PlanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		if attrs.Features != nil {
 			features := make([]types.String, len(attrs.Features))
 			for i, feature := range attrs.Features {
-				features[i] = types.StringValue(feature)
+				features[i] = types.StringValue(string(feature))
 			}
 			featuresList, diags := types.ListValueFrom(ctx, types.StringType, features)
 			resp.Diagnostics.Append(diags...)

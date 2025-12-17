@@ -213,7 +213,7 @@ func (d *SSHKeyDataSource) findOne(ctx context.Context, args *findOneArgs) (*com
 	var res *operations.GetSSHKeysResponse
 	var err error
 
-	res, err = d.client.SSHKeys.ListAll(ctx, nil)
+	res, err = d.client.SSHKeys.ListAll(ctx, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list SSH keys: %w", err)
 	}

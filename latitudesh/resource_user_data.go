@@ -108,12 +108,12 @@ func (r *UserDataResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	if result.UserData == nil || result.UserData.Data == nil || result.UserData.Data.ID == nil {
+	if result.UserDataObject == nil || result.UserDataObject.Data == nil || result.UserDataObject.Data.ID == nil {
 		resp.Diagnostics.AddError("API Error", "Failed to get user data ID from response")
 		return
 	}
 
-	data.ID = types.StringValue(*result.UserData.Data.ID)
+	data.ID = types.StringValue(*result.UserDataObject.Data.ID)
 
 	// Read the resource to populate all attributes
 	r.readUserData(ctx, &data, &resp.Diagnostics)
@@ -221,12 +221,12 @@ func (r *UserDataResource) readUserData(ctx context.Context, data *UserDataResou
 		return
 	}
 
-	if response.UserData == nil || response.UserData.Data == nil {
+	if response.UserDataObject == nil || response.UserDataObject.Data == nil {
 		data.ID = types.StringNull()
 		return
 	}
 
-	userData := response.UserData.Data
+	userData := response.UserDataObject.Data
 	if userData.Attributes != nil {
 		if userData.Attributes.Description != nil {
 			data.Description = types.StringValue(*userData.Attributes.Description)

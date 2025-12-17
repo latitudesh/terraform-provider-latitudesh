@@ -70,6 +70,41 @@ func TestAccDataSourcePlan(t *testing.T) {
 	})
 }
 
+// TestAccDataSourcePlan_Features tests that features are returned as string array (SDK v1.12.1)
+func TestAccDataSourcePlan_Features(t *testing.T) {
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("TF_ACC must be set for acceptance tests")
+	}
+
+	_, teardown := createTestRecorder(t)
+	defer teardown()
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccTokenCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfigPlanWithFeatures(),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("data.latitudesh_plan.features_test", "slug", "c3-small-x86"),
+					// SDK v1.12.1: Verify features is a list with at least one element
+					resource.TestMatchResourceAttr("data.latitudesh_plan.features_test", "features.#", regexp.MustCompile(`^[1-9]\d*$`)),
+					// SDK v1.12.1: Verify features contains expected values (ssh, user_data)
+					resource.TestCheckResourceAttr("data.latitudesh_plan.features_test", "features.0", "ssh"),
+				),
+			},
+		},
+	})
+}
+
+func testAccConfigPlanWithFeatures() string {
+	return `
+data "latitudesh_plan" "features_test" {
+  slug = "c3-small-x86"
+}
+`
+}
+
 func testAccConfigPlanBasic() string {
 	return fmt.Sprintf(`
 data "latitudesh_plan" "test" {

@@ -2,83 +2,96 @@ package latitudesh
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 )
 
 const (
 	testMemberFirstName = "Test"
 	testMemberLastName  = "User"
-	testMemberEmail     = "testuser@latitude.sh"
 	testMemberRole      = "collaborator"
 )
 
 func TestAccMember_Basic(t *testing.T) {
-	recorder, teardown := createTestRecorder(t)
-	defer teardown()
-	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
+	// Use random email to avoid conflicts
+	testEmail := fmt.Sprintf("test-acc-%s@latitude.sh", acctest.RandString(6))
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)
 		},
-		Providers:    testAccProviders,
-		CheckDestroy: testAccCheckMemberDestroy,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCheckMemberBasic(),
+				Config: testAccCheckMemberBasic(testEmail),
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckMemberExists("latitudesh_member.test_item"),
 					resource.TestCheckResourceAttr(
 						"latitudesh_member.test_item", "first_name", testMemberFirstName),
 					resource.TestCheckResourceAttr(
 						"latitudesh_member.test_item", "last_name", testMemberLastName),
 					resource.TestCheckResourceAttr(
-						"latitudesh_member.test_item", "email", testMemberEmail),
+						"latitudesh_member.test_item", "email", testEmail),
 					resource.TestCheckResourceAttr(
 						"latitudesh_member.test_item", "role", testMemberRole),
+					// SDK v1.12.1: Verify timestamps are populated
+					resource.TestCheckResourceAttrSet(
+						"latitudesh_member.test_item", "created_at"),
+					resource.TestCheckResourceAttrSet(
+						"latitudesh_member.test_item", "updated_at"),
+					// SDK v1.12.1: Verify ID has correct format (user_xxx)
+					resource.TestMatchResourceAttr(
+						"latitudesh_member.test_item", "id", regexp.MustCompile(`^user_`)),
 				),
 			},
 		},
 	})
 }
 
-func testAccCheckMemberDestroy(s *terraform.State) error {
-	// Skip destroy check for now since we don't have a proper API method
-	return nil
+// TestAccMember_Import tests importing a member by ID (SDK v1.12.1 feature)
+func TestAccMember_Import(t *testing.T) {
+	// Use random email to avoid conflicts
+	testEmail := fmt.Sprintf("test-acc-import-%s@latitude.sh", acctest.RandString(6))
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCheckMemberBasic(testEmail),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet("latitudesh_member.test_item", "id"),
+				),
+			},
+			{
+				ResourceName:      "latitudesh_member.test_item",
+				ImportState:       true,
+				ImportStateVerify: true,
+				// These fields may differ after import due to API response
+				ImportStateVerifyIgnore: []string{"first_name", "last_name"},
+			},
+		},
+	})
 }
 
-func testAccCheckMemberExists(n string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[n]
-		if !ok {
-			return fmt.Errorf("Not found: %s", n)
-		}
-		if rs.Primary.ID == "" {
-			return fmt.Errorf("No Record ID is set")
-		}
-
-		// Skip existence check for now since we don't have a proper API method
-		return nil
-	}
-}
-
-func testAccCheckMemberBasic() string {
+func testAccCheckMemberBasic(email string) string {
 	return fmt.Sprintf(`
 resource "latitudesh_member" "test_item" {
-	first_name  = "%s"
-	last_name  	= "%s"
-  	email 		= "%s"
-  	role        = "%s"
+	first_name = "%s"
+	last_name  = "%s"
+	email      = "%s"
+	role       = "%s"
 }
 `,
 		testMemberFirstName,
 		testMemberLastName,
-		testMemberEmail,
+		email,
 		testMemberRole,
 	)
 }

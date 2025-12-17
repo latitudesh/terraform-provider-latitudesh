@@ -263,14 +263,17 @@ func (r *MemberResource) ImportState(ctx context.Context, req resource.ImportSta
 }
 
 func (r *MemberResource) readMember(ctx context.Context, data *MemberResourceModel, diags *diag.Diagnostics) {
-	memberKey := ""
+	memberID := ""
+	memberEmail := ""
+
 	if !data.ID.IsNull() && !data.ID.IsUnknown() && data.ID.ValueString() != "" {
-		memberKey = data.ID.ValueString()
+		memberID = data.ID.ValueString()
 	}
-	if (memberKey == "" || !strings.Contains(memberKey, "@")) && !data.Email.IsNull() && !data.Email.IsUnknown() && data.Email.ValueString() != "" {
-		memberKey = data.Email.ValueString()
+	if !data.Email.IsNull() && !data.Email.IsUnknown() && data.Email.ValueString() != "" {
+		memberEmail = data.Email.ValueString()
 	}
-	if memberKey == "" {
+
+	if memberID == "" && memberEmail == "" {
 		diags.AddError("Missing Member Key", "Either ID or Email must be provided to identify the team member")
 		return
 	}
@@ -287,14 +290,26 @@ func (r *MemberResource) readMember(ctx context.Context, data *MemberResourceMod
 		return
 	}
 
-	// Find our member by ID (note: we need to match by email since members don't have exposed IDs in the list)
+	// Find our member by ID first (priority), then fall back to email
 	var member *components.TeamMembersData
-	for _, m := range response.TeamMembers.Data {
-		// Since the API doesn't provide IDs in team member listings,
-		// we'll need to use email for identification
-		if m.Email != nil && *m.Email == memberKey {
-			member = &m
-			break
+
+	// First pass: look for ID match only
+	if memberID != "" {
+		for _, m := range response.TeamMembers.Data {
+			if m.ID != nil && *m.ID == memberID {
+				member = &m
+				break
+			}
+		}
+	}
+
+	// Second pass: if no ID match found, look for email match
+	if member == nil && memberEmail != "" {
+		for _, m := range response.TeamMembers.Data {
+			if m.Attributes != nil && m.Attributes.Email != nil && *m.Attributes.Email == memberEmail {
+				member = &m
+				break
+			}
 		}
 	}
 
@@ -303,42 +318,70 @@ func (r *MemberResource) readMember(ctx context.Context, data *MemberResourceMod
 		return
 	}
 
-	// Populate the data model
-	if member.FirstName != nil {
-		data.FirstName = types.StringValue(*member.FirstName)
+	// Set the ID from the API response
+	if member.ID != nil {
+		data.ID = types.StringValue(*member.ID)
+	}
+
+	// Populate the data model from Attributes
+	if member.Attributes != nil {
+		if member.Attributes.FirstName != nil {
+			data.FirstName = types.StringValue(*member.Attributes.FirstName)
+		} else {
+			data.FirstName = types.StringNull()
+		}
+
+		if member.Attributes.LastName != nil {
+			data.LastName = types.StringValue(*member.Attributes.LastName)
+		} else {
+			data.LastName = types.StringNull()
+		}
+
+		if member.Attributes.Email != nil {
+			data.Email = types.StringValue(*member.Attributes.Email)
+		} else {
+			data.Email = types.StringNull()
+		}
+
+		if member.Attributes.Role != nil && member.Attributes.Role.Name != nil {
+			data.Role = types.StringValue(*member.Attributes.Role.Name)
+		} else {
+			data.Role = types.StringNull()
+		}
+
+		if member.Attributes.MfaEnabled != nil {
+			data.MfaEnabled = types.BoolValue(*member.Attributes.MfaEnabled)
+		} else {
+			data.MfaEnabled = types.BoolNull()
+		}
+
+		if member.Attributes.CreatedAt != nil {
+			data.CreatedAt = types.StringValue(member.Attributes.CreatedAt.Format("2006-01-02T15:04:05Z07:00"))
+		} else {
+			data.CreatedAt = types.StringNull()
+		}
+
+		if member.Attributes.UpdatedAt != nil {
+			data.UpdatedAt = types.StringValue(member.Attributes.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"))
+		} else {
+			data.UpdatedAt = types.StringNull()
+		}
+
+		if member.Attributes.LastLoginAt != nil {
+			data.LastLoginAt = types.StringValue(member.Attributes.LastLoginAt.Format("2006-01-02T15:04:05Z07:00"))
+		} else {
+			data.LastLoginAt = types.StringNull()
+		}
 	} else {
 		data.FirstName = types.StringNull()
-	}
-
-	if member.LastName != nil {
-		data.LastName = types.StringValue(*member.LastName)
-	} else {
 		data.LastName = types.StringNull()
-	}
-
-	if member.Email != nil {
-		data.Email = types.StringValue(*member.Email)
-	} else {
 		data.Email = types.StringNull()
-	}
-
-	if member.Role != nil && member.Role.Name != nil {
-		data.Role = types.StringValue(*member.Role.Name)
-	} else {
 		data.Role = types.StringNull()
-	}
-
-	if member.MfaEnabled != nil {
-		data.MfaEnabled = types.BoolValue(*member.MfaEnabled)
-	} else {
 		data.MfaEnabled = types.BoolNull()
+		data.CreatedAt = types.StringNull()
+		data.UpdatedAt = types.StringNull()
+		data.LastLoginAt = types.StringNull()
 	}
-
-	// Note: creation/update timestamps are not available in the current API response
-	// These would need to be populated if the API provides them
-	data.CreatedAt = types.StringNull()
-	data.UpdatedAt = types.StringNull()
-	data.LastLoginAt = types.StringNull()
 }
 
 // UpgradeState implements state migration from older schema versions
