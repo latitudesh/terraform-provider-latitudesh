@@ -38,12 +38,10 @@ func TestAccMember_Basic(t *testing.T) {
 						"latitudesh_member.test_item", "email", testEmail),
 					resource.TestCheckResourceAttr(
 						"latitudesh_member.test_item", "role", testMemberRole),
-					// SDK v1.12.1: Verify timestamps are populated
 					resource.TestCheckResourceAttrSet(
 						"latitudesh_member.test_item", "created_at"),
 					resource.TestCheckResourceAttrSet(
 						"latitudesh_member.test_item", "updated_at"),
-					// SDK v1.12.1: Verify ID has correct format (user_xxx)
 					resource.TestMatchResourceAttr(
 						"latitudesh_member.test_item", "id", regexp.MustCompile(`^user_`)),
 				),

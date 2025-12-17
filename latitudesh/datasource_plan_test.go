@@ -87,9 +87,7 @@ func TestAccDataSourcePlan_Features(t *testing.T) {
 				Config: testAccConfigPlanWithFeatures(),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("data.latitudesh_plan.features_test", "slug", "c3-small-x86"),
-					// SDK v1.12.1: Verify features is a list with at least one element
 					resource.TestMatchResourceAttr("data.latitudesh_plan.features_test", "features.#", regexp.MustCompile(`^[1-9]\d*$`)),
-					// SDK v1.12.1: Verify features contains expected values (ssh, user_data)
 					resource.TestCheckResourceAttr("data.latitudesh_plan.features_test", "features.0", "ssh"),
 				),
 			},
