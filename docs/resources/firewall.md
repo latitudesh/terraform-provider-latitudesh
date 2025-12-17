@@ -9,6 +9,8 @@ description: |-
 
 The firewall resource allows you to create and manage firewalls within your [Latitude.sh](https://latitude.sh/) account.
 
+> **Note:** When a new firewall resource is created, a default rule allowing TCP port 22 (SSH) is automatically added. This default rule is not managed by Terraform and will not appear in your Terraform state or configuration. Any subsequent updates to the firewall rules through Terraform will preserve this default rule.
+
 ## Example usage
 
 ```hcl
