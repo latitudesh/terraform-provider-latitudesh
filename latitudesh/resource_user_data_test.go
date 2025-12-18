@@ -86,11 +86,11 @@ func testAccCheckUserDataExists(n string, userData *components.UserDataPropertie
 			return err
 		}
 
-		if response.UserData == nil || response.UserData.Data == nil {
+		if response.UserDataObject == nil || response.UserDataObject.Data == nil {
 			return fmt.Errorf("user data not found")
 		}
 
-		*userData = *response.UserData.Data
+		*userData = *response.UserDataObject.Data
 
 		return nil
 	}
