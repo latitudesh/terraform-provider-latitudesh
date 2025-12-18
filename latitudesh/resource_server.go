@@ -865,10 +865,7 @@ func (r *ServerResource) reinstallServer(ctx context.Context, data *ServerResour
 	if !data.UserData.IsNull() && !data.UserData.IsUnknown() {
 		userDataValue := data.UserData.ValueString()
 		if userDataValue != "" {
-			// TODO: SDK inconsistency - reinstall API expects int64 but creation uses string IDs
-			// Temporarily skip user_data during reinstall to avoid API errors
-			// The user_data will remain in Terraform state but won't be reapplied during reinstall
-			// This is a known limitation that should be addressed when the API/SDK is standardized
+			attrs.UserData = &userDataValue
 		}
 	}
 
