@@ -563,7 +563,7 @@ resource "latitudesh_server" "test_item" {
 	site     = "%s"
 	operating_system = "%s"
 
-	timeouts {
+	timeouts = {
 		create = "45m"
 		update = "60m"
 	}
