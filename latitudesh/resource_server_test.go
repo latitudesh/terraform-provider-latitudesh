@@ -504,3 +504,128 @@ resource "latitudesh_server" "test" {
 		testServerOperatingSystem,
 		testServerHostname)
 }
+
+func TestAccServer_CustomTimeout(t *testing.T) {
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+			testAccProjectCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		CheckDestroy:             testAccCheckServerDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCheckServerCustomTimeout(),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckServerExists("latitudesh_server.test_item"),
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "hostname", testServerHostname),
+				),
+			},
+		},
+	})
+}
+
+func TestAccServer_DefaultTimeout(t *testing.T) {
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+			testAccProjectCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		CheckDestroy:             testAccCheckServerDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCheckServerBasic(),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckServerExists("latitudesh_server.test_item"),
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "hostname", testServerHostname),
+				),
+			},
+		},
+	})
+}
+
+func testAccCheckServerCustomTimeout() string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	billing = "monthly"
+	project = "%s"
+	hostname = "%s"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+
+	timeouts {
+		create = "45m"
+		update = "60m"
+	}
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testServerHostname,
+		testServerPlan,
+		testServerSite,
+		testServerOperatingSystem,
+	)
+}
+
+func TestAccServer_ProjectSlugConsistency(t *testing.T) {
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+
+	projectSlug := os.Getenv("LATITUDESH_TEST_PROJECT")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+			testAccProjectCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		CheckDestroy:             testAccCheckServerDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCheckServerWithProjectSlug(projectSlug),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckServerExists("latitudesh_server.test_item"),
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "project", projectSlug),
+					resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "hostname", testServerHostname),
+				),
+			},
+			// Verify that project value doesn't change after read
+			{
+				Config:             testAccCheckServerWithProjectSlug(projectSlug),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false, // Should be no changes
+			},
+		},
+	})
+}
+
+func testAccCheckServerWithProjectSlug(projectSlug string) string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	billing = "monthly"
+	project = "%s"
+	hostname = "%s"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+}
+`,
+		projectSlug,
+		testServerHostname,
+		testServerPlan,
+		testServerSite,
+		testServerOperatingSystem,
+	)
+}

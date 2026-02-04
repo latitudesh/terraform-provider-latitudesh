@@ -12,7 +12,7 @@ The `latitudesh_server` resource allows you to deploy and manage bare metal serv
 ## Example usage
 
 ```hcl
-# Create a server
+# Create a server with custom timeouts
 resource "latitudesh_server" "server" {
   billing           = "monthly"
   hostname          = "my-server"
@@ -21,6 +21,11 @@ resource "latitudesh_server" "server" {
   operating_system  = "ubuntu_24_04_x64_lts"
   project           = "proj_..."
   ssh_keys          = ["ssh_..."]
+
+  timeouts {
+    create = "45m"
+    update = "60m"
+  }
 }
 
 # Access the server's attributes
@@ -55,8 +60,16 @@ output "server" {
 - `ssh_keys` (List of String) List of server SSH key ids.
     Any change to `ssh_keys` will force a resource replacement.
 - `tags` (List of String) List of server tags
+- `timeouts` (Block, Optional) Configurable timeouts for server operations. (see [nested schema below](#nestedblock--timeouts))
 - `user_data` (String) The id of user data to set on the server.
     Updating user_data will trigger a reinstall.
+
+### Nested Schema for `timeouts`
+
+Optional:
+
+- `create` (String) Timeout for server creation. Default: 30 minutes. Example: "45m", "1h"
+- `update` (String) Timeout for server update (reinstall operations). Default: 30 minutes. Example: "60m", "1h30m"
 
 ### Read-Only
 
