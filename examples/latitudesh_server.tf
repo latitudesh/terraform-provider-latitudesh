@@ -7,6 +7,11 @@ resource "latitudesh_server" "server" {
   ssh_keys         = [latitudesh_ssh_key.ssh_key.id]
   billing          = "hourly"                           # Required for on_demand projects: hourly, monthly
   allow_reinstall  = true                               # Allow reinstall for OS/SSH/UserData/RAID/iPXE changes
+
+  timeouts {
+    create = "45m"  # Timeout for server creation (default: 30m)
+    update = "60m"  # Timeout for server updates/reinstalls (default: 30m)
+  }
 }
 
 output "server_state" {

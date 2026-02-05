@@ -107,6 +107,19 @@ func createTestRecorder(t *testing.T) (*recorder.Recorder, func()) {
 	return testRecorder(name, mode)
 }
 
+// createTestRecorderWithSite cria recorder VCR com nome específico incluindo site
+func createTestRecorderWithSite(t *testing.T, site string) (*recorder.Recorder, func()) {
+	baseName := t.Name()
+	nameWithSite := fmt.Sprintf("%s_%s", baseName, site)
+
+	mode, err := testRecordMode()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return testRecorder(nameWithSite, mode)
+}
+
 // createVCRClient creates a Latitude.sh SDK client with VCR recording/playback
 func createVCRClient(recorder *recorder.Recorder) *latitudeshgosdk.Latitudesh {
 	authToken := os.Getenv("LATITUDESH_AUTH_TOKEN")

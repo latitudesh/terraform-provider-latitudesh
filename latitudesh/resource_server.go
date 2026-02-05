@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -58,6 +59,7 @@ type ServerResourceModel struct {
 	CreatedAt       types.String `tfsdk:"created_at"`
 	Region          types.String `tfsdk:"region"`
 	Interfaces      types.List   `tfsdk:"interfaces"`
+	Timeouts        timeouts.Value `tfsdk:"timeouts"`
 }
 
 func (r *ServerResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -233,6 +235,10 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					},
 				},
 			},
+			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
+				Create: true,
+				Update: true,
+			}),
 		},
 	}
 }
@@ -381,9 +387,9 @@ func (r *ServerResource) Configure(ctx context.Context, req resource.ConfigureRe
 	r.defaultProject = deps.DefaultProject
 }
 
-func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string, diags *diag.Diagnostics, operation string) {
+func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string, diags *diag.Diagnostics, operation string, configuredTimeout time.Duration) {
 	// Configs
-	timeout := 30 * time.Minute
+	timeout := configuredTimeout
 	pollInterval := 30 * time.Second
 	maxRetries := 5
 
@@ -657,7 +663,14 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		}
 	}
 
-	r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "creation")
+	// Extract configured timeout with default of 30 minutes
+	createTimeout, diags := data.Timeouts.Create(ctx, 30*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "creation", createTimeout)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -753,8 +766,15 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 			return
 		}
 
+		// Extract configured timeout with default of 30 minutes
+		updateTimeout, diags := data.Timeouts.Update(ctx, 30*time.Minute)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+
 		// Wait for server to be ready after reinstall
-		r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "reinstall")
+		r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "reinstall", updateTimeout)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -1075,8 +1095,12 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 			data.OperatingSystem = types.StringNull()
 		}
 
+		// Only update project if it's not already set (e.g., during import)
+		// This prevents inconsistency when user provides a slug but API returns an ID
 		if attrs.Project != nil && attrs.Project.ID != nil {
-			data.Project = types.StringValue(*attrs.Project.ID)
+			if data.Project.IsNull() || data.Project.IsUnknown() {
+				data.Project = types.StringValue(*attrs.Project.ID)
+			}
 		}
 
 		if attrs.Region != nil && attrs.Region.Site != nil && attrs.Region.Site.Slug != nil {

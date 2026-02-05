@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 	"github.com/latitudesh/terraform-provider-latitudesh/internal/validators"
+	"gopkg.in/dnaeon/go-vcr.v3/recorder"
 )
 
 const (
@@ -168,136 +169,140 @@ func TestValidateBillingChange(t *testing.T) {
 }
 
 func TestAccServer_Basic(t *testing.T) {
-	recorder, teardown := createTestRecorder(t)
-	defer teardown()
-
-	// Use Framework provider with VCR
-	resource.Test(t, resource.TestCase{
-		PreCheck: func() {
-			testAccTokenCheck(t)
-		},
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
-		CheckDestroy:             testAccCheckServerDestroy,
-		Steps: []resource.TestStep{
-			{
-				Config: testAccCheckServerBasic(),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckServerExists("latitudesh_server.test_item"),
-					resource.TestCheckResourceAttr(
-						"latitudesh_server.test_item", "hostname", testServerHostname),
-					resource.TestCheckResourceAttrSet(
-						"latitudesh_server.test_item", "primary_ipv4"),
-					resource.TestCheckResourceAttrSet(
-						"latitudesh_server.test_item", "primary_ipv6"),
-				),
+	runTestWithSiteFallback(t, func(site string, recorder *recorder.Recorder) resource.TestCase {
+		return resource.TestCase{
+			PreCheck: func() {
+				testAccTokenCheck(t)
 			},
-		},
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+			CheckDestroy:             testAccCheckServerDestroy,
+			Steps: []resource.TestStep{
+				{
+					Config: testAccCheckServerBasicWithSite(site),
+					Check: resource.ComposeTestCheckFunc(
+						testAccCheckServerExists("latitudesh_server.test_item"),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "hostname", testServerHostname),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "site", site),
+						resource.TestCheckResourceAttrSet(
+							"latitudesh_server.test_item", "primary_ipv4"),
+						resource.TestCheckResourceAttrSet(
+							"latitudesh_server.test_item", "primary_ipv6"),
+					),
+				},
+			},
+		}
 	})
 }
 
 func TestAccServer_Update(t *testing.T) {
-	recorder, teardown := createTestRecorder(t)
-	defer teardown()
-
-	// Use Framework provider with VCR
-	resource.Test(t, resource.TestCase{
-		PreCheck: func() {
-			testAccTokenCheck(t)
-			testAccProjectCheck(t)
-		},
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
-		CheckDestroy:             testAccCheckServerDestroy,
-		Steps: []resource.TestStep{
-			{
-				Config: testAccCheckServerUpdateInitial(),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckServerExists("latitudesh_server.test_item"),
-					resource.TestCheckResourceAttr(
-						"latitudesh_server.test_item", "hostname", "test-initial"),
-					resource.TestCheckResourceAttr(
-						"latitudesh_server.test_item", "billing", "hourly"),
-				),
+	runTestWithSiteFallback(t, func(site string, recorder *recorder.Recorder) resource.TestCase {
+		return resource.TestCase{
+			PreCheck: func() {
+				testAccTokenCheck(t)
+				testAccProjectCheck(t)
 			},
-			{
-				Config: testAccCheckServerUpdateChanged(),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckServerExists("latitudesh_server.test_item"),
-					resource.TestCheckResourceAttr(
-						"latitudesh_server.test_item", "hostname", "test-initial"), // hostname should be preserved
-					resource.TestCheckResourceAttr(
-						"latitudesh_server.test_item", "billing", "monthly"), // billing should be updated
-				),
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+			CheckDestroy:             testAccCheckServerDestroy,
+			Steps: []resource.TestStep{
+				{
+					Config: testAccCheckServerUpdateInitialWithSite(site),
+					Check: resource.ComposeTestCheckFunc(
+						testAccCheckServerExists("latitudesh_server.test_item"),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "hostname", "test-initial"),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "billing", "hourly"),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "site", site),
+					),
+				},
+				{
+					Config: testAccCheckServerUpdateChangedWithSite(site),
+					Check: resource.ComposeTestCheckFunc(
+						testAccCheckServerExists("latitudesh_server.test_item"),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "hostname", "test-initial"), // hostname should be preserved
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "billing", "monthly"), // billing should be updated
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "site", site),
+					),
+				},
+				{
+					Config: testAccCheckServerUpdateHostnameWithSite(site),
+					Check: resource.ComposeTestCheckFunc(
+						testAccCheckServerExists("latitudesh_server.test_item"),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "hostname", "test-updated"), // hostname should be updated
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "billing", "monthly"), // billing should be preserved
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "site", site),
+					),
+				},
 			},
-			{
-				Config: testAccCheckServerUpdateHostname(),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckServerExists("latitudesh_server.test_item"),
-					resource.TestCheckResourceAttr(
-						"latitudesh_server.test_item", "hostname", "test-updated"), // hostname should be updated
-					resource.TestCheckResourceAttr(
-						"latitudesh_server.test_item", "billing", "monthly"), // billing should be preserved
-				),
-			},
-		},
+		}
 	})
 }
 
 func TestAccServer_IPv6Support(t *testing.T) {
-	recorder, teardown := createTestRecorder(t)
-	defer teardown()
-
-	// Use Framework provider with VCR
-	resource.Test(t, resource.TestCase{
-		PreCheck: func() {
-			testAccTokenCheck(t)
-			testAccProjectCheck(t)
-		},
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
-		CheckDestroy:             testAccCheckServerDestroy,
-		Steps: []resource.TestStep{
-			{
-				Config: testAccCheckServerBasic(),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckServerExists("latitudesh_server.test_item"),
-					// Verify that both IPv4 and IPv6 fields are present in the schema
-					resource.TestCheckResourceAttrSet(
-						"latitudesh_server.test_item", "primary_ipv4"),
-					resource.TestCheckResourceAttrSet(
-						"latitudesh_server.test_item", "primary_ipv6"),
-					// Verify the field names are correct
-					resource.TestCheckResourceAttr(
-						"latitudesh_server.test_item", "hostname", testServerHostname),
-				),
+	runTestWithSiteFallback(t, func(site string, recorder *recorder.Recorder) resource.TestCase {
+		return resource.TestCase{
+			PreCheck: func() {
+				testAccTokenCheck(t)
+				testAccProjectCheck(t)
 			},
-		},
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+			CheckDestroy:             testAccCheckServerDestroy,
+			Steps: []resource.TestStep{
+				{
+					Config: testAccCheckServerBasicWithSite(site),
+					Check: resource.ComposeTestCheckFunc(
+						testAccCheckServerExists("latitudesh_server.test_item"),
+						// Verify that both IPv4 and IPv6 fields are present in the schema
+						resource.TestCheckResourceAttrSet(
+							"latitudesh_server.test_item", "primary_ipv4"),
+						resource.TestCheckResourceAttrSet(
+							"latitudesh_server.test_item", "primary_ipv6"),
+						// Verify the field names are correct
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "hostname", testServerHostname),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "site", site),
+					),
+				},
+			},
+		}
 	})
 }
 
 func TestAccServer_SSHKeys_NoDrift(t *testing.T) {
-	recorder, teardown := createTestRecorder(t)
-	defer teardown()
+	runTestWithSiteFallback(t, func(site string, recorder *recorder.Recorder) resource.TestCase {
+		resourceName := "latitudesh_server.test_item"
 
-	resourceName := "latitudesh_server.test_item"
-
-	resource.Test(t, resource.TestCase{
-		PreCheck: func() {
-			testAccTokenCheck(t)
-			testAccProjectCheck(t)
-		},
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
-		Steps: []resource.TestStep{
-			{
-				Config: testAccServerConfigWithSSHKeys(),
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "hostname", testServerHostname),
-				),
+		return resource.TestCase{
+			PreCheck: func() {
+				testAccTokenCheck(t)
+				testAccProjectCheck(t)
 			},
-			{
-				Config:             testAccServerConfigWithSSHKeys(),
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+			Steps: []resource.TestStep{
+				{
+					Config: testAccServerConfigWithSSHKeysWithSite(site),
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttr(resourceName, "hostname", testServerHostname),
+						resource.TestCheckResourceAttr(resourceName, "site", site),
+					),
+				},
+				{
+					Config:             testAccServerConfigWithSSHKeysWithSite(site),
+					PlanOnly:           true,
+					ExpectNonEmptyPlan: false,
+				},
 			},
-		},
+		}
 	})
 }
 
@@ -503,4 +508,270 @@ resource "latitudesh_server" "test" {
 		testServerPlan,
 		testServerOperatingSystem,
 		testServerHostname)
+}
+
+func TestAccServer_CustomTimeout(t *testing.T) {
+	runTestWithSiteFallback(t, func(site string, recorder *recorder.Recorder) resource.TestCase {
+		return resource.TestCase{
+			PreCheck: func() {
+				testAccTokenCheck(t)
+				testAccProjectCheck(t)
+			},
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+			CheckDestroy:             testAccCheckServerDestroy,
+			Steps: []resource.TestStep{
+				{
+					Config: testAccCheckServerCustomTimeoutWithSite(site),
+					Check: resource.ComposeTestCheckFunc(
+						testAccCheckServerExists("latitudesh_server.test_item"),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "hostname", testServerHostname),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "site", site),
+					),
+				},
+			},
+		}
+	})
+}
+
+func TestAccServer_DefaultTimeout(t *testing.T) {
+	runTestWithSiteFallback(t, func(site string, recorder *recorder.Recorder) resource.TestCase {
+		return resource.TestCase{
+			PreCheck: func() {
+				testAccTokenCheck(t)
+				testAccProjectCheck(t)
+			},
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+			CheckDestroy:             testAccCheckServerDestroy,
+			Steps: []resource.TestStep{
+				{
+					Config: testAccCheckServerBasicWithSite(site),
+					Check: resource.ComposeTestCheckFunc(
+						testAccCheckServerExists("latitudesh_server.test_item"),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "hostname", testServerHostname),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "site", site),
+					),
+				},
+			},
+		}
+	})
+}
+
+func testAccCheckServerCustomTimeout() string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	billing = "monthly"
+	project = "%s"
+	hostname = "%s"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+
+	timeouts = {
+		create = "45m"
+		update = "60m"
+	}
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testServerHostname,
+		testServerPlan,
+		testServerSite,
+		testServerOperatingSystem,
+	)
+}
+
+func TestAccServer_ProjectSlugConsistency(t *testing.T) {
+	projectSlug := os.Getenv("LATITUDESH_TEST_PROJECT")
+
+	runTestWithSiteFallback(t, func(site string, recorder *recorder.Recorder) resource.TestCase {
+		return resource.TestCase{
+			PreCheck: func() {
+				testAccTokenCheck(t)
+				testAccProjectCheck(t)
+			},
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+			CheckDestroy:             testAccCheckServerDestroy,
+			Steps: []resource.TestStep{
+				{
+					Config: testAccCheckServerWithProjectSlugWithSite(projectSlug, site),
+					Check: resource.ComposeTestCheckFunc(
+						testAccCheckServerExists("latitudesh_server.test_item"),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "project", projectSlug),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "hostname", testServerHostname),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "site", site),
+					),
+				},
+				// Verify that project value doesn't change after read
+				{
+					Config:             testAccCheckServerWithProjectSlugWithSite(projectSlug, site),
+					PlanOnly:           true,
+					ExpectNonEmptyPlan: false, // Should be no changes
+				},
+			},
+		}
+	})
+}
+
+func testAccCheckServerWithProjectSlug(projectSlug string) string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	billing = "monthly"
+	project = "%s"
+	hostname = "%s"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+}
+`,
+		projectSlug,
+		testServerHostname,
+		testServerPlan,
+		testServerSite,
+		testServerOperatingSystem,
+	)
+}
+
+// Config generators with site parameter
+
+func testAccCheckServerBasicWithSite(site string) string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	billing = "monthly"
+	project = "%s"
+	hostname = "%s"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testServerHostname,
+		testServerPlan,
+		site,
+		testServerOperatingSystem,
+	)
+}
+
+func testAccCheckServerUpdateInitialWithSite(site string) string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	billing = "hourly"
+	project = "%s"
+	hostname = "test-initial"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testServerPlan,
+		site,
+		testServerOperatingSystem,
+	)
+}
+
+func testAccCheckServerUpdateChangedWithSite(site string) string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	billing = "monthly"
+	project = "%s"
+	hostname = "test-initial"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testServerPlan,
+		site,
+		testServerOperatingSystem,
+	)
+}
+
+func testAccCheckServerUpdateHostnameWithSite(site string) string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	billing = "monthly"
+	project = "%s"
+	hostname = "test-updated"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testServerPlan,
+		site,
+		testServerOperatingSystem,
+	)
+}
+
+func testAccServerConfigWithSSHKeysWithSite(site string) string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	billing = "monthly"
+	project = "%s"
+	hostname = "%s"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+	ssh_keys = []
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testServerHostname,
+		testServerPlan,
+		site,
+		testServerOperatingSystem,
+	)
+}
+
+func testAccCheckServerCustomTimeoutWithSite(site string) string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	billing = "monthly"
+	project = "%s"
+	hostname = "%s"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+
+	timeouts {
+		create = "45m"
+		update = "60m"
+	}
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testServerHostname,
+		testServerPlan,
+		site,
+		testServerOperatingSystem,
+	)
+}
+
+func testAccCheckServerWithProjectSlugWithSite(projectSlug, site string) string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	billing = "monthly"
+	project = "%s"
+	hostname = "%s"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+}
+`,
+		projectSlug,
+		testServerHostname,
+		testServerPlan,
+		site,
+		testServerOperatingSystem,
+	)
 }
