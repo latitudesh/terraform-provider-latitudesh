@@ -30,10 +30,10 @@ func TestAccRegion_Basic(t *testing.T) {
 				),
 			},
 			{
-				Config: testAccCheckRegionBasic("NYC1"),
+				Config: testAccCheckRegionBasic("NYC"),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(
-						"data.latitudesh_region.test", "slug", "NYC1"),
+						"data.latitudesh_region.test", "slug", "NYC"),
 				),
 			},
 		},
