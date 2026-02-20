@@ -15,12 +15,12 @@ func TestAccRegion_Basic(t *testing.T) {
 		t.Skip("TF_ACC must be set for acceptance tests")
 	}
 
-	_, teardown := createTestRecorder(t)
+	recorder, teardown := createTestRecorder(t)
 	defer teardown()
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccTokenCheck(t) },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccCheckRegionBasic(testRegionSlug),

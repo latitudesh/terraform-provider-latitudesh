@@ -1,0 +1,783 @@
+---
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=1&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_ash_001","type":"regions","attributes":{"slug":"ASH","name":"Ashburn","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=1&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_ash_001","type":"regions","attributes":{"slug":"ASH","name":"Ashburn","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 2
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=1&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_ash_001","type":"regions","attributes":{"slug":"ASH","name":"Ashburn","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 3
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=1&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_ash_001","type":"regions","attributes":{"slug":"ASH","name":"Ashburn","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 4
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=1&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_ash_001","type":"regions","attributes":{"slug":"ASH","name":"Ashburn","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 5
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=1&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_ash_001","type":"regions","attributes":{"slug":"ASH","name":"Ashburn","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 6
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=1&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_ash_001","type":"regions","attributes":{"slug":"ASH","name":"Ashburn","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 7
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=1&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_ash_001","type":"regions","attributes":{"slug":"ASH","name":"Ashburn","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 8
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=1&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_ash_001","type":"regions","attributes":{"slug":"ASH","name":"Ashburn","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 9
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=1&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_ash_001","type":"regions","attributes":{"slug":"ASH","name":"Ashburn","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 10
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=2&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_nyc_001","type":"regions","attributes":{"slug":"NYC","name":"New York City","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 11
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=2&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_nyc_001","type":"regions","attributes":{"slug":"NYC","name":"New York City","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 12
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=2&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_nyc_001","type":"regions","attributes":{"slug":"NYC","name":"New York City","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 13
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=2&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_nyc_001","type":"regions","attributes":{"slug":"NYC","name":"New York City","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 14
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=2&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_nyc_001","type":"regions","attributes":{"slug":"NYC","name":"New York City","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 15
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=2&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_nyc_001","type":"regions","attributes":{"slug":"NYC","name":"New York City","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 16
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=2&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_nyc_001","type":"regions","attributes":{"slug":"NYC","name":"New York City","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 17
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=2&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_nyc_001","type":"regions","attributes":{"slug":"NYC","name":"New York City","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 18
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=2&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_nyc_001","type":"regions","attributes":{"slug":"NYC","name":"New York City","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms
+    - id: 19
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.latitude.sh
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Accept:
+                - application/vnd.api+json
+            Api-Version:
+                - "2023-06-01"
+            Authorization:
+                - '[REDACTED]'
+            User-Agent:
+                - Latitude-Terraform-Provider/dev
+        url: https://api.latitude.sh/regions?page%5Bnumber%5D=2&page%5Bsize%5D=20
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: true
+        body: '{"data":[{"id":"reg_nyc_001","type":"regions","attributes":{"slug":"NYC","name":"New York City","country":{"slug":"US","name":"United States"}}}],"meta":{}}'
+        headers:
+            Content-Type:
+                - application/vnd.api+json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 150ms

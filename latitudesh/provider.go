@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"net/http"
 	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -18,7 +19,8 @@ var _ provider.Provider = &latitudeshProvider{}
 
 // latitudeshProvider defines the provider implementation.
 type latitudeshProvider struct {
-	version string
+	version    string
+	httpClient *http.Client // optional: used in tests for VCR recording/playback
 }
 
 // latitudeshProviderModel describes the provider data model.
@@ -90,9 +92,13 @@ func (p *latitudeshProvider) Configure(ctx context.Context, req provider.Configu
 		return
 	}
 
-	sdkClient := latitudeshgosdk.New(
+	sdkOpts := []latitudeshgosdk.SDKOption{
 		latitudeshgosdk.WithSecurity(authToken),
-	)
+	}
+	if p.httpClient != nil {
+		sdkOpts = append(sdkOpts, latitudeshgosdk.WithClient(p.httpClient))
+	}
+	sdkClient := latitudeshgosdk.New(sdkOpts...)
 	project := data.Project.ValueString()
 
 	providerContext := &iprovider.ProviderContext{
