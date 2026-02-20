@@ -109,34 +109,43 @@ func (d *RegionDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 			region = result.Region.Data
 		}
 	} else {
-		// Look up by slug - get all regions and find matching slug
+		// Look up by slug - paginate through all regions and find matching slug
 		slug := data.Slug.ValueString()
 		result, err := d.client.Regions.Get(ctx, nil, nil)
 		if err != nil {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to search for region with slug %s, got error: %s", slug, err.Error()))
 			return
 		}
-		if result.Regions != nil && result.Regions.Data != nil {
-			for _, r := range result.Regions.Data {
-				if r.Attributes != nil && r.Attributes.Slug != nil && *r.Attributes.Slug == slug {
-					// Convert RegionsData to RegionData format
-					var regionCountry *components.RegionCountry
-					if r.Attributes.Country != nil {
-						regionCountry = &components.RegionCountry{
-							Name: r.Attributes.Country.Name,
-							Slug: r.Attributes.Country.Slug,
+		for result != nil && region == nil {
+			if result.Regions != nil && result.Regions.Data != nil {
+				for _, r := range result.Regions.Data {
+					if r.Attributes != nil && r.Attributes.Slug != nil && *r.Attributes.Slug == slug {
+						var regionCountry *components.RegionCountry
+						if r.Attributes.Country != nil {
+							regionCountry = &components.RegionCountry{
+								Name: r.Attributes.Country.Name,
+								Slug: r.Attributes.Country.Slug,
+							}
 						}
+						region = &components.RegionData{
+							ID: r.ID,
+							Attributes: &components.RegionAttributes{
+								Name:    r.Attributes.Name,
+								Slug:    r.Attributes.Slug,
+								Country: regionCountry,
+							},
+						}
+						break
 					}
-					region = &components.RegionData{
-						ID: r.ID,
-						Attributes: &components.RegionAttributes{
-							Name:    r.Attributes.Name,
-							Slug:    r.Attributes.Slug,
-							Country: regionCountry,
-						},
-					}
-					break
 				}
+			}
+			if region != nil || result.Next == nil {
+				break
+			}
+			result, err = result.Next()
+			if err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to fetch next page of regions, got error: %s", err.Error()))
+				return
 			}
 		}
 	}
