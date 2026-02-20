@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"testing"
 
@@ -152,15 +153,13 @@ func testAccProtoV6ProviderFactories() map[string]func() (tfprotov6.ProviderServ
 }
 
 // Helper function to get providers for Framework testing with VCR
-func testAccProtoV6ProviderFactoriesWithVCR(recorder *recorder.Recorder) map[string]func() (tfprotov6.ProviderServer, error) {
+func testAccProtoV6ProviderFactoriesWithVCR(rec *recorder.Recorder) map[string]func() (tfprotov6.ProviderServer, error) {
+	httpClient := &http.Client{Transport: rec}
 	return map[string]func() (tfprotov6.ProviderServer, error){
-		"latitudesh": func() (tfprotov6.ProviderServer, error) {
-			// Create a provider instance with VCR-enabled client
-			provider := New("dev")()
-			// Configure the provider with VCR client
-			// This will be handled in the provider's Configure method
-			return providerserver.NewProtocol6(provider)(), nil
-		},
+		"latitudesh": providerserver.NewProtocol6WithError(&latitudeshProvider{
+			version:    "dev",
+			httpClient: httpClient,
+		}),
 	}
 }
 
