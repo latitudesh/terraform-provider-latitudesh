@@ -10,7 +10,7 @@ import (
 )
 
 // Lista de sites para fallback (em ordem)
-var testServerSiteFallbackOrder = []string{"SAN3", "BGT", "SAO2", "AMS", "ASH"}
+var testServerSiteFallbackOrder = []string{"SAN3", "BGT", "SAO2", "AMS", "ASH", "DAL", "FRA", "CHI", "LON2"}
 
 // isServersOutOfStockError detecta erro 422 com código SERVERS_OUT_OF_STOCK
 func isServersOutOfStockError(err error) bool {
