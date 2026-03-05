@@ -7,33 +7,35 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
+	"gopkg.in/dnaeon/go-vcr.v3/recorder"
 )
 
 func TestAccServer_WithUserData(t *testing.T) {
-	recorder, teardown := createTestRecorder(t)
-	defer teardown()
-
-	resource.Test(t, resource.TestCase{
-		PreCheck: func() {
-			testAccTokenCheck(t)
-			testAccProjectCheck(t)
-		},
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
-		CheckDestroy:             testAccCheckServerDestroy,
-		Steps: []resource.TestStep{
-			{
-				Config: testAccCheckServerWithUserData(),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckServerExists("latitudesh_server.test_item"),
-					resource.TestCheckResourceAttr(
-						"latitudesh_server.test_item", "hostname", testServerHostname),
-					resource.TestCheckResourceAttr(
-						"latitudesh_server.test_item", "user_data", "ud_R82A0y9L06mMY"),
-					resource.TestCheckResourceAttrSet(
-						"latitudesh_server.test_item", "primary_ipv4"),
-				),
+	runTestWithSiteFallback(t, func(site string, rec *recorder.Recorder) resource.TestCase {
+		return resource.TestCase{
+			PreCheck: func() {
+				testAccTokenCheck(t)
+				testAccProjectCheck(t)
 			},
-		},
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(rec),
+			CheckDestroy:             testAccCheckServerDestroy,
+			Steps: []resource.TestStep{
+				{
+					Config: testAccCheckServerWithUserData(site),
+					Check: resource.ComposeTestCheckFunc(
+						testAccCheckServerExists("latitudesh_server.test_item"),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "hostname", testServerHostname),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "user_data", "ud_R82A0y9L06mMY"),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "site", site),
+						resource.TestCheckResourceAttrSet(
+							"latitudesh_server.test_item", "primary_ipv4"),
+					),
+				},
+			},
+		}
 	})
 }
 
@@ -110,7 +112,7 @@ func pointersEqual(a, b *string) bool {
 	return *a == *b
 }
 
-func testAccCheckServerWithUserData() string {
+func testAccCheckServerWithUserData(site string) string {
 	return fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
@@ -126,7 +128,7 @@ resource "latitudesh_server" "test_item" {
 		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testServerHostname,
 		testServerPlan,
-		testServerSite,
+		site,
 		testServerOperatingSystem,
 	)
 }

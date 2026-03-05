@@ -794,7 +794,22 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 			return
 		}
 
-		// For in-place updates, only read server info
+		// Extract configured timeout with default of 30 minutes
+		updateTimeout, diags := data.Timeouts.Update(ctx, 30*time.Minute)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+
+		// Wait for server to be ready after in-place update
+		// The API may trigger a redeployment for certain changes, so we need
+		// to wait for the server to reach "on" status before reading state
+		r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "update", updateTimeout)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+
+		// Read server to get updated values after update
 		r.readServer(ctx, &data, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
