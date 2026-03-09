@@ -20,9 +20,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
-	"github.com/latitudesh/terraform-provider-latitudesh/internal/planmodifiers"
-	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
-	"github.com/latitudesh/terraform-provider-latitudesh/internal/validators"
+	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/planmodifiers"
+	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
+	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/validators"
 )
 
 var _ resource.Resource = &ServerResource{}

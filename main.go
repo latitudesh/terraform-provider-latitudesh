@@ -6,7 +6,7 @@ import (
 	"log"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
-	latitude "github.com/latitudesh/terraform-provider-latitudesh/latitudesh"
+	latitude "github.com/latitudesh/terraform-provider-latitudesh/v2/latitudesh"
 )
 
 // version is set via ldflags during build

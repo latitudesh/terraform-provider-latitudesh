@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
-	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
+	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
 
 var _ datasource.DataSource = &RegionDataSource{}

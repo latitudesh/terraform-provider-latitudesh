@@ -17,8 +17,8 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
-	"github.com/latitudesh/terraform-provider-latitudesh/internal/modifiers"
-	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
+	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/modifiers"
+	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
 
 var _ resource.Resource = &TagResource{}

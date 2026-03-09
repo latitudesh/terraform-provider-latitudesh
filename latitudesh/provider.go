@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
-	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
+	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
 
 // Ensure latitudeshProvider satisfies various provider interfaces

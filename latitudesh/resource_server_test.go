@@ -9,7 +9,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
-	"github.com/latitudesh/terraform-provider-latitudesh/internal/validators"
+	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/validators"
 	"gopkg.in/dnaeon/go-vcr.v3/recorder"
 )
 
