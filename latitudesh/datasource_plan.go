@@ -10,7 +10,7 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
-	iprovider "github.com/latitudesh/terraform-provider-latitudesh/internal/provider"
+	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.

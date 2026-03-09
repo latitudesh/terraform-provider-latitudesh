@@ -1,4 +1,4 @@
-module github.com/latitudesh/terraform-provider-latitudesh
+module github.com/latitudesh/terraform-provider-latitudesh/v2
 
 go 1.24.0
 
