@@ -147,6 +147,10 @@ func (r *VirtualNetworkResource) ModifyPlan(ctx context.Context, req resource.Mo
 		}
 	}
 
+	if cfg.Project.IsUnknown() {
+		return
+	}
+
 	if !cfg.Project.IsNull() && !cfg.Project.IsUnknown() && cfg.Project.ValueString() != "" {
 		plan.Project = cfg.Project
 		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)

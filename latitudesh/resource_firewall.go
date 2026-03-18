@@ -137,6 +137,10 @@ func (r *FirewallResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
+	if cfgProject.IsUnknown() {
+		return
+	}
+
 	// Resolve: resource > provider > erro
 	var resolved types.String
 	if !cfgProject.IsNull() && !cfgProject.IsUnknown() && cfgProject.ValueString() != "" {
