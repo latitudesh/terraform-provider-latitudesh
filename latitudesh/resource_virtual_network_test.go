@@ -1,5 +1,3 @@
-//go:build tfplugintesting
-
 package latitudesh
 
 import (
