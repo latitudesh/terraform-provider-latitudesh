@@ -123,3 +123,35 @@ resource "latitudesh_firewall" "test" {
 }
 `, projectID)
 }
+
+func TestAccFirewall_UnknownProject(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccTokenCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+				Config: `
+provider "latitudesh" {}
+
+resource "latitudesh_project" "test" {
+  name        = "tf-acc-unknown-project-fw"
+  environment = "Development"
+}
+
+resource "latitudesh_firewall" "test" {
+  name    = "test-firewall-unknown"
+  project = latitudesh_project.test.id
+  rules {
+    from     = "ANY"
+    to       = "ANY"
+    port     = "22"
+    protocol = "TCP"
+  }
+}
+`,
+			},
+		},
+	})
+}

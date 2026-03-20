@@ -775,3 +775,33 @@ resource "latitudesh_server" "test_item" {
 		testServerOperatingSystem,
 	)
 }
+
+func TestAccServer_UnknownProject(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccTokenCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+				Config: `
+provider "latitudesh" {}
+
+resource "latitudesh_project" "test" {
+  name        = "tf-acc-unknown-project-srv"
+  environment = "Development"
+}
+
+resource "latitudesh_server" "test_item" {
+  project          = latitudesh_project.test.id
+  hostname         = "tf-acc-unknown.latitude.sh"
+  plan             = "c2-small-x86"
+  site             = "NYC"
+  operating_system = "ubuntu_24_04_x64_lts"
+  billing          = "hourly"
+}
+`,
+			},
+		},
+	})
+}

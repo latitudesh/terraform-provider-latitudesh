@@ -357,6 +357,10 @@ func (r *ServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 		}
 	}
 
+	if cfg.Project.IsUnknown() {
+		return
+	}
+
 	if !cfg.Project.IsNull() && !cfg.Project.IsUnknown() && cfg.Project.ValueString() != "" {
 		plan.Project = cfg.Project
 		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
