@@ -189,7 +189,7 @@ func testAccUserDataCheck(t *testing.T) {
 
 func testAccServerCheck(t *testing.T) {
 	if v := os.Getenv("LATITUDESH_TEST_SERVER_ID"); v == "" {
-		t.Fatal("LATITUDESH_TEST_SERVER_ID must be set for acceptance tests")
+		t.Skip("LATITUDESH_TEST_SERVER_ID not set; skipping acceptance test")
 	}
 }
 
