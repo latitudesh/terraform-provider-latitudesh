@@ -56,8 +56,10 @@ jobs:
         run: go get .
       -
         name: Run E2E Tests
-        run: go test ./latitudesh -v -timeout 60m -run "TestAccEnvVarAuthTokenSet|TestAccServerUserDataValidation|TestAccServer|TestAccTag|TestAccSSHKey|TestAccDataSourceSSHKey|TestAccDataSourcePlan|TestAccDataSourceTag|TestAccRegion|TestAccVirtualNetwork|TestAccFirewall"
+        run: go test ./latitudesh -v -timeout 60m -run "TestAccEnvVarAuthTokenSet|TestAccServerUserDataValidation|TestAccServer|TestAccTag|TestAccSSHKey|TestAccDataSourceSSHKey|TestAccDataSourcePlan|TestAccDataSourceTag|TestAccRegion|TestAccVirtualNetwork|TestAccFirewall|TestAccElasticIP"
         env:
           TF_ACC: '1'
           LATITUDESH_AUTH_TOKEN: ${{ secrets.LATITUDESH_AUTH_TOKEN }}
           LATITUDESH_TEST_PROJECT: ${{ secrets.LATITUDESH_TEST_PROJECT }}
+          LATITUDESH_TEST_SERVER_ID: ${{ secrets.LATITUDESH_TEST_SERVER_ID }}
+          LATITUDESH_TEST_SERVER_ID_SECONDARY: ${{ secrets.LATITUDESH_TEST_SERVER_ID_SECONDARY }}
