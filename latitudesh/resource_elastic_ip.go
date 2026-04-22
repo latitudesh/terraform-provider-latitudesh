@@ -272,7 +272,57 @@ func (r *ElasticIPResource) Read(ctx context.Context, req resource.ReadRequest, 
 }
 
 func (r *ElasticIPResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Not Implemented", "Update will be implemented in a follow-up task")
+	var plan, state ElasticIPResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Only server_id is an updatable field; everything else is ForceNew or Computed.
+	if plan.ServerID.ValueString() == state.ServerID.ValueString() {
+		// No-op update (e.g. provider refresh); persist state as-is.
+		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+		return
+	}
+
+	id := state.ID.ValueString()
+	newServer := plan.ServerID.ValueString()
+
+	updateBody := components.UpdateElasticIP{
+		Data: components.UpdateElasticIPData{
+			Type: components.UpdateElasticIPTypeElasticIps,
+			Attributes: components.UpdateElasticIPAttributes{
+				ServerID: newServer,
+			},
+		},
+	}
+
+	_, err := r.client.ElasticIps.UpdateElasticIP(ctx, id, updateBody)
+	if err != nil {
+		addElasticIPError(&resp.Diagnostics, "move", err)
+		return
+	}
+
+	updateTimeout, diagTO := plan.Timeouts.Update(ctx, 10*time.Minute)
+	resp.Diagnostics.Append(diagTO...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	r.waitForElasticIPActive(ctx, id, "move", updateTimeout, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Read back authoritative state.
+	out := state
+	out.ServerID = plan.ServerID
+	r.readElasticIPInto(ctx, &out, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &out)...)
 }
 
 func (r *ElasticIPResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
