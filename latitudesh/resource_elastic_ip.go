@@ -186,6 +186,10 @@ func (r *ElasticIPResource) Create(ctx context.Context, req resource.CreateReque
 
 	serverID := data.ServerID.ValueString()
 
+	// Snapshot existing EIP IDs before create so the fallback can identify the new one
+	// by set-difference instead of relying on server/status fields being populated.
+	preCreateIDs := r.snapshotElasticIPIDs(ctx, effectiveProject)
+
 	createRequest := components.CreateElasticIP{
 		Data: components.CreateElasticIPData{
 			Type: components.CreateElasticIPTypeElasticIps,
@@ -207,12 +211,12 @@ func (r *ElasticIPResource) Create(ctx context.Context, req resource.CreateReque
 		data.ID = types.StringValue(*result.ElasticIP.Data.ID)
 	} else {
 		// Fallback: SDK docstring warns ID may be null while provisioning.
-		// Recover by listing EIPs for the project and matching server_id+configuring.
+		// Recover by polling List and picking the ID that didn't exist before Create.
 		resp.Diagnostics.AddWarning(
 			"Elastic IP ID not returned in create response",
 			"Falling back to List to recover the new Elastic IP ID.",
 		)
-		r.recoverElasticIPID(ctx, effectiveProject, serverID, &data, &resp.Diagnostics)
+		r.recoverElasticIPID(ctx, effectiveProject, serverID, preCreateIDs, &data, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -480,42 +484,92 @@ func (r *ElasticIPResource) waitForElasticIPGone(ctx context.Context, id string,
 	diags.AddError("Timeout", "Elastic IP was not fully released within "+timeout.String())
 }
 
-// recoverElasticIPID lists EIPs in the project and picks the one matching server_id
-// with status in {configuring, active}. Used when Create returns id=null.
-func (r *ElasticIPResource) recoverElasticIPID(ctx context.Context, project, serverID string, data *ElasticIPResourceModel, diags *diag.Diagnostics) {
+// snapshotElasticIPIDs returns the set of EIP IDs currently visible in the project.
+// Swallows errors: the caller uses this only to distinguish newly-created EIPs from
+// pre-existing ones during the id-null-on-create fallback, so a failure just means
+// the fallback will be slightly less precise (but still works via server/status match).
+func (r *ElasticIPResource) snapshotElasticIPIDs(ctx context.Context, project string) map[string]struct{} {
+	ids := make(map[string]struct{})
 	listReq := operations.ListElasticIpsRequest{
 		FilterProject: &project,
 	}
 	listResp, err := r.client.ElasticIps.ListElasticIps(ctx, listReq)
-	if err != nil {
-		addElasticIPError(diags, "list", err)
-		return
-	}
-	if listResp == nil || listResp.ElasticIps == nil || listResp.ElasticIps.Data == nil {
-		diags.AddError("API Error", "ElasticIPs list returned no data while recovering ID")
-		return
+	if err != nil || listResp == nil || listResp.ElasticIps == nil || listResp.ElasticIps.Data == nil {
+		return ids
 	}
 	for _, eip := range listResp.ElasticIps.Data {
-		if eip.ID == nil || eip.Attributes == nil {
-			continue
-		}
-		attrs := eip.Attributes
-		if attrs.Server == nil || attrs.Server.ID == nil || *attrs.Server.ID != serverID {
-			continue
-		}
-		if attrs.Status == nil {
-			continue
-		}
-		s := string(*attrs.Status)
-		if s == "configuring" || s == "active" {
-			data.ID = types.StringValue(*eip.ID)
-			return
+		if eip.ID != nil {
+			ids[*eip.ID] = struct{}{}
 		}
 	}
-	diags.AddError(
-		"Elastic IP not found during ID recovery",
-		"Could not locate the newly created Elastic IP in the project's list.",
+	return ids
+}
+
+// recoverElasticIPID polls ListElasticIps for up to 60s and picks the ID that wasn't
+// present in the pre-create snapshot. Used when Create returns id=null.
+// This works even when the just-created EIP has no Server association or Status populated yet.
+// Falls back to matching server_id + status on the final pass if no new ID is found.
+func (r *ElasticIPResource) recoverElasticIPID(ctx context.Context, project, serverID string, preCreateIDs map[string]struct{}, data *ElasticIPResourceModel, diags *diag.Diagnostics) {
+	const (
+		pollInterval   = 3 * time.Second
+		recoveryBudget = 60 * time.Second
 	)
+	endBy := time.Now().Add(recoveryBudget)
+
+	var lastListErr error
+	for time.Now().Before(endBy) {
+		listReq := operations.ListElasticIpsRequest{
+			FilterProject: &project,
+		}
+		listResp, err := r.client.ElasticIps.ListElasticIps(ctx, listReq)
+		if err != nil {
+			lastListErr = err
+		} else if listResp != nil && listResp.ElasticIps != nil && listResp.ElasticIps.Data != nil {
+			// Prefer a brand-new ID (set-difference against snapshot).
+			for _, eip := range listResp.ElasticIps.Data {
+				if eip.ID == nil {
+					continue
+				}
+				if _, existed := preCreateIDs[*eip.ID]; existed {
+					continue
+				}
+				data.ID = types.StringValue(*eip.ID)
+				return
+			}
+			// Secondary match: server+status, in case the snapshot happened to include
+			// the new ID already (unlikely but defensive).
+			for _, eip := range listResp.ElasticIps.Data {
+				if eip.ID == nil || eip.Attributes == nil {
+					continue
+				}
+				attrs := eip.Attributes
+				if attrs.Server == nil || attrs.Server.ID == nil || *attrs.Server.ID != serverID {
+					continue
+				}
+				if attrs.Status == nil {
+					continue
+				}
+				s := string(*attrs.Status)
+				if s == "configuring" || s == "active" {
+					data.ID = types.StringValue(*eip.ID)
+					return
+				}
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			diags.AddError("Cancelled", "Elastic IP ID recovery cancelled")
+			return
+		case <-time.After(pollInterval):
+		}
+	}
+
+	detail := "Polled ListElasticIps for " + recoveryBudget.String() + " without finding a new Elastic IP ID. Check the Latitude.sh dashboard for an orphaned resource and release it manually before retrying."
+	if lastListErr != nil {
+		detail += " Last list error: " + lastListErr.Error()
+	}
+	diags.AddError("Elastic IP not found during ID recovery", detail)
 }
 
 // readElasticIPInto issues a Get for data.ID and populates address/status/server_id.
