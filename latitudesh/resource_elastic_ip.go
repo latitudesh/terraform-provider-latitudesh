@@ -326,7 +326,34 @@ func (r *ElasticIPResource) Update(ctx context.Context, req resource.UpdateReque
 }
 
 func (r *ElasticIPResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	resp.Diagnostics.AddError("Not Implemented", "Delete will be implemented in a follow-up task")
+	var data ElasticIPResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	id := data.ID.ValueString()
+	if id == "" {
+		return
+	}
+
+	_, err := r.client.ElasticIps.DeleteElasticIP(ctx, id)
+	if err != nil {
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not_found") {
+			resp.Diagnostics.AddWarning("Elastic IP Already Released", "Elastic IP was already released")
+			return
+		}
+		addElasticIPError(&resp.Diagnostics, "delete", err)
+		return
+	}
+
+	deleteTimeout, diagTO := data.Timeouts.Delete(ctx, 10*time.Minute)
+	resp.Diagnostics.Append(diagTO...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	r.waitForElasticIPGone(ctx, id, deleteTimeout, &resp.Diagnostics)
 }
 
 // waitForElasticIPActive polls Get until the Elastic IP reaches status `active`,
