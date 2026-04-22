@@ -80,3 +80,39 @@ resource "latitudesh_elastic_ip" "test_item" {
 }
 `, project, serverID)
 }
+
+func TestAccElasticIP_Move(t *testing.T) {
+	resourceName := "latitudesh_elastic_ip.test_item"
+	serverA := os.Getenv("LATITUDESH_TEST_SERVER_ID")
+	serverB := os.Getenv("LATITUDESH_TEST_SERVER_ID_SECONDARY")
+	project := os.Getenv("LATITUDESH_TEST_PROJECT")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+			testAccProjectCheck(t)
+			testAccServerCheck(t)
+			testAccServerSecondaryCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		CheckDestroy:             testAccCheckElasticIPDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfigElasticIPBasic(project, serverA),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "server_id", serverA),
+					resource.TestCheckResourceAttr(resourceName, "status", "active"),
+					resource.TestCheckResourceAttrSet(resourceName, "address"),
+				),
+			},
+			{
+				Config: testAccConfigElasticIPBasic(project, serverB),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "server_id", serverB),
+					resource.TestCheckResourceAttr(resourceName, "status", "active"),
+					resource.TestCheckResourceAttrSet(resourceName, "address"),
+				),
+			},
+		},
+	})
+}
