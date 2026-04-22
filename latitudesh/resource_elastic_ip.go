@@ -251,7 +251,24 @@ func (r *ElasticIPResource) Create(ctx context.Context, req resource.CreateReque
 }
 
 func (r *ElasticIPResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	resp.Diagnostics.AddError("Not Implemented", "Read will be implemented in a follow-up task")
+	var data ElasticIPResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	r.readElasticIPInto(ctx, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// If readElasticIPInto detected 404 and nulled the ID, remove from state.
+	if data.ID.IsNull() {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *ElasticIPResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
