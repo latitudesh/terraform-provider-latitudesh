@@ -116,3 +116,33 @@ func TestAccElasticIP_Move(t *testing.T) {
 		},
 	})
 }
+
+func TestAccElasticIP_UnknownProject(t *testing.T) {
+	serverID := os.Getenv("LATITUDESH_TEST_SERVER_ID")
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+			testAccServerCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+				Config: fmt.Sprintf(`
+provider "latitudesh" {}
+
+resource "latitudesh_project" "test" {
+  name        = "tf-acc-unknown-project-eip"
+  environment = "Development"
+}
+
+resource "latitudesh_elastic_ip" "test_item" {
+  server_id = "%s"
+  project   = latitudesh_project.test.id
+}
+`, serverID),
+			},
+		},
+	})
+}
