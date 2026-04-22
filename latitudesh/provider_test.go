@@ -198,3 +198,9 @@ func testAccVirtualNetworkCheck(t *testing.T) {
 		t.Fatal("LATITUDESH_TEST_VIRTUAL_NETWORK_ID must be set for acceptance tests")
 	}
 }
+
+func testAccServerSecondaryCheck(t *testing.T) {
+	if v := os.Getenv("LATITUDESH_TEST_SERVER_ID_SECONDARY"); v == "" {
+		t.Fatal("LATITUDESH_TEST_SERVER_ID_SECONDARY must be set for the Elastic IP move acceptance test")
+	}
+}
