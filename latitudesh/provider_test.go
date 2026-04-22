@@ -200,7 +200,11 @@ func testAccVirtualNetworkCheck(t *testing.T) {
 }
 
 func testAccServerSecondaryCheck(t *testing.T) {
-	if v := os.Getenv("LATITUDESH_TEST_SERVER_ID_SECONDARY"); v == "" {
-		t.Fatal("LATITUDESH_TEST_SERVER_ID_SECONDARY must be set for the Elastic IP move acceptance test")
+	secondary := os.Getenv("LATITUDESH_TEST_SERVER_ID_SECONDARY")
+	if secondary == "" {
+		t.Skip("LATITUDESH_TEST_SERVER_ID_SECONDARY not set; skipping Elastic IP move acceptance test")
+	}
+	if primary := os.Getenv("LATITUDESH_TEST_SERVER_ID"); primary != "" && secondary == primary {
+		t.Skip("LATITUDESH_TEST_SERVER_ID_SECONDARY equals primary; skipping Elastic IP move acceptance test (no real move possible)")
 	}
 }
