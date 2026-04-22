@@ -239,6 +239,14 @@ func (r *ElasticIPResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
+	if data.ID.IsNull() || data.ID.ValueString() == "" {
+		resp.Diagnostics.AddError(
+			"Elastic IP disappeared after successful creation",
+			"The Elastic IP reached status `active` but a subsequent GET returned not_found. It may have been released by another actor.",
+		)
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
