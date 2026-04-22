@@ -7,7 +7,7 @@ description: |-
 
 # latitudesh_elastic_ip (Resource)
 
-The elastic IP resource allows you to reserve and manage Elastic IPs — static public IPv4 addresses that can be assigned to a server and moved between servers within the same project — within your [Latitude.sh](https://latitude.sh/) account.
+The elastic IP resource allows you to reserve and manage Elastic IPs within your [Latitude.sh](https://latitude.sh/) account. An Elastic IP is a static public IPv4 address that can be assigned to a server and moved between servers within the same project.
 
 > **Note:** Elastic IP provisioning is asynchronous. On create the IP transitions `configuring → active`; on move, `active → moving → active`; on destroy, `active → releasing → gone`. The provider waits for each transition with configurable timeouts (10 minutes each by default).
 
@@ -56,7 +56,7 @@ resource "latitudesh_elastic_ip" "elastic_ip" {
 
 ### Customizing timeouts
 
-Override the default 10-minute timeouts per operation. Note the `=` — `timeouts` is a nested attribute, not a block:
+Override the default 10-minute timeouts per operation. Use `=` because `timeouts` is a nested attribute, not a block:
 
 ```hcl
 resource "latitudesh_elastic_ip" "elastic_ip" {
