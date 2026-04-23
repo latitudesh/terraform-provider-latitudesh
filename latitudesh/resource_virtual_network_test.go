@@ -64,8 +64,8 @@ func testAccCheckVirtualNetworkDestroy(s *terraform.State) error {
 		}
 
 		resp, err := client.PrivateNetworks.Get(ctx, id)
-		if err == nil && resp != nil && resp.Object != nil && resp.Object.Data != nil &&
-			resp.Object.Data.Data != nil && resp.Object.Data.Data.ID != nil && *resp.Object.Data.Data.ID == id {
+		if err == nil && resp != nil && resp.VirtualNetwork != nil && resp.VirtualNetwork.Data != nil &&
+			resp.VirtualNetwork.Data.ID != nil && *resp.VirtualNetwork.Data.ID == id {
 			return fmt.Errorf("virtual network still exists: %s", id)
 		}
 	}

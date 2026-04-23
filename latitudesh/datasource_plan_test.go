@@ -1,23 +1,64 @@
 package latitudesh
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
+	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
-const testPlanName = "c2-small-x86"
+// testPlanCandidates are tried in order by TestAccDataSourcePlan; the first one
+// that exists in the backend is used. Extend this list if the current entries
+// all get sunsetted from the catalog.
+var testPlanCandidates = []string{
+	"c3-small-x86",
+	"c2-small-x86",
+	"f4-metal-medium",
+	"c3-medium-x86",
+	"s3-large-x86",
+}
+
 const (
 	validSlugForNVME  = "f4-metal-medium"
 	invalidSlugByName = "f4.metal.medium"
 )
 
+// findAvailableTestPlan queries the Plans API for each candidate slug and
+// returns the first one that exists. Returns "" if none exist (caller should skip).
+func findAvailableTestPlan(t *testing.T, candidates []string) string {
+	t.Helper()
+	client, err := newSDKClientFromEnv()
+	if err != nil {
+		t.Logf("findAvailableTestPlan: cannot build SDK client: %s", err)
+		return ""
+	}
+	ctx := context.Background()
+	for _, slug := range candidates {
+		s := slug
+		result, err := client.Plans.List(ctx, operations.GetPlansRequest{FilterSlug: &s})
+		if err != nil {
+			t.Logf("findAvailableTestPlan: list failed for %q: %s", slug, err)
+			continue
+		}
+		if result != nil && result.Object != nil && result.Object.Data != nil && len(result.Object.Data) > 0 {
+			return slug
+		}
+	}
+	return ""
+}
+
 func TestAccDataSourcePlan(t *testing.T) {
 	if os.Getenv("TF_ACC") == "" {
 		t.Fatalf("TF_ACC must be set for acceptance tests")
+	}
+
+	planSlug := findAvailableTestPlan(t, testPlanCandidates)
+	if planSlug == "" {
+		t.Skipf("no candidate plan slug from %v exists on the backend; skipping", testPlanCandidates)
 	}
 
 	_, teardown := createTestRecorder(t)
@@ -30,17 +71,17 @@ func TestAccDataSourcePlan(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccConfigPlanBasic(),
+				Config: testAccConfigPlanBasic(planSlug),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(
-						"data.latitudesh_plan.test", "slug", testPlanName,
+						"data.latitudesh_plan.test", "slug", planSlug,
 					),
 					resource.TestCheckResourceAttrSet(
 						"data.latitudesh_plan.test", "memory",
 					),
 					resource.TestMatchResourceAttr(
 						"data.latitudesh_plan.test", "memory",
-						regexp.MustCompile(`^32(\.0+)?$`),
+						regexp.MustCompile(`^\d+(\.\d+)?$`),
 					),
 				),
 			},
@@ -103,12 +144,12 @@ data "latitudesh_plan" "features_test" {
 `
 }
 
-func testAccConfigPlanBasic() string {
+func testAccConfigPlanBasic(slug string) string {
 	return fmt.Sprintf(`
 data "latitudesh_plan" "test" {
   slug = "%s"
 }
-`, testPlanName)
+`, slug)
 }
 
 func testAccConfigPlanByName() string {

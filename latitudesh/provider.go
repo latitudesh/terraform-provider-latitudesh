@@ -114,6 +114,7 @@ func (p *latitudeshProvider) Resources(ctx context.Context) []func() resource.Re
 	return []func() resource.Resource{
 		NewProjectResource,
 		NewServerResource,
+		NewElasticIPResource,
 		NewSSHKeyResource,
 		NewUserDataResource,
 		NewVirtualNetworkResource,
