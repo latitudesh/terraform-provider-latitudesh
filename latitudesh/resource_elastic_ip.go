@@ -212,10 +212,6 @@ func (r *ElasticIPResource) Create(ctx context.Context, req resource.CreateReque
 	} else {
 		// Fallback: SDK docstring warns ID may be null while provisioning.
 		// Recover by polling List and picking the ID that didn't exist before Create.
-		resp.Diagnostics.AddWarning(
-			"Elastic IP ID not returned in create response",
-			"Falling back to List to recover the new Elastic IP ID.",
-		)
 		r.recoverElasticIPID(ctx, effectiveProject, serverID, preCreateIDs, &data, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
