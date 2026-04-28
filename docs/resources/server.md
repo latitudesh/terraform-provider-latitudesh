@@ -16,13 +16,13 @@ The `latitudesh_server` resource allows you to deploy and manage bare metal serv
 resource "latitudesh_server" "server" {
   billing           = "monthly"
   hostname          = "my-server"
-  plan              = "c2-small-x86"
-  site              = "SAO2"
+  plan              = "m4-metal-medium"
+  site              = "ASH"
   operating_system  = "ubuntu_24_04_x64_lts"
   project           = "proj_..."
   ssh_keys          = ["ssh_..."]
 
-  timeouts {
+  timeouts = {
     create = "45m"
     update = "60m"
   }
@@ -44,10 +44,10 @@ output "server" {
   - Allowed characters: letters (a–z, A–Z), digits (0–9), dots (.), and hyphens (-);
   - Must not begin or end with a dot or hyphen;
   - Underscores (_) are not allowed;
-- `operating_system` (String) The server OS. Updating OS will trigger a reinstall. Valid values are: `ipxe`, `windows_server_2019_std_v1`, `ubuntu_22_04_x64_lts`, `debian_11`, `debian_10`, `rhel8`, `windows_server_2012_r2_std_v28`, `windows_server_2012_r2_dc_v5`, `esxi_6_7`, `debian_9_4_x64`, `centos_7_4_x64`, `centos_8_x64`, `ubuntu_16_04_x64_lts`, `ubuntu_20_04_x64_lts`, `windows_server_2016_std_v1`, `windows_server_2016_dc_v1`, `windows_server_2019_dc_v1`, `debian_12`, `ubuntu22_ml_in_a_box`, `ubuntu_18_04_x64_lts`, `windows_server_2019_std_uefi`, `windows_2022_std_uefi`, `windows_2022_std`, `ubuntu_24_04_x64_lts`, `rockylinux_8`
-- `plan` (String) The server plan slug. Examples: `c2-small-x86`, `c2-medium-x86`, `c3-large-x86`, `m4-metal-small`, `g3-h100-large`. For a complete list of available plans and their slugs, see the [API reference](https://www.latitude.sh/docs/api-reference/get-plans#list-all-plans).
+- `operating_system` (String) The server OS slug. Updating OS will trigger a reinstall. Examples: `ubuntu_24_04_x64_lts`, `ubuntu_22_04_x64_lts`, `debian_12`, `rockylinux_8`, `windows_2022_std`. For a complete list of available operating systems and their slugs, see the [API reference](https://www.latitude.sh/docs/api-reference/get-plans-operating-system).
+- `plan` (String) The server plan slug. Examples: `m4-metal-medium`, `c3-large-x86`, `f4-metal-medium`, `rs4-metal-large`, `g4-rtx6kpro-large`. For a complete list of available plans and their slugs, see the [API reference](https://www.latitude.sh/docs/api-reference/get-plans).
 - `project` (String) The id or slug of the project.
-- `site` (String) The server site. Valid values are: `ASH`, `BGT`, `BUE`, `CHI`, `DAL`, `FRA`, `LAX`, `LON`, `MEX`, `MEX2`, `MIA`, `MIA2`, `NYC`, `SAN`, `SAO`, `SAO2`, `SYD`, `TYO`, `TYO2`
+- `site` (String) The server site slug. Examples: `AMS`, `ASH`, `BGT`, `BUE`, `CHI`, `FRA`, `TYO4`. For a complete list of available regions and their slugs, see the [API reference](https://www.latitude.sh/docs/api-reference/get-regions).
 
 ### Optional
 
