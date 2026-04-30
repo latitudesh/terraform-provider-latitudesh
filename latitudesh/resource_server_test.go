@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/validators"
@@ -168,6 +169,38 @@ func TestValidateBillingChange(t *testing.T) {
 	}
 }
 
+func TestLockActionFor(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		planned types.Bool
+		current types.Bool
+		want    string
+	}{
+		{"no change false→false", types.BoolValue(false), types.BoolValue(false), ""},
+		{"no change true→true", types.BoolValue(true), types.BoolValue(true), ""},
+		{"transition false→true", types.BoolValue(true), types.BoolValue(false), "lock"},
+		{"transition true→false", types.BoolValue(false), types.BoolValue(true), "unlock"},
+		{"null planned, locked current → noop (no opinion)", types.BoolNull(), types.BoolValue(true), ""},
+		{"null planned, unlocked current → noop", types.BoolNull(), types.BoolValue(false), ""},
+		{"unknown planned, locked current → noop", types.BoolUnknown(), types.BoolValue(true), ""},
+		{"locked planned, null current → lock", types.BoolValue(true), types.BoolNull(), "lock"},
+		{"both null → noop", types.BoolNull(), types.BoolNull(), ""},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := lockActionFor(tc.planned, tc.current)
+			if got != tc.want {
+				t.Fatalf("lockActionFor(%v, %v) = %q, want %q", tc.planned, tc.current, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestAccServer_Basic(t *testing.T) {
 	runTestWithSiteFallback(t, func(site string, recorder *recorder.Recorder) resource.TestCase {
 		return resource.TestCase{
@@ -245,6 +278,66 @@ func TestAccServer_Update(t *testing.T) {
 			},
 		}
 	})
+}
+
+func TestAccServer_Locked(t *testing.T) {
+	runTestWithSiteFallback(t, func(site string, recorder *recorder.Recorder) resource.TestCase {
+		return resource.TestCase{
+			PreCheck: func() {
+				testAccTokenCheck(t)
+				testAccProjectCheck(t)
+			},
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+			CheckDestroy:             testAccCheckServerDestroy,
+			Steps: []resource.TestStep{
+				{
+					Config: testAccCheckServerLockedWithSite(site, true),
+					Check: resource.ComposeTestCheckFunc(
+						testAccCheckServerExists("latitudesh_server.test_item"),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "locked", "true"),
+					),
+				},
+				{
+					Config: testAccCheckServerLockedWithSite(site, false),
+					Check: resource.ComposeTestCheckFunc(
+						testAccCheckServerExists("latitudesh_server.test_item"),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "locked", "false"),
+					),
+				},
+				{
+					Config: testAccCheckServerLockedWithSite(site, true),
+					Check: resource.ComposeTestCheckFunc(
+						testAccCheckServerExists("latitudesh_server.test_item"),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "locked", "true"),
+					),
+				},
+			},
+		}
+	})
+}
+
+func testAccCheckServerLockedWithSite(site string, locked bool) string {
+	return fmt.Sprintf(`
+resource "latitudesh_server" "test_item" {
+	billing = "hourly"
+	project = "%s"
+	hostname = "%s"
+	plan     = "%s"
+	site     = "%s"
+	operating_system = "%s"
+	locked   = %t
+}
+`,
+		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testServerHostname,
+		testServerPlan,
+		site,
+		testServerOperatingSystem,
+		locked,
+	)
 }
 
 func TestAccServer_IPv6Support(t *testing.T) {
