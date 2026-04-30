@@ -679,8 +679,7 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	// Apply lock if requested. Done before the final read so the read reflects
-	// the locked state returned by the API.
+	// Lock before readServer so the read reflects the locked state.
 	if !data.Locked.IsNull() && !data.Locked.IsUnknown() && data.Locked.ValueBool() {
 		if _, err := r.client.Servers.Lock(ctx, data.ID.ValueString()); err != nil {
 			resp.Diagnostics.AddError("Lock Error", "Unable to lock server: "+err.Error())
@@ -732,7 +731,6 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 	}
 
 	// Locked servers reject modifications, so unlock first when transitioning off.
-	// Re-locking happens before each state.Set below.
 	lockAction := lockActionFor(data.Locked, currentData.Locked)
 	if lockAction == "unlock" {
 		if _, err := r.client.Servers.Unlock(ctx, data.ID.ValueString()); err != nil {
@@ -856,10 +854,8 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-// lockActionFor returns "lock", "unlock", or "" based on planned vs current locked state.
-// A null or unknown planned value means "no opinion" and produces no action — relevant for
-// imports or computed-only flows where the framework hasn't resolved a concrete bool.
 func lockActionFor(planned, current types.Bool) string {
+	// Null/unknown planned means "no opinion" — never act on it.
 	if planned.IsNull() || planned.IsUnknown() {
 		return ""
 	}
@@ -874,9 +870,6 @@ func lockActionFor(planned, current types.Bool) string {
 	return "unlock"
 }
 
-// applyEndOfUpdateLock issues Lock at the end of Update when transitioning off→on, and
-// reconciles data.Locked with the action taken so the state matches what the API now reports.
-// Unlock is handled at the top of Update so subsequent modifications are allowed.
 func (r *ServerResource) applyEndOfUpdateLock(ctx context.Context, action string, data *ServerResourceModel, diags *diag.Diagnostics) {
 	switch action {
 	case "lock":
