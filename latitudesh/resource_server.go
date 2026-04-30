@@ -679,6 +679,14 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
+	// Lock before readServer so the read reflects the locked state.
+	if !data.Locked.IsNull() && !data.Locked.IsUnknown() && data.Locked.ValueBool() {
+		if _, err := r.client.Servers.Lock(ctx, data.ID.ValueString()); err != nil {
+			resp.Diagnostics.AddError("Lock Error", "Unable to lock server: "+err.Error())
+			return
+		}
+	}
+
 	r.readServer(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -722,6 +730,15 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
+	// Locked servers reject modifications, so unlock first when transitioning off.
+	lockAction := lockActionFor(data.Locked, currentData.Locked)
+	if lockAction == "unlock" {
+		if _, err := r.client.Servers.Unlock(ctx, data.ID.ValueString()); err != nil {
+			resp.Diagnostics.AddError("Unlock Error", "Unable to unlock server: "+err.Error())
+			return
+		}
+	}
+
 	// Determine what changed to decide between reinstall vs in-place update
 	// Compare planned config vs current state
 	needsReinstall, reason := r.needsReinstall(ctx, &data, &currentData, &resp.Diagnostics)
@@ -758,6 +775,11 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 			}
 
 			// Skip reinstall - just update state
+
+			r.applyEndOfUpdateLock(ctx, lockAction, &data, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
 
 			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 			return
@@ -824,7 +846,41 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		}
 	}
 
+	r.applyEndOfUpdateLock(ctx, lockAction, &data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func lockActionFor(planned, current types.Bool) string {
+	// Null/unknown planned means "no opinion" — never act on it.
+	if planned.IsNull() || planned.IsUnknown() {
+		return ""
+	}
+	want := planned.ValueBool()
+	was := !current.IsNull() && !current.IsUnknown() && current.ValueBool()
+	if want == was {
+		return ""
+	}
+	if want {
+		return "lock"
+	}
+	return "unlock"
+}
+
+func (r *ServerResource) applyEndOfUpdateLock(ctx context.Context, action string, data *ServerResourceModel, diags *diag.Diagnostics) {
+	switch action {
+	case "lock":
+		if _, err := r.client.Servers.Lock(ctx, data.ID.ValueString()); err != nil {
+			diags.AddError("Lock Error", "Unable to lock server: "+err.Error())
+			return
+		}
+		data.Locked = types.BoolValue(true)
+	case "unlock":
+		data.Locked = types.BoolValue(false)
+	}
 }
 
 // needsReinstall determines if server needs reinstall based on changed fields
