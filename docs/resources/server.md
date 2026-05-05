@@ -9,6 +9,12 @@ description: |-
 
 The `latitudesh_server` resource allows you to deploy and manage bare metal servers on [Latitude.sh](https://metal.new) via Terraform.
 
+> **Reinstall behavior (v3.0+)**
+>
+> Server reinstalls now require explicit opt-in. The `allow_reinstall` attribute defaults to `false`. With the default, changing `hostname` is applied in-place via PATCH; changing `operating_system`, `ssh_keys`, `user_data`, `raid`, or `ipxe` fails the plan with an error pointing at the field. Set `allow_reinstall = true` on the resource to perform reinstalls (which destroy data on disk).
+>
+> Migrating from earlier versions: if you previously relied on the default `true` (e.g., to apply OS changes), set `allow_reinstall = true` explicitly on those resources.
+
 ## Example usage
 
 ```hcl
@@ -44,27 +50,27 @@ output "server" {
   - Allowed characters: letters (a–z, A–Z), digits (0–9), dots (.), and hyphens (-);
   - Must not begin or end with a dot or hyphen;
   - Underscores (_) are not allowed;
-  - Updating hostname triggers a reinstall when `allow_reinstall` is `true` (default). Set `allow_reinstall = false` to perform an in-place update instead.
-- `operating_system` (String) The server OS slug. Updating OS will trigger a reinstall. Examples: `ubuntu_24_04_x64_lts`, `ubuntu_22_04_x64_lts`, `debian_12`, `rockylinux_8`, `windows_2022_std`. For a complete list of available operating systems and their slugs, see the [API reference](https://www.latitude.sh/docs/api-reference/get-plans-operating-system).
+  - Updating hostname is applied in-place via PATCH by default. Set `allow_reinstall = true` on the resource to make hostname changes trigger a server reinstall instead.
+- `operating_system` (String) The server OS slug. Updating the OS requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error. Examples: `ubuntu_24_04_x64_lts`, `ubuntu_22_04_x64_lts`, `debian_12`, `rockylinux_8`, `windows_2022_std`. For a complete list of available operating systems and their slugs, see the [API reference](https://www.latitude.sh/docs/api-reference/get-plans-operating-system).
 - `plan` (String) The server plan slug. Examples: `m4-metal-medium`, `c3-large-x86`, `f4-metal-medium`, `rs4-metal-large`, `g4-rtx6kpro-large`. For a complete list of available plans and their slugs, see the [API reference](https://www.latitude.sh/docs/api-reference/get-plans).
 - `project` (String) The id or slug of the project.
 - `site` (String) The server site slug. Examples: `AMS`, `ASH`, `BGT`, `BUE`, `CHI`, `FRA`, `TYO4`. For a complete list of available regions and their slugs, see the [API reference](https://www.latitude.sh/docs/api-reference/get-regions).
 
 ### Optional
 
-- `allow_reinstall` (Boolean) Allow server reinstallation when `operating_system`, `hostname`, `ssh_keys`, `user_data`, `raid`, or `ipxe` changes. Defaults to `true`. When `false`, only in-place updates are performed and reinstall-triggering changes are reflected in state without affecting the server.
+- `allow_reinstall` (Boolean) Allow server reinstallation when `operating_system`, `hostname`, `ssh_keys`, `user_data`, `raid`, or `ipxe` changes. **Defaults to `false`.** When `false`, `hostname` changes are applied in-place via PATCH and any other reinstall-only field change fails the plan with an explicit error; set this to `true` on resources where you want reinstalls to happen automatically.
 - `billing` (String) The server billing type.
     Accepts hourly and monthly for on demand projects and yearly for reserved projects.
 - `ipxe` (String) Url for the iPXE script that will be used. 
-    Updating ipxe will trigger a reinstall.
+    Updating ipxe requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.
 - `locked` (Boolean) Lock/unlock the server. A locked server cannot be deleted or updated.
-- `raid` (String) RAID mode for the server. Updating raid will trigger a reinstall.
+- `raid` (String) RAID mode for the server. Updating raid requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.
 - `ssh_keys` (List of String) List of server SSH key ids.
-    Any change to `ssh_keys` will force a resource replacement.
+    Updating ssh_keys requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.
 - `tags` (List of String) List of server tags
 - `timeouts` (Block, Optional) Configurable timeouts for server operations. (see [nested schema below](#nestedblock--timeouts))
 - `user_data` (String) The id of user data to set on the server.
-    Updating user_data will trigger a reinstall.
+    Updating user_data requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.
 
 ### Nested Schema for `timeouts`
 
