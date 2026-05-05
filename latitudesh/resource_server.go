@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -108,7 +109,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"hostname": schema.StringAttribute{
-				MarkdownDescription: "The server hostname",
+				MarkdownDescription: "The server hostname. Changing this value triggers a server reinstall when `allow_reinstall` is `true` (default); set `allow_reinstall = false` to perform an in-place update instead.",
 				Optional:            true,
 				Computed:            true,
 				Validators:          validators.Hostname(),
@@ -161,12 +162,10 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Optional:            true,
 			},
 			"allow_reinstall": schema.BoolAttribute{
-				MarkdownDescription: "Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe changes. If false, only in-place updates are allowed.",
+				MarkdownDescription: "Allow server reinstallation when operating_system, hostname, ssh_keys, user_data, raid, or ipxe changes. Defaults to false. When false, hostname changes are applied in-place via PATCH and any other reinstall-only field change fails the plan with an explicit error.",
 				Optional:            true,
 				Computed:            true,
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
+				Default:             booldefault.StaticBool(false),
 			},
 			"primary_ipv4": schema.StringAttribute{
 				MarkdownDescription: "Primary IPv4 address of the server",
@@ -262,70 +261,61 @@ func (r *ServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 		return
 	}
 
-	// Centralize reinstall warnings here (only during plan, not during apply)
-	// This avoids duplicate warnings that appeared in Plan Modifiers
+	// Centralize reinstall diagnostics here (only during plan, not during apply)
 	if !req.State.Raw.IsNull() && !isApplyPhase {
-		// Check if allow_reinstall is enabled
-		allowReinstall := true // default
-		if !cfg.AllowReinstall.IsNull() && !cfg.AllowReinstall.IsUnknown() {
-			allowReinstall = cfg.AllowReinstall.ValueBool()
+		// Resolve effective allow_reinstall from the planned value (UseStateForUnknown
+		// already collapsed cfg/state). Default is false.
+		allowReinstall := false
+		if !plan.AllowReinstall.IsNull() && !plan.AllowReinstall.IsUnknown() {
+			allowReinstall = plan.AllowReinstall.ValueBool()
 		}
 
-		if allowReinstall {
-			// Collect all changes that require reinstall
-			var reinstallReasons []string
+		// Reinstall-only triggers: API has no in-place path for these.
+		var reinstallOnlyReasons []string
 
-			// Check operating_system
-			if !state.OperatingSystem.IsNull() && !plan.OperatingSystem.IsNull() {
-				if state.OperatingSystem.ValueString() != plan.OperatingSystem.ValueString() {
-					reinstallReasons = append(reinstallReasons, "operating_system")
-				}
+		if !state.OperatingSystem.IsNull() && !plan.OperatingSystem.IsNull() {
+			if state.OperatingSystem.ValueString() != plan.OperatingSystem.ValueString() {
+				reinstallOnlyReasons = append(reinstallOnlyReasons, "operating_system")
 			}
+		}
+		if !state.UserData.Equal(plan.UserData) && (!state.UserData.IsNull() || !plan.UserData.IsNull()) {
+			reinstallOnlyReasons = append(reinstallOnlyReasons, "user_data")
+		}
+		if !state.Raid.Equal(plan.Raid) && (!state.Raid.IsNull() || !plan.Raid.IsNull()) {
+			reinstallOnlyReasons = append(reinstallOnlyReasons, "raid")
+		}
+		if !state.Ipxe.Equal(plan.Ipxe) && (!state.Ipxe.IsNull() || !plan.Ipxe.IsNull()) {
+			reinstallOnlyReasons = append(reinstallOnlyReasons, "ipxe")
+		}
+		if !state.SSHKeys.Equal(plan.SSHKeys) && (!state.SSHKeys.IsNull() || !plan.SSHKeys.IsNull()) {
+			reinstallOnlyReasons = append(reinstallOnlyReasons, "ssh_keys")
+		}
 
-			// Check user_data
-			if !state.UserData.Equal(plan.UserData) {
-				if !state.UserData.IsNull() || !plan.UserData.IsNull() {
-					reinstallReasons = append(reinstallReasons, "user_data")
-				}
+		// Hostname is reinstall-trigger only when allow_reinstall=true; otherwise in-place PATCH.
+		hostnameChanged := !state.Hostname.IsNull() && !plan.Hostname.IsNull() && !plan.Hostname.IsUnknown() &&
+			state.Hostname.ValueString() != plan.Hostname.ValueString()
+
+		switch {
+		case allowReinstall:
+			reasons := append([]string{}, reinstallOnlyReasons...)
+			if hostnameChanged {
+				reasons = append(reasons, "hostname")
 			}
-
-			// Check raid
-			if !state.Raid.Equal(plan.Raid) {
-				if !state.Raid.IsNull() || !plan.Raid.IsNull() {
-					reinstallReasons = append(reinstallReasons, "raid")
-				}
-			}
-
-			// Check ipxe
-			if !state.Ipxe.Equal(plan.Ipxe) {
-				if !state.Ipxe.IsNull() || !plan.Ipxe.IsNull() {
-					reinstallReasons = append(reinstallReasons, "ipxe")
-				}
-			}
-
-			// Check ssh_keys
-			if !state.SSHKeys.Equal(plan.SSHKeys) {
-				stateHasKeys := !state.SSHKeys.IsNull() && !state.SSHKeys.IsUnknown()
-				planHasKeys := !plan.SSHKeys.IsNull() && !plan.SSHKeys.IsUnknown()
-
-				if stateHasKeys && !planHasKeys {
-					resp.Diagnostics.AddWarning(
-						"SSH Keys Removal",
-						"SSH keys will be removed from the server. This will trigger a server reinstall. All data on the server will be lost unless backed up.",
-					)
-				} else if !state.SSHKeys.Equal(plan.SSHKeys) {
-					reinstallReasons = append(reinstallReasons, "ssh_keys")
-				}
-			}
-
-			// Emit consolidated warning if there are changes
-			if len(reinstallReasons) > 0 {
+			if len(reasons) > 0 {
 				resp.Diagnostics.AddWarning(
 					"Server Reinstall Required",
 					fmt.Sprintf("%s changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
-						strings.Join(reinstallReasons, ", ")),
+						strings.Join(reasons, ", ")),
 				)
 			}
+		case len(reinstallOnlyReasons) > 0:
+			resp.Diagnostics.AddError(
+				"Server Reinstall Required",
+				fmt.Sprintf("%s changes require a server reinstall, but allow_reinstall is false. "+
+					"Set allow_reinstall = true on this resource to allow the reinstall, or revert the change.",
+					strings.Join(reinstallOnlyReasons, ", ")),
+			)
+			return
 		}
 	}
 
@@ -692,11 +682,6 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	// Ensure allow_reinstall has a known value (default to true if not set)
-	if data.AllowReinstall.IsNull() || data.AllowReinstall.IsUnknown() {
-		data.AllowReinstall = types.BoolValue(true)
-	}
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -739,53 +724,21 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		}
 	}
 
-	// Determine what changed to decide between reinstall vs in-place update
-	// Compare planned config vs current state
-	needsReinstall, reason := r.needsReinstall(ctx, &data, &currentData, &resp.Diagnostics)
+	allowReinstall := true // Default to true for backward compatibility
+	if !data.AllowReinstall.IsNull() && !data.AllowReinstall.IsUnknown() {
+		allowReinstall = data.AllowReinstall.ValueBool()
+	}
+
+	// Determine what changed to decide between reinstall vs in-place update.
+	// ModifyPlan rejects reinstall-only triggers when allow_reinstall=false,
+	// so reaching the reinstall branch implies allow_reinstall=true (hostname
+	// is the one trigger that depends on the flag here).
+	needsReinstall, _ := r.needsReinstall(ctx, &data, &currentData, allowReinstall, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	if needsReinstall {
-		// Check if reinstall is allowed
-		allowReinstall := true // Default to true for backward compatibility
-		if !data.AllowReinstall.IsNull() && !data.AllowReinstall.IsUnknown() {
-			allowReinstall = data.AllowReinstall.ValueBool()
-		}
-
-		if !allowReinstall {
-			// When reinstall is not allowed, just update the state
-			resp.Diagnostics.AddWarning(
-				"State Updated Without Server Changes",
-				fmt.Sprintf("Changes detected (%s) would normally trigger a server reinstall, but allow_reinstall is set to false. "+
-					"The Terraform state has been updated to match your configuration, but no actual server changes were made. "+
-					"Set allow_reinstall=true to perform the actual reinstall.", reason),
-			)
-
-			err := r.updateDeployConfig(ctx, &data, &resp.Diagnostics)
-			if err != nil {
-				resp.Diagnostics.AddError("Deploy Config Update Error", "Unable to update deploy config: "+err.Error())
-				return
-			}
-
-			// Read current server state
-			r.readServer(ctx, &data, &resp.Diagnostics)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-
-			// Skip reinstall - just update state
-
-			r.applyEndOfUpdateLock(ctx, lockAction, &data, &resp.Diagnostics)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-
-			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-			return
-		}
-
-		// Perform reinstall for OS, SSH keys, user data, raid, or ipxe changes
 		err := r.reinstallServer(ctx, &data, &resp.Diagnostics)
 		if err != nil {
 			resp.Diagnostics.AddError("Reinstall Error", "Unable to reinstall server: "+err.Error())
@@ -883,12 +836,18 @@ func (r *ServerResource) applyEndOfUpdateLock(ctx context.Context, action string
 	}
 }
 
-// needsReinstall determines if server needs reinstall based on changed fields
-func (r *ServerResource) needsReinstall(ctx context.Context, planned *ServerResourceModel, current *ServerResourceModel, diags *diag.Diagnostics) (bool, string) {
+// needsReinstall determines if server needs reinstall based on changed fields.
+// hostname only triggers reinstall when allowReinstall is true; otherwise it
+// stays on the in-place PATCH path.
+func (r *ServerResource) needsReinstall(ctx context.Context, planned *ServerResourceModel, current *ServerResourceModel, allowReinstall bool, diags *diag.Diagnostics) (bool, string) {
 	var reasons []string
 
 	if !planned.OperatingSystem.Equal(current.OperatingSystem) {
 		reasons = append(reasons, "operating_system")
+	}
+
+	if allowReinstall && !planned.Hostname.Equal(current.Hostname) {
+		reasons = append(reasons, "hostname")
 	}
 
 	// Compare SSH keys with proper handling of null vs empty lists
@@ -1236,11 +1195,6 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 	// Tags are handled separately - preserve existing tags if not returned by API
 	// The server API doesn't return tags in the get response, so we don't overwrite them
 
-	// Set default value for allow_reinstall if not set
-	if data.AllowReinstall.IsNull() {
-		data.AllowReinstall = types.BoolValue(true)
-	}
-
 	// Ensure billing is set to a known value to prevent "unknown value after apply" errors
 	if data.Billing.IsUnknown() {
 		data.Billing = types.StringNull()
@@ -1339,10 +1293,5 @@ func (r *ServerResource) updateServerTags(ctx context.Context, serverID string, 
 		}
 	}
 
-	return nil
-}
-
-func (r *ServerResource) updateDeployConfig(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) error {
-	// Just return success so state can be updated with planned values
 	return nil
 }

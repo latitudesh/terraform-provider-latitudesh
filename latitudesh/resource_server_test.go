@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
@@ -196,6 +197,70 @@ func TestLockActionFor(t *testing.T) {
 			got := lockActionFor(tc.planned, tc.current)
 			if got != tc.want {
 				t.Fatalf("lockActionFor(%v, %v) = %q, want %q", tc.planned, tc.current, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNeedsReinstall(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name           string
+		planned        ServerResourceModel
+		current        ServerResourceModel
+		allowReinstall bool
+		want           bool
+	}{
+		{
+			name:           "no diff",
+			planned:        ServerResourceModel{Hostname: types.StringValue("h"), OperatingSystem: types.StringValue("ubuntu_24_04_x64_lts")},
+			current:        ServerResourceModel{Hostname: types.StringValue("h"), OperatingSystem: types.StringValue("ubuntu_24_04_x64_lts")},
+			allowReinstall: true,
+			want:           false,
+		},
+		{
+			name:           "hostname change with allow_reinstall=true triggers reinstall",
+			planned:        ServerResourceModel{Hostname: types.StringValue("new"), OperatingSystem: types.StringValue("ubuntu_24_04_x64_lts")},
+			current:        ServerResourceModel{Hostname: types.StringValue("old"), OperatingSystem: types.StringValue("ubuntu_24_04_x64_lts")},
+			allowReinstall: true,
+			want:           true,
+		},
+		{
+			name:           "hostname change with allow_reinstall=false stays in-place",
+			planned:        ServerResourceModel{Hostname: types.StringValue("new"), OperatingSystem: types.StringValue("ubuntu_24_04_x64_lts")},
+			current:        ServerResourceModel{Hostname: types.StringValue("old"), OperatingSystem: types.StringValue("ubuntu_24_04_x64_lts")},
+			allowReinstall: false,
+			want:           false,
+		},
+		{
+			name:           "OS change always triggers reinstall regardless of allow_reinstall",
+			planned:        ServerResourceModel{Hostname: types.StringValue("h"), OperatingSystem: types.StringValue("ubuntu_24_04_x64_lts")},
+			current:        ServerResourceModel{Hostname: types.StringValue("h"), OperatingSystem: types.StringValue("ubuntu_22_04_x64_lts")},
+			allowReinstall: false,
+			want:           true,
+		},
+		{
+			name:           "hostname + OS with allow_reinstall=true",
+			planned:        ServerResourceModel{Hostname: types.StringValue("new"), OperatingSystem: types.StringValue("ubuntu_24_04_x64_lts")},
+			current:        ServerResourceModel{Hostname: types.StringValue("old"), OperatingSystem: types.StringValue("ubuntu_22_04_x64_lts")},
+			allowReinstall: true,
+			want:           true,
+		},
+	}
+
+	r := &ServerResource{}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var diags diag.Diagnostics
+			got, _ := r.needsReinstall(context.Background(), &tc.planned, &tc.current, tc.allowReinstall, &diags)
+			if got != tc.want {
+				t.Fatalf("needsReinstall(allowReinstall=%v) = %v, want %v", tc.allowReinstall, got, tc.want)
+			}
+			if diags.HasError() {
+				t.Fatalf("unexpected diags: %v", diags)
 			}
 		})
 	}
@@ -797,6 +862,7 @@ resource "latitudesh_server" "test_item" {
 	plan     = "%s"
 	site     = "%s"
 	operating_system = "%s"
+	allow_reinstall = false
 }
 `,
 		os.Getenv("LATITUDESH_TEST_PROJECT"),
