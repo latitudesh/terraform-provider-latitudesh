@@ -44,6 +44,7 @@ output "server" {
   - Allowed characters: letters (a–z, A–Z), digits (0–9), dots (.), and hyphens (-);
   - Must not begin or end with a dot or hyphen;
   - Underscores (_) are not allowed;
+  - Updating hostname triggers a reinstall when `allow_reinstall` is `true` (default). Set `allow_reinstall = false` to perform an in-place update instead.
 - `operating_system` (String) The server OS slug. Updating OS will trigger a reinstall. Examples: `ubuntu_24_04_x64_lts`, `ubuntu_22_04_x64_lts`, `debian_12`, `rockylinux_8`, `windows_2022_std`. For a complete list of available operating systems and their slugs, see the [API reference](https://www.latitude.sh/docs/api-reference/get-plans-operating-system).
 - `plan` (String) The server plan slug. Examples: `m4-metal-medium`, `c3-large-x86`, `f4-metal-medium`, `rs4-metal-large`, `g4-rtx6kpro-large`. For a complete list of available plans and their slugs, see the [API reference](https://www.latitude.sh/docs/api-reference/get-plans).
 - `project` (String) The id or slug of the project.
@@ -51,6 +52,7 @@ output "server" {
 
 ### Optional
 
+- `allow_reinstall` (Boolean) Allow server reinstallation when `operating_system`, `hostname`, `ssh_keys`, `user_data`, `raid`, or `ipxe` changes. Defaults to `true`. When `false`, only in-place updates are performed and reinstall-triggering changes are reflected in state without affecting the server.
 - `billing` (String) The server billing type.
     Accepts hourly and monthly for on demand projects and yearly for reserved projects.
 - `ipxe` (String) Url for the iPXE script that will be used. 

@@ -108,7 +108,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"hostname": schema.StringAttribute{
-				MarkdownDescription: "The server hostname",
+				MarkdownDescription: "The server hostname. Changing this value triggers a server reinstall when `allow_reinstall` is `true` (default); set `allow_reinstall = false` to perform an in-place update instead.",
 				Optional:            true,
 				Computed:            true,
 				Validators:          validators.Hostname(),
@@ -161,7 +161,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Optional:            true,
 			},
 			"allow_reinstall": schema.BoolAttribute{
-				MarkdownDescription: "Allow server reinstallation when operating_system, ssh_keys, user_data, raid, or ipxe changes. If false, only in-place updates are allowed.",
+				MarkdownDescription: "Allow server reinstallation when operating_system, hostname, ssh_keys, user_data, raid, or ipxe changes. If false, only in-place updates are allowed.",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.Bool{
@@ -279,6 +279,13 @@ func (r *ServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 			if !state.OperatingSystem.IsNull() && !plan.OperatingSystem.IsNull() {
 				if state.OperatingSystem.ValueString() != plan.OperatingSystem.ValueString() {
 					reinstallReasons = append(reinstallReasons, "operating_system")
+				}
+			}
+
+			// Check hostname (only triggers reinstall when allow_reinstall=true)
+			if !state.Hostname.IsNull() && !plan.Hostname.IsNull() && !plan.Hostname.IsUnknown() {
+				if state.Hostname.ValueString() != plan.Hostname.ValueString() {
+					reinstallReasons = append(reinstallReasons, "hostname")
 				}
 			}
 
@@ -739,20 +746,19 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		}
 	}
 
+	allowReinstall := true // Default to true for backward compatibility
+	if !data.AllowReinstall.IsNull() && !data.AllowReinstall.IsUnknown() {
+		allowReinstall = data.AllowReinstall.ValueBool()
+	}
+
 	// Determine what changed to decide between reinstall vs in-place update
 	// Compare planned config vs current state
-	needsReinstall, reason := r.needsReinstall(ctx, &data, &currentData, &resp.Diagnostics)
+	needsReinstall, reason := r.needsReinstall(ctx, &data, &currentData, allowReinstall, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	if needsReinstall {
-		// Check if reinstall is allowed
-		allowReinstall := true // Default to true for backward compatibility
-		if !data.AllowReinstall.IsNull() && !data.AllowReinstall.IsUnknown() {
-			allowReinstall = data.AllowReinstall.ValueBool()
-		}
-
 		if !allowReinstall {
 			// When reinstall is not allowed, just update the state
 			resp.Diagnostics.AddWarning(
@@ -883,12 +889,18 @@ func (r *ServerResource) applyEndOfUpdateLock(ctx context.Context, action string
 	}
 }
 
-// needsReinstall determines if server needs reinstall based on changed fields
-func (r *ServerResource) needsReinstall(ctx context.Context, planned *ServerResourceModel, current *ServerResourceModel, diags *diag.Diagnostics) (bool, string) {
+// needsReinstall determines if server needs reinstall based on changed fields.
+// hostname only triggers reinstall when allowReinstall is true; otherwise it
+// stays on the in-place PATCH path.
+func (r *ServerResource) needsReinstall(ctx context.Context, planned *ServerResourceModel, current *ServerResourceModel, allowReinstall bool, diags *diag.Diagnostics) (bool, string) {
 	var reasons []string
 
 	if !planned.OperatingSystem.Equal(current.OperatingSystem) {
 		reasons = append(reasons, "operating_system")
+	}
+
+	if allowReinstall && !planned.Hostname.Equal(current.Hostname) {
+		reasons = append(reasons, "hostname")
 	}
 
 	// Compare SSH keys with proper handling of null vs empty lists
