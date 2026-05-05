@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -164,9 +165,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "Allow server reinstallation when operating_system, hostname, ssh_keys, user_data, raid, or ipxe changes. Defaults to false. When false, hostname changes are applied in-place via PATCH and any other reinstall-only field change fails the plan with an explicit error.",
 				Optional:            true,
 				Computed:            true,
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
+				Default:             booldefault.StaticBool(false),
 			},
 			"primary_ipv4": schema.StringAttribute{
 				MarkdownDescription: "Primary IPv4 address of the server",
@@ -683,11 +682,6 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	// Ensure allow_reinstall has a known value (default to false if not set)
-	if data.AllowReinstall.IsNull() || data.AllowReinstall.IsUnknown() {
-		data.AllowReinstall = types.BoolValue(false)
-	}
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -1200,11 +1194,6 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 
 	// Tags are handled separately - preserve existing tags if not returned by API
 	// The server API doesn't return tags in the get response, so we don't overwrite them
-
-	// Set default value for allow_reinstall if not set
-	if data.AllowReinstall.IsNull() {
-		data.AllowReinstall = types.BoolValue(false)
-	}
 
 	// Ensure billing is set to a known value to prevent "unknown value after apply" errors
 	if data.Billing.IsUnknown() {
