@@ -758,10 +758,35 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 			return
 		}
 
-		// Read server to get updated values after reinstall
+		// The reinstall API doesn't accept billing, tags or project. If those
+		// changed in the same plan, follow up with an in-place PATCH so the
+		// state matches reality after this apply (PD-6011).
+		var changedProj bool
+		var newProj string
+		if inPlaceFieldsChanged(&data, &currentData) {
+			var err error
+			changedProj, newProj, err = r.updateServerInPlace(ctx, &data, &currentData, &resp.Diagnostics)
+			if err != nil {
+				resp.Diagnostics.AddError("Update Error", "Unable to update server: "+err.Error())
+				return
+			}
+
+			r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "post-reinstall update", updateTimeout)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+		}
+
+		// Read server to get updated values after reinstall (and follow-up update, if any)
 		r.readServer(ctx, &data, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
+		}
+
+		// readServer only writes project when state was null/unknown, so reinstate
+		// the changed project explicitly (mirrors the in-place-only branch below).
+		if changedProj && newProj != "" {
+			data.Project = types.StringValue(newProj)
 		}
 	} else {
 		// Performing in-place update
@@ -805,6 +830,23 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// inPlaceFieldsChanged reports whether billing, tags or project differ between
+// the planned and current models. These are the fields that the reinstall API
+// does not accept; when any of them changed in a reinstall apply, a follow-up
+// PATCH is required to keep state in sync with reality.
+func inPlaceFieldsChanged(planned, current *ServerResourceModel) bool {
+	if !planned.Billing.IsNull() && !planned.Billing.IsUnknown() && !planned.Billing.Equal(current.Billing) {
+		return true
+	}
+	if !planned.Project.IsNull() && !planned.Project.IsUnknown() && !planned.Project.Equal(current.Project) {
+		return true
+	}
+	if !planned.Tags.Equal(current.Tags) {
+		return true
+	}
+	return false
 }
 
 func lockActionFor(planned, current types.Bool) string {

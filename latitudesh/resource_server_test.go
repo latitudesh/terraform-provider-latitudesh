@@ -266,6 +266,74 @@ func TestNeedsReinstall(t *testing.T) {
 	}
 }
 
+func TestInPlaceFieldsChanged(t *testing.T) {
+	t.Parallel()
+
+	tagsA, diagsA := types.ListValueFrom(context.Background(), types.StringType, []string{"tag-1"})
+	if diagsA.HasError() {
+		t.Fatalf("setup tagsA: %v", diagsA)
+	}
+	tagsB, diagsB := types.ListValueFrom(context.Background(), types.StringType, []string{"tag-2"})
+	if diagsB.HasError() {
+		t.Fatalf("setup tagsB: %v", diagsB)
+	}
+
+	cases := []struct {
+		name    string
+		planned ServerResourceModel
+		current ServerResourceModel
+		want    bool
+	}{
+		{
+			name:    "no diff",
+			planned: ServerResourceModel{Billing: types.StringValue("monthly"), Project: types.StringValue("proj_a"), Tags: tagsA},
+			current: ServerResourceModel{Billing: types.StringValue("monthly"), Project: types.StringValue("proj_a"), Tags: tagsA},
+			want:    false,
+		},
+		{
+			name:    "billing changed",
+			planned: ServerResourceModel{Billing: types.StringValue("monthly"), Project: types.StringValue("proj_a"), Tags: tagsA},
+			current: ServerResourceModel{Billing: types.StringValue("hourly"), Project: types.StringValue("proj_a"), Tags: tagsA},
+			want:    true,
+		},
+		{
+			name:    "project changed",
+			planned: ServerResourceModel{Billing: types.StringValue("monthly"), Project: types.StringValue("proj_b"), Tags: tagsA},
+			current: ServerResourceModel{Billing: types.StringValue("monthly"), Project: types.StringValue("proj_a"), Tags: tagsA},
+			want:    true,
+		},
+		{
+			name:    "tags changed",
+			planned: ServerResourceModel{Billing: types.StringValue("monthly"), Project: types.StringValue("proj_a"), Tags: tagsB},
+			current: ServerResourceModel{Billing: types.StringValue("monthly"), Project: types.StringValue("proj_a"), Tags: tagsA},
+			want:    true,
+		},
+		{
+			name:    "planned billing unknown is ignored",
+			planned: ServerResourceModel{Billing: types.StringUnknown(), Project: types.StringValue("proj_a"), Tags: tagsA},
+			current: ServerResourceModel{Billing: types.StringValue("monthly"), Project: types.StringValue("proj_a"), Tags: tagsA},
+			want:    false,
+		},
+		{
+			name:    "planned project null is ignored",
+			planned: ServerResourceModel{Billing: types.StringValue("monthly"), Project: types.StringNull(), Tags: tagsA},
+			current: ServerResourceModel{Billing: types.StringValue("monthly"), Project: types.StringValue("proj_a"), Tags: tagsA},
+			want:    false,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := inPlaceFieldsChanged(&tc.planned, &tc.current)
+			if got != tc.want {
+				t.Fatalf("inPlaceFieldsChanged = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestAccServer_Basic(t *testing.T) {
 	runTestWithSiteFallback(t, func(site string, recorder *recorder.Recorder) resource.TestCase {
 		return resource.TestCase{
