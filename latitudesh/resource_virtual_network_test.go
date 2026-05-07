@@ -114,6 +114,85 @@ resource "latitudesh_virtual_network" "test_item" {
 `, project, desc, site)
 }
 
+// TestAccVirtualNetwork_WithTags exercises the previously-broken path where
+// a virtual network is created with tags, then re-planned (must be empty),
+// then has its tag set updated in-place. Before the fix in PD-6027, the
+// provider silently dropped tags on Create and hard-coded Update to error.
+//
+// Requires LATITUDESH_TEST_TAG_ID and LATITUDESH_TEST_TAG_ID_ALT to point at
+// two distinct, pre-existing custom tag IDs in the test team.
+func TestAccVirtualNetwork_WithTags(t *testing.T) {
+	tagID := os.Getenv("LATITUDESH_TEST_TAG_ID")
+	altTagID := os.Getenv("LATITUDESH_TEST_TAG_ID_ALT")
+	if tagID == "" || altTagID == "" {
+		t.Skip("LATITUDESH_TEST_TAG_ID and LATITUDESH_TEST_TAG_ID_ALT must be set for this test")
+	}
+
+	resourceName := "latitudesh_virtual_network.test_item"
+	project := os.Getenv("LATITUDESH_TEST_PROJECT")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+			testAccProjectCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		CheckDestroy:             testAccCheckVirtualNetworkDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfigVirtualNetworkWithTags(project, testVNDesc, testVNSite, []string{tagID}),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttr(resourceName, "tags.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "tags.0", tagID),
+				),
+			},
+			{
+				// Idempotency — same config, plan must be empty.
+				Config:             testAccConfigVirtualNetworkWithTags(project, testVNDesc, testVNSite, []string{tagID}),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			{
+				// In-place tag update must succeed (was the hard-error path).
+				Config: testAccConfigVirtualNetworkWithTags(project, testVNDesc, testVNSite, []string{tagID, altTagID}),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "tags.#", "2"),
+				),
+			},
+		},
+	})
+}
+
+func testAccConfigVirtualNetworkWithTags(project, desc, site string, tagIDs []string) string {
+	quoted := make([]string, len(tagIDs))
+	for i, id := range tagIDs {
+		quoted[i] = fmt.Sprintf("%q", id)
+	}
+	return fmt.Sprintf(`
+provider "latitudesh" {
+  project = "%s"
+}
+
+resource "latitudesh_virtual_network" "test_item" {
+  description = "%s"
+  site        = "%s"
+  tags        = [%s]
+}
+`, project, desc, site, joinComma(quoted))
+}
+
+func joinComma(s []string) string {
+	out := ""
+	for i, v := range s {
+		if i > 0 {
+			out += ", "
+		}
+		out += v
+	}
+	return out
+}
+
 func TestAccVirtualNetwork_UnknownProject(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccTokenCheck(t) },

@@ -40,7 +40,7 @@ resource "latitudesh_virtual_network" "virtual_network" {
 
 ### Optional
 
-- `tags` (List of String) List of virtual network tags
+- `tags` (List of String) List of virtual network tag IDs
 
 ### Read-Only
 
