@@ -9,11 +9,13 @@ description: |-
 
 The `latitudesh_server` resource allows you to deploy and manage bare metal servers on [Latitude.sh](https://metal.new) via Terraform.
 
-> **Reinstall behavior (v3.0+)**
+> **Reinstall behavior**
 >
-> Server reinstalls now require explicit opt-in. The `allow_reinstall` attribute defaults to `false`. With the default, changing `hostname` is applied in-place via PATCH; changing `operating_system`, `ssh_keys`, `user_data`, `raid`, or `ipxe` fails the plan with an error pointing at the field. Set `allow_reinstall = true` on the resource to perform reinstalls (which destroy data on disk).
+> Server reinstalls require explicit opt-in. The `allow_reinstall` attribute defaults to `false`. With the default, changing `hostname` is applied in-place via PATCH; changing `operating_system`, `ssh_keys`, `user_data`, `raid`, or `ipxe` fails the plan with an error pointing at the field. Set `allow_reinstall = true` on the resource to perform reinstalls (which destroy data on disk).
 >
-> Migrating from earlier versions: if you previously relied on the default `true` (e.g., to apply OS changes), set `allow_reinstall = true` explicitly on those resources.
+> When a reinstall-trigger field changes alongside `billing`, `tags`, or `project` in the same plan, the provider runs the reinstall first and follows up with an in-place PATCH so all changes are applied in a single apply.
+>
+> Migrating from earlier versions (pre-v3.0): if you previously relied on the default `true` (e.g., to apply OS changes), set `allow_reinstall = true` explicitly on those resources.
 
 ## Example usage
 
