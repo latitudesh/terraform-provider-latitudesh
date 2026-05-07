@@ -82,7 +82,7 @@ func (r *VirtualNetworkResource) Schema(ctx context.Context, req resource.Schema
 				},
 			},
 			"tags": schema.ListAttribute{
-				MarkdownDescription: "List of virtual network tags",
+				MarkdownDescription: "List of virtual network tag IDs",
 				ElementType:         types.StringType,
 				Optional:            true,
 			},
@@ -213,8 +213,6 @@ func (r *VirtualNetworkResource) Create(ctx context.Context, req resource.Create
 		attrs.Description = data.Description.ValueString()
 	}
 
-	// Note: Tags are not supported in the create operation, only in update
-
 	createRequest := operations.CreateVirtualNetworkPrivateNetworksRequestBody{
 		Data: operations.CreateVirtualNetworkPrivateNetworksData{
 			Type:       operations.CreateVirtualNetworkPrivateNetworksTypeVirtualNetwork,
@@ -257,6 +255,26 @@ func (r *VirtualNetworkResource) Create(ctx context.Context, req resource.Create
 		}
 	}
 
+	// The Create endpoint does not accept tags; apply them via PATCH so they
+	// land on the resource and don't drift on the next plan.
+	if !data.Tags.IsNull() && !data.Tags.IsUnknown() {
+		var tagIDs []string
+		resp.Diagnostics.Append(data.Tags.ElementsAs(ctx, &tagIDs, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if len(tagIDs) > 0 {
+			if err := r.validateTagIDs(ctx, tagIDs); err != nil {
+				resp.Diagnostics.AddError("Tag Validation Error", "Unable to validate tag IDs: "+err.Error())
+				return
+			}
+			if err := r.applyTags(ctx, data.ID.ValueString(), tagIDs, data.Description.ValueString()); err != nil {
+				resp.Diagnostics.AddError("Tag Update Error", "Unable to apply tags to virtual network: "+err.Error())
+				return
+			}
+		}
+	}
+
 	// Read the resource to populate all attributes
 	r.readVirtualNetwork(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -284,9 +302,37 @@ func (r *VirtualNetworkResource) Read(ctx context.Context, req resource.ReadRequ
 }
 
 func (r *VirtualNetworkResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Update Not Supported",
-		"Virtual network updates are not supported due to SDK limitations. "+
-			"Changes to description require resource replacement.")
+	var plan VirtualNetworkResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// description, site, project all have RequiresReplace, so the only
+	// attribute that reaches Update is `tags`.
+	var tagIDs []string
+	if !plan.Tags.IsNull() && !plan.Tags.IsUnknown() {
+		resp.Diagnostics.Append(plan.Tags.ElementsAs(ctx, &tagIDs, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if err := r.validateTagIDs(ctx, tagIDs); err != nil {
+			resp.Diagnostics.AddError("Tag Validation Error", "Unable to validate tag IDs: "+err.Error())
+			return
+		}
+	}
+
+	if err := r.applyTags(ctx, plan.ID.ValueString(), tagIDs, plan.Description.ValueString()); err != nil {
+		resp.Diagnostics.AddError("Tag Update Error", "Unable to update virtual network tags: "+err.Error())
+		return
+	}
+
+	r.readVirtualNetworkByID(ctx, &plan, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *VirtualNetworkResource) findVirtualNetworkByProject(ctx context.Context, data *VirtualNetworkResourceModel, diags *diag.Diagnostics) {
@@ -509,13 +555,13 @@ func (r *VirtualNetworkResource) ImportState(ctx context.Context, req resource.I
 
 		tags := attrs.GetTags()
 		if len(tags) > 0 {
-			tagNames := make([]attr.Value, 0, len(tags))
+			tagIDs := make([]attr.Value, 0, len(tags))
 			for _, tag := range tags {
-				if tag.GetName() != nil {
-					tagNames = append(tagNames, types.StringValue(*tag.GetName()))
+				if tag.GetID() != nil {
+					tagIDs = append(tagIDs, types.StringValue(*tag.GetID()))
 				}
 			}
-			tagList, diagErr := types.ListValue(types.StringType, tagNames)
+			tagList, diagErr := types.ListValue(types.StringType, tagIDs)
 			if diagErr.HasError() {
 				resp.Diagnostics.Append(diagErr...)
 			} else {
@@ -611,13 +657,13 @@ func (r *VirtualNetworkResource) readVirtualNetworkByID(ctx context.Context, dat
 
 	tags := attrs.GetTags()
 	if len(tags) > 0 {
-		tagNames := make([]attr.Value, 0, len(tags))
+		tagIDs := make([]attr.Value, 0, len(tags))
 		for _, tag := range tags {
-			if tag.GetName() != nil {
-				tagNames = append(tagNames, types.StringValue(*tag.GetName()))
+			if tag.GetID() != nil {
+				tagIDs = append(tagIDs, types.StringValue(*tag.GetID()))
 			}
 		}
-		tagList, diagErr := types.ListValue(types.StringType, tagNames)
+		tagList, diagErr := types.ListValue(types.StringType, tagIDs)
 		if diagErr.HasError() {
 			diags.Append(diagErr...)
 		} else {
@@ -707,4 +753,70 @@ func (r *VirtualNetworkResource) readVirtualNetwork(ctx context.Context, data *V
 			data.Description = types.StringNull()
 		}
 	}
+}
+
+func (r *VirtualNetworkResource) validateTagIDs(ctx context.Context, tagIDs []string) error {
+	if len(tagIDs) == 0 {
+		return nil
+	}
+
+	response, err := r.client.Tags.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	if response.CustomTags == nil || response.CustomTags.Data == nil {
+		return fmt.Errorf("no tags found")
+	}
+
+	validTagIDs := make(map[string]bool)
+	for _, tag := range response.CustomTags.Data {
+		if tag.ID != nil {
+			validTagIDs[*tag.ID] = true
+		}
+	}
+
+	for _, tagID := range tagIDs {
+		if !validTagIDs[tagID] {
+			return fmt.Errorf("tag ID '%s' not found", tagID)
+		}
+	}
+
+	return nil
+}
+
+// applyTags PATCHes the virtual network with the provided tag IDs. The SDK's
+// Update payload includes a non-omitempty `description` with a default value,
+// so we always echo the planned description back to avoid clobbering it.
+func (r *VirtualNetworkResource) applyTags(ctx context.Context, vlanID string, tagIDs []string, description string) error {
+	if vlanID == "" {
+		return fmt.Errorf("virtual network ID is empty")
+	}
+
+	desc := description
+	attrs := &operations.UpdateVirtualNetworkPrivateNetworksAttributes{
+		Tags:        tagIDs,
+		Description: &desc,
+	}
+
+	body := operations.UpdateVirtualNetworkPrivateNetworksRequestBody{
+		Data: operations.UpdateVirtualNetworkPrivateNetworksData{
+			ID:         vlanID,
+			Type:       operations.UpdateVirtualNetworkPrivateNetworksTypeVirtualNetworks,
+			Attributes: attrs,
+		},
+	}
+
+	result, err := r.client.PrivateNetworks.Update(ctx, vlanID, body)
+	if err != nil {
+		return fmt.Errorf("unable to update virtual network: %w", err)
+	}
+
+	if result != nil && result.HTTPMeta.Response != nil {
+		if status := result.HTTPMeta.Response.StatusCode; status >= 400 {
+			return fmt.Errorf("virtual network update failed with status code: %d", status)
+		}
+	}
+
+	return nil
 }
