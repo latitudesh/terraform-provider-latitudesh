@@ -231,60 +231,83 @@ func (r *VlanAssignmentResource) ImportState(ctx context.Context, req resource.I
 func (r *VlanAssignmentResource) readVlanAssignment(ctx context.Context, data *VlanAssignmentResourceModel, diags *diag.Diagnostics) {
 	assignmentID := data.ID.ValueString()
 
-	// Get all virtual network assignments and find ours
-	response, err := r.client.PrivateNetworks.ListAssignments(ctx, operations.GetVirtualNetworksAssignmentsRequest{})
-	if err != nil {
-		diags.AddError("Client Error", "Unable to read virtual network assignments, got error: "+err.Error())
-		return
-	}
+	// Initialize Computed attributes to Null. Plugin Framework requires every
+	// Computed attribute to be Known (concrete value or explicit Null) after
+	// Apply; if the API response is missing one of these fields we still want
+	// a concrete Null in state rather than Unknown.
+	data.Vid = types.Int64Null()
+	data.Description = types.StringNull()
+	data.Status = types.StringNull()
 
-	if response.VirtualNetworkAssignments == nil || response.VirtualNetworkAssignments.Data == nil {
-		data.ID = types.StringNull()
-		return
-	}
+	// The API populates `vid` asynchronously when assignments are created in
+	// parallel (NetBox `get_next_vid` allocation). Retry the lookup a few
+	// times so we don't surface Null and trigger a phantom diff on refresh.
+	const vidRetryAttempts = 3
+	for attempt := 0; attempt < vidRetryAttempts; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Second)
+		}
 
-	// Find our assignment
-	var assignment *components.VirtualNetworkAssignmentData
-	for _, a := range response.VirtualNetworkAssignments.Data {
-		if a.ID != nil && *a.ID == assignmentID {
-			assignment = &a
-			break
+		response, err := r.client.PrivateNetworks.ListAssignments(ctx, operations.GetVirtualNetworksAssignmentsRequest{})
+		if err != nil {
+			diags.AddError("Client Error", "Unable to read virtual network assignments, got error: "+err.Error())
+			return
+		}
+
+		if response.VirtualNetworkAssignments == nil || response.VirtualNetworkAssignments.Data == nil {
+			data.ID = types.StringNull()
+			return
+		}
+
+		var assignment *components.VirtualNetworkAssignmentData
+		for _, a := range response.VirtualNetworkAssignments.Data {
+			if a.ID != nil && *a.ID == assignmentID {
+				assignment = &a
+				break
+			}
+		}
+
+		if assignment == nil {
+			data.ID = types.StringNull()
+			return
+		}
+
+		if assignment.Attributes != nil {
+			attrs := assignment.Attributes
+			if attrs.Server != nil && attrs.Server.ID != nil {
+				data.ServerID = types.StringValue(*attrs.Server.ID)
+			}
+			if attrs.VirtualNetworkID != nil {
+				data.VirtualNetworkID = types.StringValue(*attrs.VirtualNetworkID)
+			}
+			if attrs.Vid != nil {
+				data.Vid = types.Int64Value(*attrs.Vid)
+			}
+			if attrs.Description != nil {
+				data.Description = types.StringValue(*attrs.Description)
+			}
+			if attrs.Status != nil {
+				data.Status = types.StringValue(*attrs.Status)
+			}
+		}
+
+		// If we got the vid, we're done. Otherwise retry.
+		if !data.Vid.IsNull() {
+			return
 		}
 	}
-
-	if assignment == nil {
-		data.ID = types.StringNull()
-		return
-	}
-
-	if assignment.Attributes != nil {
-		attrs := assignment.Attributes
-
-		if attrs.Server != nil && attrs.Server.ID != nil {
-			data.ServerID = types.StringValue(*attrs.Server.ID)
-		}
-
-		if attrs.VirtualNetworkID != nil {
-			data.VirtualNetworkID = types.StringValue(*attrs.VirtualNetworkID)
-		}
-
-		if attrs.Vid != nil {
-			data.Vid = types.Int64Value(*attrs.Vid)
-		}
-
-		if attrs.Description != nil {
-			data.Description = types.StringValue(*attrs.Description)
-		}
-
-		if attrs.Status != nil {
-			data.Status = types.StringValue(*attrs.Status)
-		}
-	}
+	// Exhausted retries — keep whatever Null fallbacks were initialized above.
 }
 
 func (r *VlanAssignmentResource) findAssignmentByServerAndVNet(ctx context.Context, data *VlanAssignmentResourceModel, diags *diag.Diagnostics) {
 	serverID := data.ServerID.ValueString()
 	vnetID := data.VirtualNetworkID.ValueString()
+
+	// Initialize Computed attributes to Null so a partial API response can't
+	// leave them Unknown after Apply.
+	data.Vid = types.Int64Null()
+	data.Description = types.StringNull()
+	data.Status = types.StringNull()
 
 	// Get all virtual network assignments and find ours
 	response, err := r.client.PrivateNetworks.ListAssignments(ctx, operations.GetVirtualNetworksAssignmentsRequest{})

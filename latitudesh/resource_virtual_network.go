@@ -194,6 +194,22 @@ func (r *VirtualNetworkResource) Create(ctx context.Context, req resource.Create
 	// persist in state to avoid flapping of Optional+Computed
 	data.Project = types.StringValue(effectiveProject)
 
+	// Extract and validate tag IDs *before* the Create POST so an invalid tag
+	// can't leave behind an orphan virtual network in the backend.
+	var tagIDs []string
+	if !data.Tags.IsNull() && !data.Tags.IsUnknown() {
+		resp.Diagnostics.Append(data.Tags.ElementsAs(ctx, &tagIDs, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if len(tagIDs) > 0 {
+			if err := r.validateTagIDs(ctx, tagIDs); err != nil {
+				resp.Diagnostics.AddError("Tag Validation Error", "Unable to validate tag IDs: "+err.Error())
+				return
+			}
+		}
+	}
+
 	// Prepare attributes for creation
 	attrs := operations.CreateVirtualNetworkPrivateNetworksAttributes{}
 
@@ -256,22 +272,14 @@ func (r *VirtualNetworkResource) Create(ctx context.Context, req resource.Create
 	}
 
 	// The Create endpoint does not accept tags; apply them via PATCH so they
-	// land on the resource and don't drift on the next plan.
-	if !data.Tags.IsNull() && !data.Tags.IsUnknown() {
-		var tagIDs []string
-		resp.Diagnostics.Append(data.Tags.ElementsAs(ctx, &tagIDs, false)...)
-		if resp.Diagnostics.HasError() {
+	// land on the resource and don't drift on the next plan. If the PATCH
+	// fails, attempt to delete the just-created VNet so we don't leave an
+	// orphan in the backend that blocks downstream destroys.
+	if len(tagIDs) > 0 {
+		if err := r.applyTags(ctx, data.ID.ValueString(), tagIDs, data.Description.ValueString()); err != nil {
+			r.cleanupOrphanVNet(ctx, data.ID.ValueString(), &resp.Diagnostics)
+			resp.Diagnostics.AddError("Tag Update Error", "Unable to apply tags to virtual network: "+err.Error())
 			return
-		}
-		if len(tagIDs) > 0 {
-			if err := r.validateTagIDs(ctx, tagIDs); err != nil {
-				resp.Diagnostics.AddError("Tag Validation Error", "Unable to validate tag IDs: "+err.Error())
-				return
-			}
-			if err := r.applyTags(ctx, data.ID.ValueString(), tagIDs, data.Description.ValueString()); err != nil {
-				resp.Diagnostics.AddError("Tag Update Error", "Unable to apply tags to virtual network: "+err.Error())
-				return
-			}
 		}
 	}
 
@@ -655,23 +663,52 @@ func (r *VirtualNetworkResource) readVirtualNetworkByID(ctx context.Context, dat
 		data.Region = types.StringNull()
 	}
 
+	// Tags need set-equivalence handling: the API treats `tags` as a set
+	// (no order preserved server-side), but the schema is a List. If we
+	// blindly overwrite state.Tags with the API's order, the next plan
+	// shows a phantom diff and the framework rejects "inconsistent result
+	// after apply". When state and API hold the same set of tag IDs, keep
+	// state's order; only adopt the API ordering when an actual drift is
+	// detected (different membership).
 	tags := attrs.GetTags()
-	if len(tags) > 0 {
-		tagIDs := make([]attr.Value, 0, len(tags))
-		for _, tag := range tags {
-			if tag.GetID() != nil {
-				tagIDs = append(tagIDs, types.StringValue(*tag.GetID()))
-			}
+	apiOrder := make([]attr.Value, 0, len(tags))
+	apiSet := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		if tag.GetID() != nil {
+			apiOrder = append(apiOrder, types.StringValue(*tag.GetID()))
+			apiSet[*tag.GetID()] = struct{}{}
 		}
-		tagList, diagErr := types.ListValue(types.StringType, tagIDs)
-		if diagErr.HasError() {
-			diags.Append(diagErr...)
-		} else {
-			data.Tags = tagList
-		}
-	} else {
-		data.Tags = types.ListNull(types.StringType)
 	}
+
+	preserveStateOrder := false
+	if !data.Tags.IsNull() && !data.Tags.IsUnknown() && len(data.Tags.Elements()) == len(apiOrder) {
+		var stateIDs []string
+		if !data.Tags.ElementsAs(ctx, &stateIDs, false).HasError() {
+			allMatch := true
+			for _, sid := range stateIDs {
+				if _, ok := apiSet[sid]; !ok {
+					allMatch = false
+					break
+				}
+			}
+			preserveStateOrder = allMatch
+		}
+	}
+
+	if preserveStateOrder {
+		// data.Tags already reflects the same set; keep its ordering.
+		return
+	}
+	if len(apiOrder) == 0 {
+		data.Tags = types.ListNull(types.StringType)
+		return
+	}
+	tagList, diagErr := types.ListValue(types.StringType, apiOrder)
+	if diagErr.HasError() {
+		diags.Append(diagErr...)
+		return
+	}
+	data.Tags = tagList
 }
 
 func (r *VirtualNetworkResource) readVirtualNetwork(ctx context.Context, data *VirtualNetworkResourceModel, diags *diag.Diagnostics) {
@@ -752,6 +789,22 @@ func (r *VirtualNetworkResource) readVirtualNetwork(ctx context.Context, data *V
 		if data.Description.IsUnknown() {
 			data.Description = types.StringNull()
 		}
+	}
+}
+
+// cleanupOrphanVNet best-effort deletes a VNet that was created server-side
+// but couldn't complete its post-create work (e.g., tag PATCH failed). A
+// failure here is logged as a warning rather than promoted to an error so the
+// caller's original failure remains the surfaced one.
+func (r *VirtualNetworkResource) cleanupOrphanVNet(ctx context.Context, vlanID string, diags *diag.Diagnostics) {
+	if vlanID == "" {
+		return
+	}
+	if _, err := r.client.VirtualNetworks.Delete(ctx, vlanID); err != nil {
+		diags.AddWarning(
+			"Orphan Cleanup Failed",
+			fmt.Sprintf("Failed to delete partially-created virtual network %s: %s. Manual cleanup may be required.", vlanID, err.Error()),
+		)
 	}
 }
 

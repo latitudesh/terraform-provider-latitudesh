@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
 const (
@@ -191,6 +193,65 @@ func joinComma(s []string) string {
 		out += v
 	}
 	return out
+}
+
+// TestAccVirtualNetwork_InvalidTagFailsBeforePOST verifies that PD-6028's fix
+// validates tag IDs before the Create POST and does not leave an orphan VNet
+// in the backend when validation fails.
+func TestAccVirtualNetwork_InvalidTagFailsBeforePOST(t *testing.T) {
+	project := os.Getenv("LATITUDESH_TEST_PROJECT")
+	if project == "" {
+		t.Skip("LATITUDESH_TEST_PROJECT must be set")
+	}
+
+	desc := "tf-acc-pd6028-orphan-check"
+	bogusTagID := "tag_pd6028_definitely_not_a_real_tag"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+			testAccProjectCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccConfigVirtualNetworkWithTags(project, desc, testVNSite, []string{bogusTagID}),
+				ExpectError: regexp.MustCompile(`Tag Validation Error`),
+			},
+		},
+		CheckDestroy: func(s *terraform.State) error {
+			// After the failed apply, the backend must not contain a vnet
+			// with our description — otherwise the orphan-prevention regressed.
+			ctx := context.Background()
+			client, err := newSDKClientFromEnv()
+			if err != nil {
+				return err
+			}
+			resp, err := client.PrivateNetworks.List(ctx, operations.GetVirtualNetworksRequest{
+				FilterProject: &project,
+			})
+			if err != nil {
+				return fmt.Errorf("listing vnets to check for orphan: %w", err)
+			}
+			if resp.VirtualNetworks == nil || resp.VirtualNetworks.Data == nil {
+				return nil
+			}
+			for _, vn := range resp.VirtualNetworks.Data {
+				attrs := vn.GetAttributes()
+				if attrs == nil || attrs.GetDescription() == nil {
+					continue
+				}
+				if *attrs.GetDescription() == desc {
+					id := ""
+					if vn.GetID() != nil {
+						id = *vn.GetID()
+					}
+					return fmt.Errorf("orphan vnet %s left behind with description %q (PD-6028 regression)", id, desc)
+				}
+			}
+			return nil
+		},
+	})
 }
 
 func TestAccVirtualNetwork_UnknownProject(t *testing.T) {
