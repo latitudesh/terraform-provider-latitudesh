@@ -245,7 +245,11 @@ func (r *VlanAssignmentResource) readVlanAssignment(ctx context.Context, data *V
 	const vidRetryAttempts = 3
 	for attempt := 0; attempt < vidRetryAttempts; attempt++ {
 		if attempt > 0 {
-			time.Sleep(time.Second)
+			select {
+			case <-time.After(time.Second):
+			case <-ctx.Done():
+				return
+			}
 		}
 
 		response, err := r.client.PrivateNetworks.ListAssignments(ctx, operations.GetVirtualNetworksAssignmentsRequest{})

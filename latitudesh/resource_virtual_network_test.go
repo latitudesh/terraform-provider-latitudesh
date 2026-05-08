@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 
@@ -204,7 +205,9 @@ func TestAccVirtualNetwork_InvalidTagFailsBeforePOST(t *testing.T) {
 		t.Skip("LATITUDESH_TEST_PROJECT must be set")
 	}
 
-	desc := "tf-acc-pd6028-orphan-check"
+	// Suffix per-run so parallel CI jobs don't false-trigger each other's
+	// orphan check on the shared project.
+	desc := fmt.Sprintf("tf-acc-pd6028-orphan-check-%s", acctest.RandString(6))
 	bogusTagID := "tag_pd6028_definitely_not_a_real_tag"
 
 	resource.Test(t, resource.TestCase{
