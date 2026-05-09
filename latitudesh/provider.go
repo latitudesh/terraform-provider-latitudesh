@@ -103,7 +103,7 @@ func (p *latitudeshProvider) Configure(ctx context.Context, req provider.Configu
 				Exponent:        1.5,
 				MaxElapsedTime:  300000,
 			},
-			RetryConnectionErrors: true,
+			RetryConnectionErrors: false,
 		}),
 	}
 	if p.httpClient != nil {
