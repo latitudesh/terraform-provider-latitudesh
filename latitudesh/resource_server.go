@@ -184,9 +184,6 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			"status": schema.StringAttribute{
 				MarkdownDescription: "Server power status",
 				Computed:            true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 			"locked": schema.BoolAttribute{
 				MarkdownDescription: "Whether the server is locked",

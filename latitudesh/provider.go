@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"github.com/latitudesh/latitudesh-go-sdk/retry"
 	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
 
@@ -94,6 +95,16 @@ func (p *latitudeshProvider) Configure(ctx context.Context, req provider.Configu
 
 	sdkOpts := []latitudeshgosdk.SDKOption{
 		latitudeshgosdk.WithSecurity(authToken),
+		latitudeshgosdk.WithRetryConfig(retry.Config{
+			Strategy: "backoff",
+			Backoff: &retry.BackoffStrategy{
+				InitialInterval: 500,
+				MaxInterval:     60000,
+				Exponent:        1.5,
+				MaxElapsedTime:  300000,
+			},
+			RetryConnectionErrors: false,
+		}),
 	}
 	if p.httpClient != nil {
 		sdkOpts = append(sdkOpts, latitudeshgosdk.WithClient(p.httpClient))
