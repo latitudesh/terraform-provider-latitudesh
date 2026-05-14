@@ -473,7 +473,8 @@ func (r *VirtualNetworkResource) Delete(ctx context.Context, req resource.Delete
 		maxBackoff     = 30 * time.Second
 	)
 
-	deadline := time.Now().Add(retryDeadline)
+	start := time.Now()
+	deadline := start.Add(retryDeadline)
 	backoff := initialBackoff
 
 	for {
