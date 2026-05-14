@@ -499,7 +499,7 @@ func (r *VirtualNetworkResource) Delete(ctx context.Context, req resource.Delete
 				"Client Error",
 				fmt.Sprintf(
 					"Unable to delete virtual network after waiting %s for assignments to drain. Last error: %s",
-					retryDeadline, err.Error(),
+					time.Since(start).Round(time.Second), err.Error(),
 				),
 			)
 			return
