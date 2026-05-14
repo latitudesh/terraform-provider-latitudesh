@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -466,17 +467,64 @@ func (r *VirtualNetworkResource) Delete(ctx context.Context, req resource.Delete
 		return
 	}
 
-	// Attempt to delete using the virtual network ID directly
-	_, err := r.client.VirtualNetworks.Delete(ctx, vlanID)
-	if err != nil {
-		// If we get a 404, the resource was already deleted
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not_found") {
+	const (
+		retryDeadline  = 5 * time.Minute
+		initialBackoff = 5 * time.Second
+		maxBackoff     = 30 * time.Second
+	)
+
+	deadline := time.Now().Add(retryDeadline)
+	backoff := initialBackoff
+
+	for {
+		_, err := r.client.VirtualNetworks.Delete(ctx, vlanID)
+		if err == nil {
+			return
+		}
+
+		errStr := err.Error()
+		if strings.Contains(errStr, "404") || strings.Contains(errStr, "not_found") {
 			resp.Diagnostics.AddWarning("Virtual Network Already Deleted", "Virtual network was already deleted")
 			return
 		}
-		resp.Diagnostics.AddError("Client Error", "Unable to delete virtual network, got error: "+err.Error())
-		return
+
+		if !isDeletionRestrictionError(errStr) {
+			resp.Diagnostics.AddError("Client Error", "Unable to delete virtual network, got error: "+err.Error())
+			return
+		}
+
+		if !time.Now().Add(backoff).Before(deadline) {
+			resp.Diagnostics.AddError(
+				"Client Error",
+				fmt.Sprintf(
+					"Unable to delete virtual network after waiting %s for assignments to drain. Last error: %s",
+					retryDeadline, err.Error(),
+				),
+			)
+			return
+		}
+
+		select {
+		case <-ctx.Done():
+			resp.Diagnostics.AddError(
+				"Context Cancelled",
+				"Virtual network delete was cancelled while waiting for assignments to drain",
+			)
+			return
+		case <-time.After(backoff):
+		}
+
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
 	}
+}
+
+func isDeletionRestrictionError(errStr string) bool {
+	return strings.Contains(errStr, "VIRTUAL_NETWORK_DELETION_ERROR") ||
+		strings.Contains(errStr, "Virtual Network Deletion Restriction") ||
+		strings.Contains(errStr, "remove all assignments")
 }
 
 func (r *VirtualNetworkResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

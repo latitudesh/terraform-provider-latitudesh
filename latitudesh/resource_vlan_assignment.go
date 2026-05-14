@@ -214,6 +214,45 @@ func (r *VlanAssignmentResource) Delete(ctx context.Context, req resource.Delete
 			return
 		}
 	}
+
+	r.waitForAssignmentRemoval(ctx, id)
+}
+
+func (r *VlanAssignmentResource) waitForAssignmentRemoval(ctx context.Context, id string) {
+	const (
+		waitDeadline = 2 * time.Minute
+		pollInterval = 3 * time.Second
+	)
+	deadline := time.Now().Add(waitDeadline)
+
+	for time.Now().Before(deadline) {
+		response, err := r.client.PrivateNetworks.ListAssignments(ctx, operations.GetVirtualNetworksAssignmentsRequest{})
+		if err != nil {
+			// Transient list failures shouldn't fail the destroy; let the
+			// parent vnet delete handle any remaining lag.
+			return
+		}
+		if response.VirtualNetworkAssignments == nil || response.VirtualNetworkAssignments.Data == nil {
+			return
+		}
+
+		stillPresent := false
+		for _, a := range response.VirtualNetworkAssignments.Data {
+			if a.ID != nil && *a.ID == id {
+				stillPresent = true
+				break
+			}
+		}
+		if !stillPresent {
+			return
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(pollInterval):
+		}
+	}
 }
 
 func (r *VlanAssignmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
