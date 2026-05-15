@@ -214,6 +214,54 @@ func (r *VlanAssignmentResource) Delete(ctx context.Context, req resource.Delete
 			return
 		}
 	}
+
+	r.waitForAssignmentRemoval(ctx, id, data.VirtualNetworkID.ValueString(), data.ServerID.ValueString())
+}
+
+// waitForAssignmentRemoval polls ListAssignments filtered by both the vnet and
+// the server IDs — the tuple is unique in interface_tagged_vlans, so the
+// response holds at most one entry and fits on the first page regardless of
+// account size. Without the filters, `ListAssignments` returns page 1 of all
+// assignments in the account (page size default 20) and the lookup silently
+// no-ops when the target lives on page 2+.
+func (r *VlanAssignmentResource) waitForAssignmentRemoval(ctx context.Context, id, vnetID, serverID string) {
+	const (
+		waitDeadline = 2 * time.Minute
+		pollInterval = 3 * time.Second
+	)
+	deadline := time.Now().Add(waitDeadline)
+
+	for time.Now().Before(deadline) {
+		response, err := r.client.PrivateNetworks.ListAssignments(ctx, operations.GetVirtualNetworksAssignmentsRequest{
+			FilterVirtualNetworkID: &vnetID,
+			FilterServer:           &serverID,
+		})
+		if err != nil {
+			// Transient list failures shouldn't fail the destroy; let the
+			// parent vnet delete handle any remaining lag.
+			return
+		}
+		if response.VirtualNetworkAssignments == nil || response.VirtualNetworkAssignments.Data == nil {
+			return
+		}
+
+		stillPresent := false
+		for _, a := range response.VirtualNetworkAssignments.Data {
+			if a.ID != nil && *a.ID == id {
+				stillPresent = true
+				break
+			}
+		}
+		if !stillPresent {
+			return
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(pollInterval):
+		}
+	}
 }
 
 func (r *VlanAssignmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
