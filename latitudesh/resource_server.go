@@ -829,6 +829,28 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
+// requiresIpxeAttribute returns an error when operating_system is the literal
+// "ipxe" but the ipxe attribute is null or empty. The Latitude API rejects such
+// reinstall requests with a 422 ("ipxe must be informed"); failing the plan
+// here surfaces the misconfiguration before any API call is made.
+//
+// Unknown values are skipped — the check re-runs once Terraform resolves them.
+func requiresIpxeAttribute(os, ipxe types.String) error {
+	if os.IsNull() || os.IsUnknown() {
+		return nil
+	}
+	if os.ValueString() != "ipxe" {
+		return nil
+	}
+	if ipxe.IsUnknown() {
+		return nil
+	}
+	if ipxe.IsNull() || ipxe.ValueString() == "" {
+		return fmt.Errorf("operating_system = \"ipxe\" requires the ipxe attribute to be set (URL or base64-encoded script)")
+	}
+	return nil
+}
+
 // inPlaceFieldsChanged reports whether billing, tags or project differ between
 // the planned and current models. These are the fields that the reinstall API
 // does not accept; when any of them changed in a reinstall apply, a follow-up

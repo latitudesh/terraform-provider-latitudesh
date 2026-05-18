@@ -1032,3 +1032,38 @@ resource "latitudesh_server" "test_item" {
 		},
 	})
 }
+
+func TestRequiresIpxeAttribute(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		os      types.String
+		ipxe    types.String
+		wantErr bool
+	}{
+		{"os=ipxe, ipxe set as URL", types.StringValue("ipxe"), types.StringValue("https://example/script.ipxe"), false},
+		{"os=ipxe, ipxe set as base64", types.StringValue("ipxe"), types.StringValue("IyFpcHhlCg=="), false},
+		{"os=ipxe, ipxe null", types.StringValue("ipxe"), types.StringNull(), true},
+		{"os=ipxe, ipxe empty string", types.StringValue("ipxe"), types.StringValue(""), true},
+		{"os=ipxe, ipxe unknown (still resolving)", types.StringValue("ipxe"), types.StringUnknown(), false},
+		{"os=ubuntu, ipxe null", types.StringValue("ubuntu_24_04_x64_lts"), types.StringNull(), false},
+		{"os=ubuntu, ipxe set (no constraint)", types.StringValue("ubuntu_24_04_x64_lts"), types.StringValue("https://x"), false},
+		{"os null, ipxe null", types.StringNull(), types.StringNull(), false},
+		{"os unknown, ipxe null", types.StringUnknown(), types.StringNull(), false},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := requiresIpxeAttribute(tc.os, tc.ipxe)
+			if tc.wantErr && err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+		})
+	}
+}
