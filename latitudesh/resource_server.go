@@ -417,6 +417,8 @@ func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string
 	deadline := time.Now().Add(timeout)
 	consecutiveErrors := 0
 	lastStatus := ""
+	initialStatus := ""
+	sawTransition := false
 
 	// Enable debug logging if TF_LOG or LATITUDESH_DEBUG is set
 	enableDebug := os.Getenv("TF_LOG") != "" || os.Getenv("LATITUDESH_DEBUG") != ""
@@ -496,20 +498,24 @@ func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string
 		}
 		lastStatus = status
 
-		// Check for failure states
-		if status == "failed_disk_erasing" || status == "failed_deployment" {
+		// Capture initial status on first successful poll and watch for transition.
+		if initialStatus == "" {
+			initialStatus = status
+		} else if !sawTransition && status != initialStatus {
+			sawTransition = true
+		}
+
+		if terminal, success := isReinstallTerminal(initialStatus, status, sawTransition); terminal {
+			if success {
+				if enableDebug {
+					fmt.Fprintf(os.Stderr, "[DEBUG] Server %s completed successfully (status: on)\n", operation)
+				}
+				return
+			}
 			diags.AddError(
 				fmt.Sprintf("Server %s Failed", operation),
 				fmt.Sprintf("Server entered failed state: %s. Please check the server in the Latitude.sh dashboard.", status),
 			)
-			return
-		}
-
-		// Check for success states
-		if status == "on" {
-			if enableDebug {
-				fmt.Fprintf(os.Stderr, "[DEBUG] Server %s completed successfully (status: on)\n", operation)
-			}
 			return
 		}
 
