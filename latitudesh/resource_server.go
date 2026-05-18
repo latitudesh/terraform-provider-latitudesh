@@ -530,6 +530,33 @@ func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string
 	)
 }
 
+// isReinstallTerminal decides whether a polled server status should be treated
+// as terminal (success or failure). When the operation started while the server
+// was already in a terminal-looking state (`on`, `failed_deployment`,
+// `failed_disk_erasing`) — common on a reinstall right after a previous
+// reinstall — accepting the first stale reading as terminal causes false
+// success or false failure. Require an observed transition before honoring a
+// terminal status that matches the initial one.
+//
+// success is only meaningful when terminal is true; ignore otherwise.
+func isReinstallTerminal(initialStatus, currentStatus string, sawTransition bool) (terminal, success bool) {
+	isTerminal := func(s string) bool {
+		return s == "on" || s == "failed_deployment" || s == "failed_disk_erasing"
+	}
+
+	if !isTerminal(currentStatus) {
+		return false, false
+	}
+
+	// If we started in a terminal state and have not observed a transition,
+	// the current reading is stale from the previous operation.
+	if isTerminal(initialStatus) && !sawTransition {
+		return false, false
+	}
+
+	return true, currentStatus == "on"
+}
+
 func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data ServerResourceModel
 
