@@ -1032,3 +1032,87 @@ resource "latitudesh_server" "test_item" {
 		},
 	})
 }
+
+func TestRequiresIpxeAttribute(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		os      types.String
+		ipxe    types.String
+		wantErr bool
+	}{
+		{"os=ipxe, ipxe set as URL", types.StringValue("ipxe"), types.StringValue("https://example/script.ipxe"), false},
+		{"os=ipxe, ipxe set as base64", types.StringValue("ipxe"), types.StringValue("IyFpcHhlCg=="), false},
+		{"os=ipxe, ipxe null", types.StringValue("ipxe"), types.StringNull(), true},
+		{"os=ipxe, ipxe empty string", types.StringValue("ipxe"), types.StringValue(""), true},
+		{"os=ipxe, ipxe unknown (still resolving)", types.StringValue("ipxe"), types.StringUnknown(), false},
+		{"os=ubuntu, ipxe null", types.StringValue("ubuntu_24_04_x64_lts"), types.StringNull(), false},
+		{"os=ubuntu, ipxe set (no constraint)", types.StringValue("ubuntu_24_04_x64_lts"), types.StringValue("https://x"), false},
+		{"os null, ipxe null", types.StringNull(), types.StringNull(), false},
+		{"os unknown, ipxe null", types.StringUnknown(), types.StringNull(), false},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := requiresIpxeAttribute(tc.os, tc.ipxe)
+			if tc.wantErr && err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestIsReinstallTerminal(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name           string
+		initial        string
+		current        string
+		sawTransition  bool
+		wantTerminal   bool
+		wantSuccess    bool
+	}{
+		// Fresh creation path: server transitions from provisioning → on
+		{"create: provisioning then on", "provisioning", "on", true, true, true},
+		{"create: still provisioning", "provisioning", "provisioning", false, false, false},
+		{"create: deploying then failed", "deploying", "failed_deployment", true, true, false},
+		{"create: deploying then failed disk", "deploying", "failed_disk_erasing", true, true, false},
+
+		// Reinstall from on (the race we hit on our m4 tests): initial=on
+		{"reinstall: stale on, no transition (race)", "on", "on", false, false, false},
+		{"reinstall: on -> deploying", "on", "deploying", true, false, false},
+		{"reinstall: on -> deploying -> on", "on", "on", true, true, true},
+		{"reinstall: on -> deploying -> failed", "on", "failed_deployment", true, true, false},
+		{"reinstall: on -> disk_erasing -> failed disk", "on", "failed_disk_erasing", true, true, false},
+
+		// Reinstall from failed_deployment (the race Andrew hit): initial=failed_deployment
+		{"reinstall: stale failed_deployment, no transition (race)", "failed_deployment", "failed_deployment", false, false, false},
+		{"reinstall: failed_deployment -> disk_erasing", "failed_deployment", "disk_erasing", true, false, false},
+		{"reinstall: failed_deployment -> disk_erasing -> on", "failed_deployment", "on", true, true, true},
+		{"reinstall: failed_deployment -> disk_erasing -> failed", "failed_deployment", "failed_deployment", true, true, false},
+
+		// Edge: unknown intermediate state, never terminal until target reached
+		{"unknown intermediate state", "provisioning", "rebooting", false, false, false},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			terminal, success := isReinstallTerminal(tc.initial, tc.current, tc.sawTransition)
+			if terminal != tc.wantTerminal {
+				t.Fatalf("terminal: got %v, want %v", terminal, tc.wantTerminal)
+			}
+			if success != tc.wantSuccess {
+				t.Fatalf("success: got %v, want %v", success, tc.wantSuccess)
+			}
+		})
+	}
+}

@@ -141,7 +141,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"ipxe": schema.StringAttribute{
-				MarkdownDescription: "URL where iPXE script is stored on, OR the iPXE script encoded in base64",
+				MarkdownDescription: "The iPXE script to boot. Accepts either a URL pointing at the script, or the script encoded in base64. Required when `operating_system = \"ipxe\"`; the plan fails with an explicit error if it is missing. Updating ipxe requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.",
 				Optional:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
@@ -255,6 +255,17 @@ func (r *ServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	}
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Plan-time guard: operating_system = "ipxe" requires the ipxe attribute.
+	// Catches misconfiguration before any API call (API otherwise returns 422).
+	if err := requiresIpxeAttribute(plan.OperatingSystem, plan.Ipxe); err != nil {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("ipxe"),
+			"Missing iPXE script",
+			err.Error(),
+		)
 		return
 	}
 
@@ -378,7 +389,7 @@ func (r *ServerResource) Configure(ctx context.Context, req resource.ConfigureRe
 	r.defaultProject = deps.DefaultProject
 }
 
-func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string, diags *diag.Diagnostics, operation string, configuredTimeout time.Duration) {
+func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string, diags *diag.Diagnostics, operation string, configuredTimeout time.Duration, requireTransition bool) {
 	// Configs
 	timeout := configuredTimeout
 	pollInterval := 30 * time.Second
@@ -406,6 +417,8 @@ func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string
 	deadline := time.Now().Add(timeout)
 	consecutiveErrors := 0
 	lastStatus := ""
+	initialStatus := ""
+	sawTransition := false
 
 	// Enable debug logging if TF_LOG or LATITUDESH_DEBUG is set
 	enableDebug := os.Getenv("TF_LOG") != "" || os.Getenv("LATITUDESH_DEBUG") != ""
@@ -485,20 +498,25 @@ func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string
 		}
 		lastStatus = status
 
-		// Check for failure states
-		if status == "failed_disk_erasing" || status == "failed_deployment" {
+		// Capture initial status on first successful poll and watch for transition.
+		if initialStatus == "" {
+			initialStatus = status
+		} else if !sawTransition && status != initialStatus {
+			sawTransition = true
+		}
+
+		effectiveTransition := sawTransition || !requireTransition
+		if terminal, success := isReinstallTerminal(initialStatus, status, effectiveTransition); terminal {
+			if success {
+				if enableDebug {
+					fmt.Fprintf(os.Stderr, "[DEBUG] Server %s completed successfully (status: on)\n", operation)
+				}
+				return
+			}
 			diags.AddError(
 				fmt.Sprintf("Server %s Failed", operation),
 				fmt.Sprintf("Server entered failed state: %s. Please check the server in the Latitude.sh dashboard.", status),
 			)
-			return
-		}
-
-		// Check for success states
-		if status == "on" {
-			if enableDebug {
-				fmt.Fprintf(os.Stderr, "[DEBUG] Server %s completed successfully (status: on)\n", operation)
-			}
 			return
 		}
 
@@ -517,6 +535,33 @@ func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string
 		fmt.Sprintf("Server %s Timeout", operation),
 		fmt.Sprintf("Server did not reach 'on' state within %v. Check server status in Latitude.sh dashboard.", timeout),
 	)
+}
+
+// isReinstallTerminal decides whether a polled server status should be treated
+// as terminal (success or failure). When the operation started while the server
+// was already in a terminal-looking state (`on`, `failed_deployment`,
+// `failed_disk_erasing`) — common on a reinstall right after a previous
+// reinstall — accepting the first stale reading as terminal causes false
+// success or false failure. Require an observed transition before honoring a
+// terminal status that matches the initial one.
+//
+// success is only meaningful when terminal is true; ignore otherwise.
+func isReinstallTerminal(initialStatus, currentStatus string, sawTransition bool) (terminal, success bool) {
+	isTerminal := func(s string) bool {
+		return s == "on" || s == "failed_deployment" || s == "failed_disk_erasing"
+	}
+
+	if !isTerminal(currentStatus) {
+		return false, false
+	}
+
+	// If we started in a terminal state and have not observed a transition,
+	// the current reading is stale from the previous operation.
+	if isTerminal(initialStatus) && !sawTransition {
+		return false, false
+	}
+
+	return true, currentStatus == "on"
 }
 
 func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -661,7 +706,7 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "creation", createTimeout)
+	r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "creation", createTimeout, false)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -750,7 +795,7 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		}
 
 		// Wait for server to be ready after reinstall
-		r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "reinstall", updateTimeout)
+		r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "reinstall", updateTimeout, true)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -768,7 +813,7 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 				return
 			}
 
-			r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "post-reinstall update", updateTimeout)
+			r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "post-reinstall update", updateTimeout, false)
 			if resp.Diagnostics.HasError() {
 				return
 			}
@@ -805,7 +850,7 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		// Wait for server to be ready after in-place update
 		// The API may trigger a redeployment for certain changes, so we need
 		// to wait for the server to reach "on" status before reading state
-		r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "update", updateTimeout)
+		r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "update", updateTimeout, false)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -827,6 +872,28 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// requiresIpxeAttribute returns an error when operating_system is the literal
+// "ipxe" but the ipxe attribute is null or empty. The Latitude API rejects such
+// reinstall requests with a 422 ("ipxe must be informed"); failing the plan
+// here surfaces the misconfiguration before any API call is made.
+//
+// Unknown values are skipped — the check re-runs once Terraform resolves them.
+func requiresIpxeAttribute(operatingSystem, ipxe types.String) error {
+	if operatingSystem.IsNull() || operatingSystem.IsUnknown() {
+		return nil
+	}
+	if operatingSystem.ValueString() != "ipxe" {
+		return nil
+	}
+	if ipxe.IsUnknown() {
+		return nil
+	}
+	if ipxe.IsNull() || ipxe.ValueString() == "" {
+		return fmt.Errorf("operating_system = \"ipxe\" requires the ipxe attribute to be set (URL or base64-encoded script)")
+	}
+	return nil
 }
 
 // inPlaceFieldsChanged reports whether billing, tags or project differ between
