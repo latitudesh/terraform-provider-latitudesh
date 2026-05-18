@@ -389,7 +389,7 @@ func (r *ServerResource) Configure(ctx context.Context, req resource.ConfigureRe
 	r.defaultProject = deps.DefaultProject
 }
 
-func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string, diags *diag.Diagnostics, operation string, configuredTimeout time.Duration) {
+func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string, diags *diag.Diagnostics, operation string, configuredTimeout time.Duration, requireTransition bool) {
 	// Configs
 	timeout := configuredTimeout
 	pollInterval := 30 * time.Second
@@ -505,7 +505,8 @@ func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string
 			sawTransition = true
 		}
 
-		if terminal, success := isReinstallTerminal(initialStatus, status, sawTransition); terminal {
+		effectiveTransition := sawTransition || !requireTransition
+		if terminal, success := isReinstallTerminal(initialStatus, status, effectiveTransition); terminal {
 			if success {
 				if enableDebug {
 					fmt.Fprintf(os.Stderr, "[DEBUG] Server %s completed successfully (status: on)\n", operation)
@@ -705,7 +706,7 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "creation", createTimeout)
+	r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "creation", createTimeout, false)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -794,7 +795,7 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		}
 
 		// Wait for server to be ready after reinstall
-		r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "reinstall", updateTimeout)
+		r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "reinstall", updateTimeout, true)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -812,7 +813,7 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 				return
 			}
 
-			r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "post-reinstall update", updateTimeout)
+			r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "post-reinstall update", updateTimeout, false)
 			if resp.Diagnostics.HasError() {
 				return
 			}
@@ -849,7 +850,7 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		// Wait for server to be ready after in-place update
 		// The API may trigger a redeployment for certain changes, so we need
 		// to wait for the server to reach "on" status before reading state
-		r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "update", updateTimeout)
+		r.waitForServerReady(ctx, data.ID.ValueString(), &resp.Diagnostics, "update", updateTimeout, false)
 		if resp.Diagnostics.HasError() {
 			return
 		}
