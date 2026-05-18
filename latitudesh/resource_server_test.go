@@ -1090,6 +1090,7 @@ func TestIsReinstallTerminal(t *testing.T) {
 		{"reinstall: on -> deploying", "on", "deploying", true, false, false},
 		{"reinstall: on -> deploying -> on", "on", "on", true, true, true},
 		{"reinstall: on -> deploying -> failed", "on", "failed_deployment", true, true, false},
+		{"reinstall: on -> disk_erasing -> failed disk", "on", "failed_disk_erasing", true, true, false},
 
 		// Reinstall from failed_deployment (the race Andrew hit): initial=failed_deployment
 		{"reinstall: stale failed_deployment, no transition (race)", "failed_deployment", "failed_deployment", false, false, false},

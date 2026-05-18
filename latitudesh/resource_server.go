@@ -880,11 +880,11 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 // here surfaces the misconfiguration before any API call is made.
 //
 // Unknown values are skipped — the check re-runs once Terraform resolves them.
-func requiresIpxeAttribute(os, ipxe types.String) error {
-	if os.IsNull() || os.IsUnknown() {
+func requiresIpxeAttribute(operatingSystem, ipxe types.String) error {
+	if operatingSystem.IsNull() || operatingSystem.IsUnknown() {
 		return nil
 	}
-	if os.ValueString() != "ipxe" {
+	if operatingSystem.ValueString() != "ipxe" {
 		return nil
 	}
 	if ipxe.IsUnknown() {
