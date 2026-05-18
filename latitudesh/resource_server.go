@@ -258,6 +258,17 @@ func (r *ServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 		return
 	}
 
+	// Plan-time guard: operating_system = "ipxe" requires the ipxe attribute.
+	// Catches misconfiguration before any API call (API otherwise returns 422).
+	if err := requiresIpxeAttribute(plan.OperatingSystem, plan.Ipxe); err != nil {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("ipxe"),
+			"Missing iPXE script",
+			err.Error(),
+		)
+		return
+	}
+
 	// Centralize reinstall diagnostics here (only during plan, not during apply)
 	if !req.State.Raw.IsNull() && !isApplyPhase {
 		// Resolve effective allow_reinstall from the planned value (UseStateForUnknown
