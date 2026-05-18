@@ -141,7 +141,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"ipxe": schema.StringAttribute{
-				MarkdownDescription: "URL where iPXE script is stored on, OR the iPXE script encoded in base64",
+				MarkdownDescription: "The iPXE script to boot. Accepts either a URL pointing at the script, or the script encoded in base64. Required when `operating_system = \"ipxe\"`; the plan fails with an explicit error if it is missing. Updating ipxe requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.",
 				Optional:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
