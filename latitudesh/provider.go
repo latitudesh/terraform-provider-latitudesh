@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"sync"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -113,8 +114,9 @@ func (p *latitudeshProvider) Configure(ctx context.Context, req provider.Configu
 	project := data.Project.ValueString()
 
 	providerContext := &iprovider.ProviderContext{
-		Client:  sdkClient,
-		Project: project,
+		Client:            sdkClient,
+		Project:           project,
+		UserDataHashCache: &sync.Map{},
 	}
 
 	resp.ResourceData = providerContext

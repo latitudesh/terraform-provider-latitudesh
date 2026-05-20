@@ -4,10 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -18,13 +22,28 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/planmodifiers"
 	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/validators"
 )
+
+// validReinstallTriggers lists the trigger names accepted in
+// allowed_reinstall_triggers. The token "user_data" covers both ID changes and
+// content changes (the latter detected through the user_data_content_hash
+// shadow attribute).
+var validReinstallTriggers = []string{
+	"operating_system",
+	"user_data",
+	"raid",
+	"ipxe",
+	"ssh_keys",
+	"hostname",
+}
 
 var _ resource.Resource = &ServerResource{}
 var _ resource.ResourceWithImportState = &ServerResource{}
@@ -37,30 +56,33 @@ func NewServerResource() resource.Resource {
 type ServerResource struct {
 	client         *latitudeshgosdk.Latitudesh
 	defaultProject string
+	hashCache      *sync.Map
 }
 
 type ServerResourceModel struct {
-	ID              types.String `tfsdk:"id"`
-	Project         types.String `tfsdk:"project"`
-	Site            types.String `tfsdk:"site"`
-	Plan            types.String `tfsdk:"plan"`
-	OperatingSystem types.String `tfsdk:"operating_system"`
-	Hostname        types.String `tfsdk:"hostname"`
-	SSHKeys         types.List   `tfsdk:"ssh_keys"`
-	UserData        types.String `tfsdk:"user_data"`
-	Raid            types.String `tfsdk:"raid"`
-	Ipxe            types.String `tfsdk:"ipxe"`
-	Billing         types.String `tfsdk:"billing"`
-	Tags            types.List   `tfsdk:"tags"`
-	AllowReinstall  types.Bool   `tfsdk:"allow_reinstall"`
-	PrimaryIpv4     types.String `tfsdk:"primary_ipv4"`
-	PrimaryIpv6     types.String `tfsdk:"primary_ipv6"`
-	Status          types.String `tfsdk:"status"`
-	Locked          types.Bool   `tfsdk:"locked"`
-	CreatedAt       types.String `tfsdk:"created_at"`
-	Region          types.String `tfsdk:"region"`
-	Interfaces      types.List   `tfsdk:"interfaces"`
-	Timeouts        timeouts.Value `tfsdk:"timeouts"`
+	ID                       types.String   `tfsdk:"id"`
+	Project                  types.String   `tfsdk:"project"`
+	Site                     types.String   `tfsdk:"site"`
+	Plan                     types.String   `tfsdk:"plan"`
+	OperatingSystem          types.String   `tfsdk:"operating_system"`
+	Hostname                 types.String   `tfsdk:"hostname"`
+	SSHKeys                  types.List     `tfsdk:"ssh_keys"`
+	UserData                 types.String   `tfsdk:"user_data"`
+	UserDataContentHash      types.String   `tfsdk:"user_data_content_hash"`
+	AllowedReinstallTriggers types.List     `tfsdk:"allowed_reinstall_triggers"`
+	Raid                     types.String   `tfsdk:"raid"`
+	Ipxe                     types.String   `tfsdk:"ipxe"`
+	Billing                  types.String   `tfsdk:"billing"`
+	Tags                     types.List     `tfsdk:"tags"`
+	AllowReinstall           types.Bool     `tfsdk:"allow_reinstall"`
+	PrimaryIpv4              types.String   `tfsdk:"primary_ipv4"`
+	PrimaryIpv6              types.String   `tfsdk:"primary_ipv6"`
+	Status                   types.String   `tfsdk:"status"`
+	Locked                   types.Bool     `tfsdk:"locked"`
+	CreatedAt                types.String   `tfsdk:"created_at"`
+	Region                   types.String   `tfsdk:"region"`
+	Interfaces               types.List     `tfsdk:"interfaces"`
+	Timeouts                 timeouts.Value `tfsdk:"timeouts"`
 }
 
 func (r *ServerResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -162,10 +184,26 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Optional:            true,
 			},
 			"allow_reinstall": schema.BoolAttribute{
-				MarkdownDescription: "Allow server reinstallation when operating_system, hostname, ssh_keys, user_data, raid, or ipxe changes. Defaults to false. When false, hostname changes are applied in-place via PATCH and any other reinstall-only field change fails the plan with an explicit error.",
+				MarkdownDescription: "Allow server reinstallation when `operating_system`, `hostname`, `ssh_keys`, `user_data` (ID or content), `raid`, or `ipxe` changes. Defaults to `false`. When `false`, `hostname` changes are applied in-place via PATCH and any other reinstall-only field change fails the plan with an explicit error. See `allowed_reinstall_triggers` to restrict which kinds of changes are permitted to cause a reinstall.",
 				Optional:            true,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
+			},
+			"allowed_reinstall_triggers": schema.ListAttribute{
+				MarkdownDescription: "Optional list restricting which field changes are allowed to trigger a server reinstall when `allow_reinstall = true`. When omitted, all reinstall-only field changes trigger a reinstall (existing behavior). When set, only listed names cause a reinstall; changes to reinstall-only fields not in the list fail the plan, except `hostname` which falls back to in-place PATCH. Valid values: `operating_system`, `user_data`, `raid`, `ipxe`, `ssh_keys`, `hostname`. The token `user_data` covers both ID changes and content changes of the referenced user_data resource.",
+				Optional:            true,
+				ElementType:         types.StringType,
+				Validators: []validator.List{
+					listvalidator.ValueStringsAre(stringvalidator.OneOf(validReinstallTriggers...)),
+					listvalidator.UniqueValues(),
+				},
+			},
+			"user_data_content_hash": schema.StringAttribute{
+				MarkdownDescription: "SHA256 hex digest of the user_data `content` currently tracked for this server. Maintained automatically by the provider; a change in this value triggers a server reinstall when `allow_reinstall = true` and `user_data` is an allowed reinstall trigger.",
+				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"primary_ipv4": schema.StringAttribute{
 				MarkdownDescription: "Primary IPv4 address of the server",
@@ -269,6 +307,23 @@ func (r *ServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 		return
 	}
 
+	// Resolve the planned user_data_content_hash from the in-run cache (populated
+	// by latitudesh_user_data.ModifyPlan) or via a direct API GET. This is what
+	// surfaces user_data content changes to the reinstall logic in a single apply
+	// without the customer having to wire the hash explicitly. When user_data is
+	// unknown (e.g. referencing a not-yet-created user_data) the field stays
+	// "(known after apply)" and falls through to normal computed propagation.
+	if !plan.UserData.IsNull() && !plan.UserData.IsUnknown() {
+		liveHash := r.resolveUserDataContentHash(ctx, plan.UserData.ValueString())
+		if liveHash != "" {
+			plan.UserDataContentHash = types.StringValue(liveHash)
+			resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+		}
+	}
+
 	// Centralize reinstall diagnostics here (only during plan, not during apply)
 	if !req.State.Raw.IsNull() && !isApplyPhase {
 		// Resolve effective allow_reinstall from the planned value (UseStateForUnknown
@@ -276,6 +331,17 @@ func (r *ServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 		allowReinstall := false
 		if !plan.AllowReinstall.IsNull() && !plan.AllowReinstall.IsUnknown() {
 			allowReinstall = plan.AllowReinstall.ValueBool()
+		}
+
+		// Extract allowed_reinstall_triggers (nil/empty when unset).
+		var allowedTriggers []string
+		allowedTriggersSet := false
+		if !plan.AllowedReinstallTriggers.IsNull() && !plan.AllowedReinstallTriggers.IsUnknown() {
+			allowedTriggersSet = true
+			resp.Diagnostics.Append(plan.AllowedReinstallTriggers.ElementsAs(ctx, &allowedTriggers, false)...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
 		}
 
 		// Reinstall-only triggers: API has no in-place path for these.
@@ -286,7 +352,15 @@ func (r *ServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 				reinstallOnlyReasons = append(reinstallOnlyReasons, "operating_system")
 			}
 		}
-		if !state.UserData.Equal(plan.UserData) && (!state.UserData.IsNull() || !plan.UserData.IsNull()) {
+		// user_data reason covers both ID change and content change (detected via
+		// the content hash). Single token so the customer-facing name matches the
+		// schema attribute.
+		userDataIDChanged := !state.UserData.Equal(plan.UserData) && (!state.UserData.IsNull() || !plan.UserData.IsNull())
+		userDataContentChanged := state.UserData.Equal(plan.UserData) &&
+			!plan.UserDataContentHash.IsNull() && !plan.UserDataContentHash.IsUnknown() &&
+			!state.UserDataContentHash.IsNull() &&
+			state.UserDataContentHash.ValueString() != plan.UserDataContentHash.ValueString()
+		if userDataIDChanged || userDataContentChanged {
 			reinstallOnlyReasons = append(reinstallOnlyReasons, "user_data")
 		}
 		if !state.Raid.Equal(plan.Raid) && (!state.Raid.IsNull() || !plan.Raid.IsNull()) {
@@ -304,7 +378,52 @@ func (r *ServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 			state.Hostname.ValueString() != plan.Hostname.ValueString()
 
 		switch {
-		case allowReinstall:
+		case !allowReinstall:
+			// allow_reinstall = false: hard-block all reinstall-only changes
+			// regardless of allowed_reinstall_triggers.
+			if len(reinstallOnlyReasons) > 0 {
+				resp.Diagnostics.AddError(
+					"Server Reinstall Required",
+					fmt.Sprintf("%s changes require a server reinstall, but allow_reinstall is false. "+
+						"Set allow_reinstall = true on this resource to allow the reinstall, or revert the change.",
+						strings.Join(reinstallOnlyReasons, ", ")),
+				)
+				return
+			}
+		case allowedTriggersSet:
+			// List-restricted reinstall. Reinstall-only fields not in the list
+			// hard-block; hostname not in the list falls back to in-place PATCH.
+			var allowedReasons, excludedReasons []string
+			for _, reason := range reinstallOnlyReasons {
+				if slices.Contains(allowedTriggers, reason) {
+					allowedReasons = append(allowedReasons, reason)
+				} else {
+					excludedReasons = append(excludedReasons, reason)
+				}
+			}
+			if len(excludedReasons) > 0 {
+				resp.Diagnostics.AddError(
+					"Server Reinstall Required",
+					fmt.Sprintf("%s change(s) would require a reinstall, but they are not listed in allowed_reinstall_triggers (%v). "+
+						"Either add them to the list or revert the change.",
+						strings.Join(excludedReasons, ", "), allowedTriggers),
+				)
+				return
+			}
+			reasons := append([]string{}, allowedReasons...)
+			if hostnameChanged && slices.Contains(allowedTriggers, "hostname") {
+				reasons = append(reasons, "hostname")
+			}
+			if len(reasons) > 0 {
+				resp.Diagnostics.AddWarning(
+					"Server Reinstall Required",
+					fmt.Sprintf("%s changes will trigger a server reinstall. All data on the server will be lost unless backed up.",
+						strings.Join(reasons, ", ")),
+				)
+			}
+		default:
+			// allow_reinstall = true and no list set: all reinstall-only field
+			// changes trigger reinstall (existing behavior).
 			reasons := append([]string{}, reinstallOnlyReasons...)
 			if hostnameChanged {
 				reasons = append(reasons, "hostname")
@@ -316,14 +435,6 @@ func (r *ServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 						strings.Join(reasons, ", ")),
 				)
 			}
-		case len(reinstallOnlyReasons) > 0:
-			resp.Diagnostics.AddError(
-				"Server Reinstall Required",
-				fmt.Sprintf("%s changes require a server reinstall, but allow_reinstall is false. "+
-					"Set allow_reinstall = true on this resource to allow the reinstall, or revert the change.",
-					strings.Join(reinstallOnlyReasons, ", ")),
-			)
-			return
 		}
 	}
 
@@ -387,6 +498,7 @@ func (r *ServerResource) Configure(ctx context.Context, req resource.ConfigureRe
 	}
 	r.client = deps.Client
 	r.defaultProject = deps.DefaultProject
+	r.hashCache = deps.UserDataHashCache
 }
 
 func (r *ServerResource) waitForServerReady(ctx context.Context, serverID string, diags *diag.Diagnostics, operation string, configuredTimeout time.Duration, requireTransition bool) {
@@ -874,6 +986,57 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
+// resolveUserDataContentHash returns the SHA256 hex digest of the referenced
+// user_data's `content`, preferring the in-run provider cache (populated by
+// latitudesh_user_data.ModifyPlan when the user_data is being managed in the
+// same Terraform run) and falling back to a direct API GET. Intended for use
+// from server.ModifyPlan, where the cache carries the *planned* hash so the
+// cascade is visible in the same apply.
+//
+// Do NOT call this from Read paths: the cache is populated mid-walk by the
+// user_data resource's plan step, which on a unified Read+Plan walk runs
+// *before* the dependent server's Read step. Calling it from Read would
+// silently absorb the planned hash into state and hide the drift from the
+// subsequent ModifyPlan comparison.
+func (r *ServerResource) resolveUserDataContentHash(ctx context.Context, userDataID string) string {
+	if r.hashCache != nil {
+		if cached, ok := r.hashCache.Load(userDataID); ok {
+			if s, isStr := cached.(string); isStr && s != "" {
+				return s
+			}
+		}
+	}
+	return r.fetchUserDataContentHashFromAPI(ctx, userDataID)
+}
+
+// fetchUserDataContentHashFromAPI fetches the referenced user_data from the
+// API and returns the SHA256 hex digest of its `content`, bypassing the in-run
+// cache. Use this from Read paths so refresh-time state reflects the API
+// state and ModifyPlan can later detect drift against the cache. Logs a
+// non-fatal warning on API failures so operators can diagnose silent
+// drift-tracking gaps without the plan being blocked; the framework's
+// UseStateForUnknown on the receiving attribute keeps the last-known value in
+// place when this returns "".
+func (r *ServerResource) fetchUserDataContentHashFromAPI(ctx context.Context, userDataID string) string {
+	if r.client == nil {
+		return ""
+	}
+	result, err := r.client.UserData.Retrieve(ctx, userDataID, nil)
+	if err != nil {
+		tflog.Warn(ctx, "failed to fetch user_data content from API; user_data_content_hash tracking will fall back to the prior state value for this plan",
+			map[string]any{"user_data_id": userDataID, "error": err.Error()})
+		return ""
+	}
+	if result == nil || result.UserDataObject == nil ||
+		result.UserDataObject.Data == nil || result.UserDataObject.Data.Attributes == nil ||
+		result.UserDataObject.Data.Attributes.Content == nil {
+		tflog.Warn(ctx, "user_data API response missing content; user_data_content_hash tracking will fall back to the prior state value for this plan",
+			map[string]any{"user_data_id": userDataID})
+		return ""
+	}
+	return computeContentHash(*result.UserDataObject.Data.Attributes.Content)
+}
+
 // requiresIpxeAttribute returns an error when operating_system is the literal
 // "ipxe" but the ipxe attribute is null or empty. The Latitude API rejects such
 // reinstall requests with a 422 ("ipxe must be informed"); failing the plan
@@ -944,44 +1107,67 @@ func (r *ServerResource) applyEndOfUpdateLock(ctx context.Context, action string
 
 // needsReinstall determines if server needs reinstall based on changed fields.
 // hostname only triggers reinstall when allowReinstall is true; otherwise it
-// stays on the in-place PATCH path.
+// stays on the in-place PATCH path. When the customer sets
+// allowed_reinstall_triggers, reasons not in the list are skipped — they were
+// already hard-blocked at plan time for reinstall-only fields, and hostname
+// silently falls back to the PATCH path.
 func (r *ServerResource) needsReinstall(ctx context.Context, planned *ServerResourceModel, current *ServerResourceModel, allowReinstall bool, diags *diag.Diagnostics) (bool, string) {
+	var allowedTriggers []string
+	allowedTriggersSet := false
+	if !planned.AllowedReinstallTriggers.IsNull() && !planned.AllowedReinstallTriggers.IsUnknown() {
+		allowedTriggersSet = true
+		diags.Append(planned.AllowedReinstallTriggers.ElementsAs(ctx, &allowedTriggers, false)...)
+		if diags.HasError() {
+			return false, ""
+		}
+	}
+	allowed := func(name string) bool {
+		if !allowedTriggersSet {
+			return true
+		}
+		return slices.Contains(allowedTriggers, name)
+	}
+
 	var reasons []string
 
-	if !planned.OperatingSystem.Equal(current.OperatingSystem) {
+	if !planned.OperatingSystem.Equal(current.OperatingSystem) && allowed("operating_system") {
 		reasons = append(reasons, "operating_system")
 	}
 
-	if allowReinstall && !planned.Hostname.Equal(current.Hostname) {
+	if allowReinstall && !planned.Hostname.Equal(current.Hostname) && allowed("hostname") {
 		reasons = append(reasons, "hostname")
 	}
 
 	// Compare SSH keys with proper handling of null vs empty lists
 	sshKeysChanged := false
 	if planned.SSHKeys.IsNull() && !current.SSHKeys.IsNull() {
-		// Planned is null, current is not null
 		sshKeysChanged = true
 	} else if !planned.SSHKeys.IsNull() && current.SSHKeys.IsNull() {
-		// Planned is not null, current is null
 		sshKeysChanged = true
 	} else if !planned.SSHKeys.IsNull() && !current.SSHKeys.IsNull() {
-		// Both are not null, compare values
 		sshKeysChanged = !planned.SSHKeys.Equal(current.SSHKeys)
 	}
 
-	if sshKeysChanged {
+	if sshKeysChanged && allowed("ssh_keys") {
 		reasons = append(reasons, "ssh_keys")
 	}
 
-	if !planned.UserData.Equal(current.UserData) {
+	// user_data covers both ID change and content change (via the content hash
+	// tracked in user_data_content_hash). Both flow under the single token.
+	userDataIDChanged := !planned.UserData.Equal(current.UserData)
+	userDataContentChanged := planned.UserData.Equal(current.UserData) &&
+		!planned.UserDataContentHash.IsNull() && !planned.UserDataContentHash.IsUnknown() &&
+		!current.UserDataContentHash.IsNull() &&
+		planned.UserDataContentHash.ValueString() != current.UserDataContentHash.ValueString()
+	if (userDataIDChanged || userDataContentChanged) && allowed("user_data") {
 		reasons = append(reasons, "user_data")
 	}
 
-	if !planned.Raid.Equal(current.Raid) {
+	if !planned.Raid.Equal(current.Raid) && allowed("raid") {
 		reasons = append(reasons, "raid")
 	}
 
-	if !planned.Ipxe.Equal(current.Ipxe) {
+	if !planned.Ipxe.Equal(current.Ipxe) && allowed("ipxe") {
 		reasons = append(reasons, "ipxe")
 	}
 
@@ -1308,6 +1494,20 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 
 	// Read deploy config to get SSH keys, user data, raid, and ipxe
 	r.readDeployConfig(ctx, data, diags)
+
+	// Populate user_data_content_hash on the first known read (Create-time or
+	// when state was previously null). On refresh of an already-applied server
+	// we preserve the value stored in state so that ModifyPlan can detect
+	// drift between state and the current API content on the next plan; if
+	// readServer overwrote it here the drift would be silently absorbed into
+	// state and the server would never see a planned reinstall.
+	if !data.UserData.IsNull() && !data.UserData.IsUnknown() {
+		if data.UserDataContentHash.IsNull() || data.UserDataContentHash.IsUnknown() {
+			if h := r.fetchUserDataContentHashFromAPI(ctx, data.UserData.ValueString()); h != "" {
+				data.UserDataContentHash = types.StringValue(h)
+			}
+		}
+	}
 }
 
 func (r *ServerResource) readDeployConfig(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) {
