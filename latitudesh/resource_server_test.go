@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
@@ -205,6 +206,15 @@ func TestLockActionFor(t *testing.T) {
 func TestNeedsReinstall(t *testing.T) {
 	t.Parallel()
 
+	triggerList := func(values ...string) types.List {
+		elements := make([]attr.Value, 0, len(values))
+		for _, v := range values {
+			elements = append(elements, types.StringValue(v))
+		}
+		l, _ := types.ListValue(types.StringType, elements)
+		return l
+	}
+
 	cases := []struct {
 		name           string
 		planned        ServerResourceModel
@@ -246,6 +256,84 @@ func TestNeedsReinstall(t *testing.T) {
 			current:        ServerResourceModel{Hostname: types.StringValue("old"), OperatingSystem: types.StringValue("ubuntu_22_04_x64_lts")},
 			allowReinstall: true,
 			want:           true,
+		},
+		{
+			name: "user_data content drift triggers reinstall under user_data reason",
+			planned: ServerResourceModel{
+				Hostname:            types.StringValue("h"),
+				OperatingSystem:     types.StringValue("ubuntu_24_04_x64_lts"),
+				UserData:            types.StringValue("ud_abc"),
+				UserDataContentHash: types.StringValue("dXBkYXRlZA=="),
+			},
+			current: ServerResourceModel{
+				Hostname:            types.StringValue("h"),
+				OperatingSystem:     types.StringValue("ubuntu_24_04_x64_lts"),
+				UserData:            types.StringValue("ud_abc"),
+				UserDataContentHash: types.StringValue("b3JpZ2luYWw="),
+			},
+			allowReinstall: true,
+			want:           true,
+		},
+		{
+			name: "user_data ID change triggers reinstall under user_data reason",
+			planned: ServerResourceModel{
+				Hostname:        types.StringValue("h"),
+				OperatingSystem: types.StringValue("ubuntu_24_04_x64_lts"),
+				UserData:        types.StringValue("ud_new"),
+			},
+			current: ServerResourceModel{
+				Hostname:        types.StringValue("h"),
+				OperatingSystem: types.StringValue("ubuntu_24_04_x64_lts"),
+				UserData:        types.StringValue("ud_old"),
+			},
+			allowReinstall: true,
+			want:           true,
+		},
+		{
+			name: "allowed_reinstall_triggers excludes hostname: hostname change does not reinstall",
+			planned: ServerResourceModel{
+				Hostname:                 types.StringValue("new"),
+				OperatingSystem:          types.StringValue("ubuntu_24_04_x64_lts"),
+				AllowedReinstallTriggers: triggerList("user_data"),
+			},
+			current: ServerResourceModel{
+				Hostname:        types.StringValue("old"),
+				OperatingSystem: types.StringValue("ubuntu_24_04_x64_lts"),
+			},
+			allowReinstall: true,
+			want:           false,
+		},
+		{
+			name: "allowed_reinstall_triggers includes hostname: hostname change reinstalls",
+			planned: ServerResourceModel{
+				Hostname:                 types.StringValue("new"),
+				OperatingSystem:          types.StringValue("ubuntu_24_04_x64_lts"),
+				AllowedReinstallTriggers: triggerList("hostname"),
+			},
+			current: ServerResourceModel{
+				Hostname:        types.StringValue("old"),
+				OperatingSystem: types.StringValue("ubuntu_24_04_x64_lts"),
+			},
+			allowReinstall: true,
+			want:           true,
+		},
+		{
+			name: "allowed_reinstall_triggers excludes user_data: content drift suppressed at apply",
+			planned: ServerResourceModel{
+				Hostname:                 types.StringValue("h"),
+				OperatingSystem:          types.StringValue("ubuntu_24_04_x64_lts"),
+				UserData:                 types.StringValue("ud_abc"),
+				UserDataContentHash:      types.StringValue("dXBkYXRlZA=="),
+				AllowedReinstallTriggers: triggerList("hostname"),
+			},
+			current: ServerResourceModel{
+				Hostname:            types.StringValue("h"),
+				OperatingSystem:     types.StringValue("ubuntu_24_04_x64_lts"),
+				UserData:            types.StringValue("ud_abc"),
+				UserDataContentHash: types.StringValue("b3JpZ2luYWw="),
+			},
+			allowReinstall: true,
+			want:           false,
 		},
 	}
 
@@ -1072,12 +1160,12 @@ func TestIsReinstallTerminal(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name           string
-		initial        string
-		current        string
-		sawTransition  bool
-		wantTerminal   bool
-		wantSuccess    bool
+		name          string
+		initial       string
+		current       string
+		sawTransition bool
+		wantTerminal  bool
+		wantSuccess   bool
 	}{
 		// Fresh creation path: server transitions from provisioning → on
 		{"create: provisioning then on", "provisioning", "on", true, true, true},

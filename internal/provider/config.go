@@ -2,14 +2,16 @@ package latitudesh
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 )
 
 type ProviderDeps struct {
-	Client         *latitudeshgosdk.Latitudesh
-	DefaultProject string
+	Client            *latitudeshgosdk.Latitudesh
+	DefaultProject    string
+	UserDataHashCache *sync.Map
 }
 
 func resolveProviderDeps(pd any) (ProviderDeps, error) {
@@ -19,8 +21,9 @@ func resolveProviderDeps(pd any) (ProviderDeps, error) {
 			return ProviderDeps{}, fmt.Errorf("nil ProviderContext or Client")
 		}
 		return ProviderDeps{
-			Client:         v.Client,
-			DefaultProject: v.Project,
+			Client:            v.Client,
+			DefaultProject:    v.Project,
+			UserDataHashCache: v.UserDataHashCache,
 		}, nil
 	case *latitudeshgosdk.Latitudesh:
 		if v == nil {

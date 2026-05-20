@@ -2,7 +2,10 @@ package latitudesh
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
+	"sync"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -15,16 +18,27 @@ import (
 	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
 
+// computeContentHash returns the SHA256 hex digest of the user_data `content`
+// string (base64 as stored by the API). It backs the cross-resource cascade so
+// dependent latitudesh_server resources can track changes without replicating
+// the raw user_data payload into their own state.
+func computeContentHash(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(sum[:])
+}
+
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &UserDataResource{}
 var _ resource.ResourceWithImportState = &UserDataResource{}
+var _ resource.ResourceWithModifyPlan = &UserDataResource{}
 
 func NewUserDataResource() resource.Resource {
 	return &UserDataResource{}
 }
 
 type UserDataResource struct {
-	client *latitudeshgosdk.Latitudesh
+	client    *latitudeshgosdk.Latitudesh
+	hashCache *sync.Map
 }
 
 type UserDataResourceModel struct {
@@ -79,6 +93,7 @@ func (r *UserDataResource) Configure(ctx context.Context, req resource.Configure
 		return
 	}
 	r.client = deps.Client
+	r.hashCache = deps.UserDataHashCache
 }
 
 func (r *UserDataResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -176,6 +191,34 @@ func (r *UserDataResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// ModifyPlan writes the SHA256 hex digest of the planned user_data content
+// into the provider-level cache keyed by the user_data ID. Dependent
+// latitudesh_server resources read from this cache during their own ModifyPlan
+// so that in-Terraform content changes cascade to a reinstall in the same
+// apply without the customer wiring an explicit reference between the two
+// resources. Storing a hash (rather than the raw base64 content) keeps the
+// server state file small and avoids replicating sensitive cloud-init payloads
+// into each dependent server's state.
+func (r *UserDataResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() {
+		return // destroy
+	}
+
+	var plan UserDataResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if plan.Content.IsNull() || plan.Content.IsUnknown() {
+		return
+	}
+
+	if r.hashCache != nil && !plan.ID.IsNull() && !plan.ID.IsUnknown() {
+		r.hashCache.Store(plan.ID.ValueString(), computeContentHash(plan.Content.ValueString()))
+	}
 }
 
 func (r *UserDataResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
