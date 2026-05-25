@@ -128,4 +128,4 @@ The region must match the value used by the storage endpoint shown on the bucket
 
 **`PreconditionFailed` on lock acquisition** — another Terraform process already holds the lock. Wait for it to finish, or run `terraform force-unlock <lock-id>` if you are certain the previous run is dead.
 
-**State writes succeed but locking seems to do nothing** — verify that you are pointing at a High-performance bucket.
+**State writes succeed but locking seems to do nothing** — verify that you are pointing at a High-performance bucket. Standard buckets do not honor `If-None-Match`, so `use_lockfile = true` becomes a silent no-op.
