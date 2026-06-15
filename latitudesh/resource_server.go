@@ -1508,6 +1508,10 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 			}
 		}
 	}
+
+	if data.UserDataContentHash.IsUnknown() {
+		data.UserDataContentHash = types.StringNull()
+	}
 }
 
 func (r *ServerResource) readDeployConfig(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) {
