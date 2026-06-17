@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -36,20 +37,21 @@ type VirtualMachineResource struct {
 
 // VirtualMachineResourceModel describes the resource data model.
 type VirtualMachineResourceModel struct {
-	ID              types.String `tfsdk:"id"`
-	Name            types.String `tfsdk:"name"`
-	Plan            types.String `tfsdk:"plan"`
-	Project         types.String `tfsdk:"project"`
-	OperatingSystem types.String `tfsdk:"operating_system"`
-	SSHKeys         types.List   `tfsdk:"ssh_keys"`
-	Status          types.String `tfsdk:"status"`
-	PrimaryIPv4     types.String `tfsdk:"primary_ipv4"`
-	CreatedAt       types.String `tfsdk:"created_at"`
-	SSHUser         types.String `tfsdk:"ssh_user"`
-	VCPU            types.Int64  `tfsdk:"vcpu"`
-	RAM             types.String `tfsdk:"ram"`
-	Storage         types.String `tfsdk:"storage"`
-	GPU             types.String `tfsdk:"gpu"`
+	ID              types.String   `tfsdk:"id"`
+	Name            types.String   `tfsdk:"name"`
+	Plan            types.String   `tfsdk:"plan"`
+	Project         types.String   `tfsdk:"project"`
+	OperatingSystem types.String   `tfsdk:"operating_system"`
+	SSHKeys         types.List     `tfsdk:"ssh_keys"`
+	Status          types.String   `tfsdk:"status"`
+	PrimaryIPv4     types.String   `tfsdk:"primary_ipv4"`
+	CreatedAt       types.String   `tfsdk:"created_at"`
+	SSHUser         types.String   `tfsdk:"ssh_user"`
+	VCPU            types.Int64    `tfsdk:"vcpu"`
+	RAM             types.String   `tfsdk:"ram"`
+	Storage         types.String   `tfsdk:"storage"`
+	GPU             types.String   `tfsdk:"gpu"`
+	Timeouts        timeouts.Value `tfsdk:"timeouts"`
 }
 
 func (r *VirtualMachineResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -141,6 +143,9 @@ func (r *VirtualMachineResource) Schema(ctx context.Context, req resource.Schema
 				MarkdownDescription: "GPU information, if any",
 				Computed:            true,
 			},
+			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
+				Create: true,
+			}),
 		},
 	}
 }
@@ -224,14 +229,26 @@ func (r *VirtualMachineResource) Create(ctx context.Context, req resource.Create
 	data.ID = types.StringValue(id)
 	data.Project = types.StringValue(project)
 
-	// Persist the ID before the (potentially long) wait so the VM is tracked in
-	// state even if polling times out; otherwise it leaks as an orphan.
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	// Persist the ID and resolved project before the (potentially long) wait so
+	// the VM is tracked in state even if polling times out; otherwise it leaks as
+	// an orphan. Only known values are written here: the computed attributes
+	// (status, primary_ipv4, created_at, ssh_user, vcpu, ram, storage, gpu) are
+	// still unknown at this point, and writing unknown values to state makes
+	// Terraform reject the apply with "Provider returned invalid result object
+	// after apply".
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), id)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project"), project)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	r.waitForVMReady(ctx, id, &resp.Diagnostics)
+	createTimeout, diags := data.Timeouts.Create(ctx, 10*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	r.waitForVMReady(ctx, id, createTimeout, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -337,11 +354,8 @@ func (r *VirtualMachineResource) ImportState(ctx context.Context, req resource.I
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func (r *VirtualMachineResource) waitForVMReady(ctx context.Context, id string, diags *diag.Diagnostics) {
-	const (
-		timeout      = 10 * time.Minute
-		pollInterval = 15 * time.Second
-	)
+func (r *VirtualMachineResource) waitForVMReady(ctx context.Context, id string, timeout time.Duration, diags *diag.Diagnostics) {
+	const pollInterval = 15 * time.Second
 
 	deadline := time.Now().Add(timeout)
 	lastStatus := ""
@@ -349,7 +363,16 @@ func (r *VirtualMachineResource) waitForVMReady(ctx context.Context, id string, 
 	for time.Now().Before(deadline) {
 		result, err := r.client.VirtualMachines.Get(ctx, id)
 		if err != nil {
-			// Tolerate transient errors and keep polling until the deadline.
+			// A 404 right after create (VM not queryable yet) and 5xx responses are
+			// transient: keep polling. Other API errors (401/403/422/...) will not
+			// resolve by waiting, so fail immediately instead of burning the full
+			// timeout budget. Network errors are not *APIError and fall through to
+			// the retry path below.
+			var apiErr *components.APIError
+			if errors.As(err, &apiErr) && apiErr.StatusCode != http.StatusNotFound && apiErr.StatusCode < 500 {
+				diags.AddError("Client Error", "Unable to check virtual machine status: "+err.Error())
+				return
+			}
 			select {
 			case <-ctx.Done():
 				diags.AddError("Client Error", "Context cancelled while waiting for virtual machine to be ready: "+ctx.Err().Error())

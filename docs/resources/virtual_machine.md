@@ -46,6 +46,7 @@ The resource waits for the virtual machine to reach a running state with a prima
 - `operating_system` (String) The operating system slug. If not specified, the API defaults to `ubuntu-24-04` for CPU plans or `ubuntu24_ml_in_a_box` for GPU plans. Changing this forces a new resource.
 - `project` (String) The project (ID or slug) to deploy the virtual machine. If not set, the provider-level `project` is used. Changing this forces a new resource.
 - `ssh_keys` (List of String) List of SSH key IDs to add to the virtual machine. Changing this forces a new resource.
+- `timeouts` (Block, Optional) Configurable timeouts for virtual machine operations. (see [nested schema below](#nestedblock--timeouts))
 
 ### Read-Only
 
@@ -58,6 +59,12 @@ The resource waits for the virtual machine to reach a running state with a prima
 - `status` (String) Virtual machine status.
 - `storage` (String) Amount of storage.
 - `vcpu` (Number) Number of vCPUs.
+
+### Nested Schema for `timeouts`
+
+Optional:
+
+- `create` (String) Timeout for virtual machine creation, which waits until the VM is running with a primary IPv4. Default: 10 minutes. Example: "15m", "1h"
 
 ## Import
 
