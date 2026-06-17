@@ -165,7 +165,7 @@ func (r *VirtualMachineResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	project := data.Project.ValueString()
+	project := ""
 	if !data.Project.IsNull() && !data.Project.IsUnknown() && data.Project.ValueString() != "" {
 		project = data.Project.ValueString()
 	} else if r.defaultProject != "" {
@@ -274,20 +274,28 @@ func (r *VirtualMachineResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	id := data.ID.ValueString()
+	// Load the existing ID from state; desired attributes come from the plan.
+	var id types.String
+	resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("id"), &id)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	data.ID = id
+
+	idStr := id.ValueString()
 	name := data.Name.ValueString()
 
 	updatePayload := components.VirtualMachineUpdatePayload{
 		Data: components.VirtualMachineUpdatePayloadData{
 			Type: components.VirtualMachineUpdatePayloadTypeVirtualMachines,
-			ID:   &id,
+			ID:   &idStr,
 			Attributes: components.VirtualMachineUpdatePayloadAttributes{
 				Name: name,
 			},
 		},
 	}
 
-	_, err := r.client.VirtualMachines.UpdateVirtualMachine(ctx, id, updatePayload)
+	_, err := r.client.VirtualMachines.UpdateVirtualMachine(ctx, idStr, updatePayload)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to update virtual machine, got error: "+err.Error())
 		return
