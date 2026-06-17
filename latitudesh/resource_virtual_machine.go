@@ -21,7 +21,6 @@ import (
 	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
 
-// Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &VirtualMachineResource{}
 var _ resource.ResourceWithImportState = &VirtualMachineResource{}
 
@@ -225,8 +224,13 @@ func (r *VirtualMachineResource) Create(ctx context.Context, req resource.Create
 	data.ID = types.StringValue(id)
 	data.Project = types.StringValue(project)
 
-	// Wait for the VM to reach a running state so primary_ipv4 is populated and
-	// usable by dependent resources in the same apply.
+	// Persist the ID before the (potentially long) wait so the VM is tracked in
+	// state even if polling times out; otherwise it leaks as an orphan.
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	r.waitForVMReady(ctx, id, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -270,8 +274,6 @@ func (r *VirtualMachineResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	// Only the name (hostname) can be updated in place; all other fields force
-	// replacement via plan modifiers.
 	id := data.ID.ValueString()
 	name := data.Name.ValueString()
 
@@ -327,9 +329,6 @@ func (r *VirtualMachineResource) ImportState(ctx context.Context, req resource.I
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-// waitForVMReady polls the VM until it reports a "Running" status with a primary
-// IPv4 address, or the timeout elapses. Transient errors are tolerated with a
-// short backoff.
 func (r *VirtualMachineResource) waitForVMReady(ctx context.Context, id string, diags *diag.Diagnostics) {
 	const (
 		timeout      = 10 * time.Minute
@@ -426,9 +425,6 @@ func (r *VirtualMachineResource) readVirtualMachine(ctx context.Context, data *V
 		data.CreatedAt = types.StringValue(*a.CreatedAt)
 	}
 
-	// operating_system and plan are slugs/IDs in config; the API echoes them back
-	// in a normalized form that may not match. Only populate these from the API
-	// when there is no prior value (e.g. on import) to avoid spurious diffs.
 	if (data.OperatingSystem.IsNull() || data.OperatingSystem.IsUnknown()) && a.OperatingSystem != nil && a.OperatingSystem.Slug != nil {
 		data.OperatingSystem = types.StringValue(*a.OperatingSystem.Slug)
 	}
@@ -479,8 +475,6 @@ func (r *VirtualMachineResource) readVirtualMachine(ctx context.Context, data *V
 		data.GPU = types.StringNull()
 	}
 
-	// ssh_keys is write-only at create time; the API read does not return the
-	// input key IDs, so preserve the configured value (leave null on import).
 	if data.SSHKeys.IsUnknown() {
 		data.SSHKeys = types.ListNull(types.StringType)
 	}

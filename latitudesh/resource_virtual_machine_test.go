@@ -78,6 +78,20 @@ func TestAccVirtualMachine_Import(t *testing.T) {
 }
 
 func testAccCheckVirtualMachineDestroy(s *terraform.State) error {
+	client := createVCRClient(nil)
+	ctx := context.Background()
+
+	for _, rs := range s.RootModule().Resources {
+		if rs.Type != "latitudesh_virtual_machine" {
+			continue
+		}
+
+		resp, err := client.VirtualMachines.Get(ctx, rs.Primary.ID)
+		if err == nil && resp.VirtualMachine != nil && resp.VirtualMachine.Data != nil {
+			return fmt.Errorf("virtual machine %s still exists", rs.Primary.ID)
+		}
+	}
+
 	return nil
 }
 
