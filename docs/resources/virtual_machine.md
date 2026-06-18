@@ -19,8 +19,8 @@ resource "latitudesh_ssh_key" "ssh_key" {
 
 resource "latitudesh_virtual_machine" "bastion" {
   name             = "bastion"
-  plan             = "vm-shared-1c-1g"
-  operating_system = "ubuntu-24-04"
+  plan             = "vm-small"
+  operating_system = "ubuntu_24_04_x64_lts"
   ssh_keys         = [latitudesh_ssh_key.ssh_key.id]
 }
 
@@ -43,7 +43,7 @@ The resource waits for the virtual machine to reach a running state with a prima
 ### Optional
 
 - `name` (String) The virtual machine name (hostname). Defaults to `my-vm` if not set.
-- `operating_system` (String) The operating system slug. If not specified, the API defaults to `ubuntu-24-04` for CPU plans or `ubuntu24_ml_in_a_box` for GPU plans. Changing this forces a new resource.
+- `operating_system` (String) The operating system slug. If not specified, the API defaults to `ubuntu_24_04_x64_lts`. Changing this forces a new resource.
 - `project` (String) The project (ID or slug) to deploy the virtual machine. If not set, the provider-level `project` is used. Changing this forces a new resource.
 - `ssh_keys` (List of String) List of SSH key IDs to add to the virtual machine. Changing this forces a new resource.
 - `timeouts` (Block, Optional) Configurable timeouts for virtual machine operations. (see [nested schema below](#nestedblock--timeouts))
@@ -51,7 +51,6 @@ The resource waits for the virtual machine to reach a running state with a prima
 ### Read-Only
 
 - `created_at` (String) The timestamp for when the virtual machine was created.
-- `gpu` (String) GPU information, if any.
 - `id` (String) The ID of this resource.
 - `primary_ipv4` (String) The primary IPv4 address of the virtual machine.
 - `ram` (String) Amount of RAM.
@@ -77,6 +76,8 @@ The `latitudesh_virtual_machine` resource can be imported by specifying the virt
 ```sh
 terraform import latitudesh_virtual_machine.bastion <VIRTUAL_MACHINE_ID>
 ```
+
+> **Note:** The read API returns the `plan` as its identifier, not the slug. After importing, set `plan` in your configuration to the plan **ID** to avoid a spurious diff. Because `plan` forces a new resource, a slug-vs-ID mismatch would otherwise be planned as a destroy-and-recreate. `ssh_keys` are not returned by the read API and must be re-declared in configuration.
 
 **Import Block (Experimental)**
 

@@ -50,7 +50,6 @@ type VirtualMachineResourceModel struct {
 	VCPU            types.Int64    `tfsdk:"vcpu"`
 	RAM             types.String   `tfsdk:"ram"`
 	Storage         types.String   `tfsdk:"storage"`
-	GPU             types.String   `tfsdk:"gpu"`
 	Timeouts        timeouts.Value `tfsdk:"timeouts"`
 }
 
@@ -95,7 +94,7 @@ func (r *VirtualMachineResource) Schema(ctx context.Context, req resource.Schema
 				},
 			},
 			"operating_system": schema.StringAttribute{
-				MarkdownDescription: "The operating system slug for the virtual machine. If not specified, the API defaults to `ubuntu-24-04` for CPU plans or `ubuntu24_ml_in_a_box` for GPU plans. Changing this forces a new resource.",
+				MarkdownDescription: "The operating system slug for the virtual machine. If not specified, the API defaults to `ubuntu_24_04_x64_lts`. Changing this forces a new resource.",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
@@ -137,10 +136,6 @@ func (r *VirtualMachineResource) Schema(ctx context.Context, req resource.Schema
 			},
 			"storage": schema.StringAttribute{
 				MarkdownDescription: "Amount of storage",
-				Computed:            true,
-			},
-			"gpu": schema.StringAttribute{
-				MarkdownDescription: "GPU information, if any",
 				Computed:            true,
 			},
 			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
@@ -232,7 +227,7 @@ func (r *VirtualMachineResource) Create(ctx context.Context, req resource.Create
 	// Persist the ID and resolved project before the (potentially long) wait so
 	// the VM is tracked in state even if polling times out; otherwise it leaks as
 	// an orphan. Only known values are written here: the computed attributes
-	// (status, primary_ipv4, created_at, ssh_user, vcpu, ram, storage, gpu) are
+	// (status, primary_ipv4, created_at, ssh_user, vcpu, ram, storage) are
 	// still unknown at this point, and writing unknown values to state makes
 	// Terraform reject the apply with "Provider returned invalid result object
 	// after apply".
@@ -355,10 +350,14 @@ func (r *VirtualMachineResource) ImportState(ctx context.Context, req resource.I
 }
 
 func (r *VirtualMachineResource) waitForVMReady(ctx context.Context, id string, timeout time.Duration, diags *diag.Diagnostics) {
-	const pollInterval = 15 * time.Second
+	const (
+		pollInterval         = 15 * time.Second
+		maxConsecutiveErrors = 5
+	)
 
 	deadline := time.Now().Add(timeout)
 	lastStatus := ""
+	consecutiveErrors := 0
 
 	for time.Now().Before(deadline) {
 		result, err := r.client.VirtualMachines.Get(ctx, id)
@@ -373,6 +372,13 @@ func (r *VirtualMachineResource) waitForVMReady(ctx context.Context, id string, 
 				diags.AddError("Client Error", "Unable to check virtual machine status: "+err.Error())
 				return
 			}
+			// Give up once transient errors (5xx, network, or an undecodable status)
+			// repeat too many times in a row, instead of polling until the deadline.
+			consecutiveErrors++
+			if consecutiveErrors >= maxConsecutiveErrors {
+				diags.AddError("Client Error", fmt.Sprintf("Unable to check virtual machine status after %d consecutive attempts, last error: %s", consecutiveErrors, err.Error()))
+				return
+			}
 			select {
 			case <-ctx.Done():
 				diags.AddError("Client Error", "Context cancelled while waiting for virtual machine to be ready: "+ctx.Err().Error())
@@ -381,6 +387,7 @@ func (r *VirtualMachineResource) waitForVMReady(ctx context.Context, id string, 
 				continue
 			}
 		}
+		consecutiveErrors = 0
 
 		if result.VirtualMachine != nil && result.VirtualMachine.Data != nil && result.VirtualMachine.Data.Attributes != nil {
 			attrs := result.VirtualMachine.Data.Attributes
@@ -494,16 +501,10 @@ func (r *VirtualMachineResource) readVirtualMachine(ctx context.Context, data *V
 		} else {
 			data.Storage = types.StringNull()
 		}
-		if a.Specs.Gpu != nil {
-			data.GPU = types.StringValue(*a.Specs.Gpu)
-		} else {
-			data.GPU = types.StringNull()
-		}
 	} else {
 		data.VCPU = types.Int64Null()
 		data.RAM = types.StringNull()
 		data.Storage = types.StringNull()
-		data.GPU = types.StringNull()
 	}
 
 	if data.SSHKeys.IsUnknown() {

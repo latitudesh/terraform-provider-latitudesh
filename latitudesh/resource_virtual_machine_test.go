@@ -2,12 +2,15 @@ package latitudesh
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
+	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 )
 
 const (
@@ -68,10 +71,13 @@ func TestAccVirtualMachine_Import(t *testing.T) {
 				Check:  testAccCheckVirtualMachineExists(resourceName),
 			},
 			{
-				ResourceName:            resourceName,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"ssh_keys"},
+				ResourceName:      resourceName,
+				ImportState:       true,
+				ImportStateVerify: true,
+				// ssh_keys are write-only (not returned by the read API) and the read
+				// API echoes plan as its ID rather than the configured slug, so neither
+				// round-trips through import.
+				ImportStateVerifyIgnore: []string{"ssh_keys", "plan"},
 			},
 		},
 	})
@@ -87,7 +93,16 @@ func testAccCheckVirtualMachineDestroy(s *terraform.State) error {
 		}
 
 		resp, err := client.VirtualMachines.Get(ctx, rs.Primary.ID)
-		if err == nil && resp.VirtualMachine != nil && resp.VirtualMachine.Data != nil {
+		if err != nil {
+			// A 404 means the VM is gone, as expected. Any other error must be
+			// surfaced rather than silently treated as a successful destroy.
+			var apiErr *components.APIError
+			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+				continue
+			}
+			return fmt.Errorf("error checking virtual machine %s destroy: %w", rs.Primary.ID, err)
+		}
+		if resp.VirtualMachine != nil && resp.VirtualMachine.Data != nil {
 			return fmt.Errorf("virtual machine %s still exists", rs.Primary.ID)
 		}
 	}

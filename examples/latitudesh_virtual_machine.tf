@@ -7,8 +7,8 @@ resource "latitudesh_ssh_key" "ssh_key" {
 # OpenVPN install and tunnelling are configured separately, after the VM exists.
 resource "latitudesh_virtual_machine" "bastion" {
   name             = "bastion"
-  plan             = "vm-shared-1c-1g" # VM plan slug or ID
-  operating_system = "ubuntu-24-04"
+  plan             = "vm-small" # VM plan slug or ID
+  operating_system = "ubuntu_24_04_x64_lts"
   project          = latitudesh_project.project.id # ID or slug
   ssh_keys         = [latitudesh_ssh_key.ssh_key.id]
 }
