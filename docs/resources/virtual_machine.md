@@ -77,7 +77,7 @@ The `latitudesh_virtual_machine` resource can be imported by specifying the virt
 terraform import latitudesh_virtual_machine.bastion <VIRTUAL_MACHINE_ID>
 ```
 
-> **Note:** The read API returns the `plan` as its identifier, not the slug. After importing, set `plan` in your configuration to the plan **ID** to avoid a spurious diff. Because `plan` forces a new resource, a slug-vs-ID mismatch would otherwise be planned as a destroy-and-recreate. `ssh_keys` are not returned by the read API and must be re-declared in configuration.
+> **Note:** The read API returns `plan` as its identifier (not the slug) and `project` as its slug (not an ID). After importing, set `plan` to the plan **ID** and `project` to the project **slug** in your configuration to avoid spurious diffs. Because both force a new resource, a slug-vs-ID mismatch would otherwise be planned as a destroy-and-recreate. `ssh_keys` are not returned by the read API and must be re-declared in configuration.
 
 **Import Block (Experimental)**
 

@@ -74,10 +74,11 @@ func TestAccVirtualMachine_Import(t *testing.T) {
 				ResourceName:      resourceName,
 				ImportState:       true,
 				ImportStateVerify: true,
-				// ssh_keys are write-only (not returned by the read API) and the read
-				// API echoes plan as its ID rather than the configured slug, so neither
-				// round-trips through import.
-				ImportStateVerifyIgnore: []string{"ssh_keys", "plan"},
+				// ssh_keys are write-only (not returned by the read API); the read API
+				// echoes plan as its ID rather than the configured slug; and it echoes
+				// project as its slug rather than a configured ID. None of these
+				// round-trip through import, so they are excluded from verification.
+				ImportStateVerifyIgnore: []string{"ssh_keys", "plan", "project"},
 			},
 		},
 	})
