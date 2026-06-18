@@ -142,9 +142,10 @@ With the above, only `user_data` changes (ID or content) cause a reinstall. Chan
 - `allowed_reinstall_triggers` (List of String) Optional list restricting which field changes are allowed to trigger a server reinstall when `allow_reinstall = true`. When omitted, all reinstall-only field changes trigger a reinstall (default behavior). When set, only listed names cause a reinstall; changes to reinstall-only fields not in the list fail the plan with an explicit error, except `hostname` which falls back to its in-place PATCH path. Valid values: `operating_system`, `user_data`, `raid`, `ipxe`, `ssh_keys`, `hostname`. The token `user_data` covers both ID changes and content changes of the referenced `latitudesh_user_data` resource.
 - `billing` (String) The server billing type.
     Accepts hourly and monthly for on demand projects and yearly for reserved projects.
+- `disk_layout` (Attributes List) Custom disk layout made of one or more disk groups, used instead of `raid`. Mutually exclusive with `raid`. Write-only: the server API does not return it on read, so only the configured value is tracked in state. Changing it requires a reinstall and only succeeds when `allow_reinstall = true`. (see [below for nested schema](#nestedatt--disk_layout))
 - `ipxe` (String) The iPXE script to boot. Accepts either a URL pointing at the script, or the script encoded in base64. Required when `operating_system = "ipxe"`; the plan fails with an explicit error if it is missing. Updating ipxe requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.
 - `locked` (Boolean) Lock/unlock the server. A locked server cannot be deleted or updated.
-- `raid` (String) RAID mode for the server. Updating raid requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.
+- `raid` (String) RAID mode for the server. Updating raid requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error. Mutually exclusive with `disk_layout`.
 - `ssh_keys` (List of String) List of server SSH key ids.
     Updating ssh_keys requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.
 - `tags` (List of String) List of server tags
@@ -157,6 +158,20 @@ Optional:
 
 - `create` (String) Timeout for server creation. Default: 30 minutes. Example: "45m", "1h"
 - `update` (String) Timeout for server update (reinstall operations). Default: 30 minutes. Example: "60m", "1h30m"
+
+<a id="nestedatt--disk_layout"></a>
+### Nested Schema for `disk_layout`
+
+Required:
+
+- `count` (Number) Number of disks to include in this group.
+- `role` (String) Role of this disk group: `os`, `storage`, or `raw`.
+
+Optional:
+
+- `filesystem` (String) Filesystem to format this disk group with: `ext4` or `xfs`. Not allowed for the `os` role (the OS installer chooses it).
+- `mount_point` (String) Mount point for this disk group, e.g. `/var/lib`.
+- `raid_level` (String) RAID level for this disk group: `raid-0` or `raid-1`.
 
 ### Read-Only
 
