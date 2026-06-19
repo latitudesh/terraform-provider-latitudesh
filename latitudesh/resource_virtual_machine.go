@@ -302,7 +302,7 @@ func (r *VirtualMachineResource) Update(ctx context.Context, req resource.Update
 			Type: components.VirtualMachineUpdatePayloadTypeVirtualMachines,
 			ID:   &idStr,
 			Attributes: components.VirtualMachineUpdatePayloadAttributes{
-				Name: name,
+				Name: &name,
 			},
 		},
 	}

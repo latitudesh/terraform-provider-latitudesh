@@ -8,6 +8,13 @@ resource "latitudesh_server" "server" {
   billing          = "hourly"                           # Required for on_demand projects: hourly, monthly
   allow_reinstall  = true                               # Allow reinstall for OS/SSH/UserData/RAID/iPXE changes
 
+  # Custom disk layout (alternative to `raid`, mutually exclusive with `raid` and `ipxe`).
+  # One group per disk role; the OS filesystem is always ext4 (managed by the API).
+  # disk_layout = [
+  #   { count = 2, role = "os", raid_level = "raid-1" },
+  #   { count = 2, role = "storage", raid_level = "raid-0", mount_point = "/data" },
+  # ]
+
   timeouts {
     create = "45m"  # Timeout for server creation (default: 30m)
     update = "60m"  # Timeout for server updates/reinstalls (default: 30m)
