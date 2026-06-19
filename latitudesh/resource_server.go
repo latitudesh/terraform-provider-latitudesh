@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -63,16 +62,16 @@ type ServerResource struct {
 }
 
 type ServerResourceModel struct {
-	ID                       types.String   `tfsdk:"id"`
-	Project                  types.String   `tfsdk:"project"`
-	Site                     types.String   `tfsdk:"site"`
-	Plan                     types.String   `tfsdk:"plan"`
-	OperatingSystem          types.String   `tfsdk:"operating_system"`
-	Hostname                 types.String   `tfsdk:"hostname"`
-	SSHKeys                  types.List     `tfsdk:"ssh_keys"`
-	UserData                 types.String   `tfsdk:"user_data"`
-	UserDataContentHash      types.String   `tfsdk:"user_data_content_hash"`
-	AllowedReinstallTriggers types.List     `tfsdk:"allowed_reinstall_triggers"`
+	ID                       types.String      `tfsdk:"id"`
+	Project                  types.String      `tfsdk:"project"`
+	Site                     types.String      `tfsdk:"site"`
+	Plan                     types.String      `tfsdk:"plan"`
+	OperatingSystem          types.String      `tfsdk:"operating_system"`
+	Hostname                 types.String      `tfsdk:"hostname"`
+	SSHKeys                  types.List        `tfsdk:"ssh_keys"`
+	UserData                 types.String      `tfsdk:"user_data"`
+	UserDataContentHash      types.String      `tfsdk:"user_data_content_hash"`
+	AllowedReinstallTriggers types.List        `tfsdk:"allowed_reinstall_triggers"`
 	Raid                     types.String      `tfsdk:"raid"`
 	DiskLayout               []DiskLayoutModel `tfsdk:"disk_layout"`
 	Ipxe                     types.String      `tfsdk:"ipxe"`
@@ -95,7 +94,6 @@ type DiskLayoutModel struct {
 	Count      types.Int64  `tfsdk:"count"`
 	Role       types.String `tfsdk:"role"`
 	RaidLevel  types.String `tfsdk:"raid_level"`
-	Filesystem types.String `tfsdk:"filesystem"`
 	MountPoint types.String `tfsdk:"mount_point"`
 }
 
@@ -177,7 +175,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"disk_layout": schema.ListNestedAttribute{
-				MarkdownDescription: "Custom disk layout made of one or more disk groups, used instead of `raid`. Mutually exclusive with `raid`. This attribute is write-only: the server API does not return it, so it is never refreshed from the API and only the configured value is tracked in state. Changing it triggers a reinstall (requires `allow_reinstall = true`).",
+				MarkdownDescription: "Custom disk layout made of one or more disk groups, used instead of `raid`. Mutually exclusive with `raid` and `ipxe`. The layout is refreshed from the server deploy config on read, so out-of-band changes are detected and imported servers populate it. Changing it triggers a reinstall (requires `allow_reinstall = true`). The OS group's filesystem is always `ext4` (managed by the API) and is not configurable here.",
 				Optional:            true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -198,10 +196,6 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 							Validators: []validator.String{
 								stringvalidator.OneOf("raid-0", "raid-1"),
 							},
-						},
-						"filesystem": schema.StringAttribute{
-							MarkdownDescription: "Filesystem to format this disk group with (ext4, xfs)",
-							Optional:            true,
 						},
 						"mount_point": schema.StringAttribute{
 							MarkdownDescription: "Mount point for this disk group",
@@ -238,7 +232,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Default:             booldefault.StaticBool(false),
 			},
 			"allowed_reinstall_triggers": schema.ListAttribute{
-				MarkdownDescription: "Optional list restricting which field changes are allowed to trigger a server reinstall when `allow_reinstall = true`. When omitted, all reinstall-only field changes trigger a reinstall (existing behavior). When set, only listed names cause a reinstall; changes to reinstall-only fields not in the list fail the plan, except `hostname` which falls back to in-place PATCH. Valid values: `operating_system`, `user_data`, `raid`, `ipxe`, `ssh_keys`, `hostname`. The token `user_data` covers both ID changes and content changes of the referenced user_data resource.",
+				MarkdownDescription: "Optional list restricting which field changes are allowed to trigger a server reinstall when `allow_reinstall = true`. When omitted, all reinstall-only field changes trigger a reinstall (existing behavior). When set, only listed names cause a reinstall; changes to reinstall-only fields not in the list fail the plan, except `hostname` which falls back to in-place PATCH. Valid values: `operating_system`, `user_data`, `raid`, `disk_layout`, `ipxe`, `ssh_keys`, `hostname`. The token `user_data` covers both ID changes and content changes of the referenced user_data resource.",
 				Optional:            true,
 				ElementType:         types.StringType,
 				Validators: []validator.List{
@@ -1600,6 +1594,34 @@ func (r *ServerResource) readDeployConfig(ctx context.Context, data *ServerResou
 		}
 	}
 	// If no SSH keys in API response, leave data.SSHKeys as null (don't set to empty list)
+
+	// Refresh the custom disk layout from the deploy config. The server GET does
+	// not return it, but deploy_config does, so this is the read path that keeps
+	// state in sync and lets imported servers populate disk_layout. The
+	// API-managed filesystem is intentionally ignored (not exposed in the schema).
+	if len(attrs.DiskLayout) > 0 {
+		layout := make([]DiskLayoutModel, 0, len(attrs.DiskLayout))
+		for _, d := range attrs.DiskLayout {
+			m := DiskLayoutModel{
+				Count:      types.Int64Value(d.Count),
+				Role:       types.StringValue(string(d.Role)),
+				RaidLevel:  types.StringNull(),
+				MountPoint: types.StringNull(),
+			}
+			if d.RaidLevel != nil {
+				m.RaidLevel = types.StringValue(string(*d.RaidLevel))
+			}
+			if d.MountPoint != nil {
+				m.MountPoint = types.StringValue(*d.MountPoint)
+			}
+			layout = append(layout, m)
+		}
+		data.DiskLayout = layout
+	} else {
+		// No custom layout on the server (e.g. removed out-of-band). Clear it so
+		// Terraform detects the drift instead of keeping a stale value in state.
+		data.DiskLayout = nil
+	}
 }
 
 func (r *ServerResource) validateTagIDs(ctx context.Context, tagIDs []string) error {
@@ -1668,8 +1690,8 @@ func (r *ServerResource) updateServerTags(ctx context.Context, serverID string, 
 	return nil
 }
 
-// ValidateConfig enforces that raid and disk_layout are mutually exclusive.
-// Both describe the disk configuration and the API accepts only one.
+// ValidateConfig enforces that disk_layout is not combined with raid or ipxe.
+// All describe the disk/boot configuration and the API accepts only one.
 func (r *ServerResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	var data ServerResourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
@@ -1677,11 +1699,74 @@ func (r *ServerResource) ValidateConfig(ctx context.Context, req resource.Valida
 		return
 	}
 
-	if !data.Raid.IsNull() && !data.Raid.IsUnknown() && len(data.DiskLayout) > 0 {
-		resp.Diagnostics.AddError(
-			"Conflicting disk configuration",
-			"raid and disk_layout are mutually exclusive. Set only one of them.",
-		)
+	if len(data.DiskLayout) > 0 {
+		if !data.Raid.IsNull() && !data.Raid.IsUnknown() {
+			resp.Diagnostics.AddError(
+				"Conflicting disk configuration",
+				"raid and disk_layout are mutually exclusive. Set only one of them.",
+			)
+		}
+		if !data.Ipxe.IsNull() && !data.Ipxe.IsUnknown() {
+			resp.Diagnostics.AddError(
+				"Conflicting disk configuration",
+				"ipxe and disk_layout are mutually exclusive. Set only one of them.",
+			)
+		}
+		validateDiskLayoutGroups(data.DiskLayout, &resp.Diagnostics)
+	}
+}
+
+// validateDiskLayoutGroups surfaces the disk_layout structural rules at plan
+// time instead of letting them fail at apply with an API 422. It mirrors the
+// API validation: exactly one os group, at most one storage group, per-group
+// field placement, and count constraints. Checks that depend on unknown
+// (interpolated) values are skipped so they don't produce false errors.
+func validateDiskLayoutGroups(groups []DiskLayoutModel, diags *diag.Diagnostics) {
+	osCount, storageCount := 0, 0
+	rolesKnown := true
+
+	for i, d := range groups {
+		hasRaid := !d.RaidLevel.IsNull() && !d.RaidLevel.IsUnknown()
+		hasMount := !d.MountPoint.IsNull() && !d.MountPoint.IsUnknown() && d.MountPoint.ValueString() != ""
+		countKnown := !d.Count.IsNull() && !d.Count.IsUnknown()
+
+		if countKnown && d.Count.ValueInt64() < 1 {
+			diags.AddError("Invalid disk_layout", fmt.Sprintf("disk_layout[%d]: count must be >= 1.", i))
+		}
+		if hasRaid && countKnown && d.Count.ValueInt64() < 2 {
+			diags.AddError("Invalid disk_layout", fmt.Sprintf("disk_layout[%d]: raid_level requires count >= 2.", i))
+		}
+
+		if d.Role.IsUnknown() {
+			rolesKnown = false
+			continue
+		}
+		switch d.Role.ValueString() {
+		case "os":
+			osCount++
+			if hasMount {
+				diags.AddError("Invalid disk_layout", fmt.Sprintf("disk_layout[%d]: mount_point is not allowed on role \"os\".", i))
+			}
+		case "storage":
+			storageCount++
+			if !hasMount {
+				diags.AddError("Invalid disk_layout", fmt.Sprintf("disk_layout[%d]: mount_point is required on role \"storage\".", i))
+			}
+		case "raw":
+			if hasRaid {
+				diags.AddError("Invalid disk_layout", fmt.Sprintf("disk_layout[%d]: raid_level is not allowed on role \"raw\".", i))
+			}
+			if hasMount {
+				diags.AddError("Invalid disk_layout", fmt.Sprintf("disk_layout[%d]: mount_point is not allowed on role \"raw\".", i))
+			}
+		}
+	}
+
+	if rolesKnown && osCount != 1 {
+		diags.AddError("Invalid disk_layout", "disk_layout must contain exactly one group with role \"os\".")
+	}
+	if rolesKnown && storageCount > 1 {
+		diags.AddError("Invalid disk_layout", "disk_layout must contain at most one group with role \"storage\".")
 	}
 }
 
@@ -1689,10 +1774,18 @@ func (r *ServerResource) ValidateConfig(ctx context.Context, req resource.Valida
 // reinstall-trigger detection for the disk_layout attribute. nil and empty are
 // treated as equal (both mean "no custom layout").
 func diskLayoutChanged(a, b []DiskLayoutModel) bool {
-	if len(a) == 0 && len(b) == 0 {
-		return false
+	if len(a) != len(b) {
+		return true
 	}
-	return !reflect.DeepEqual(a, b)
+	for i := range a {
+		if !a[i].Count.Equal(b[i].Count) ||
+			!a[i].Role.Equal(b[i].Role) ||
+			!a[i].RaidLevel.Equal(b[i].RaidLevel) ||
+			!a[i].MountPoint.Equal(b[i].MountPoint) {
+			return true
+		}
+	}
+	return false
 }
 
 // createServerDiskLayout maps the Terraform disk_layout model to the SDK create
@@ -1708,11 +1801,7 @@ func createServerDiskLayout(in []DiskLayoutModel) []operations.CreateServerDiskL
 			rl := operations.CreateServerRaidLevel(d.RaidLevel.ValueString())
 			entry.RaidLevel = &rl
 		}
-		if !d.Filesystem.IsNull() && !d.Filesystem.IsUnknown() {
-			fs := operations.CreateServerFilesystem(d.Filesystem.ValueString())
-			entry.Filesystem = &fs
-		}
-		if !d.MountPoint.IsNull() && !d.MountPoint.IsUnknown() {
+		if !d.MountPoint.IsNull() && !d.MountPoint.IsUnknown() && d.MountPoint.ValueString() != "" {
 			mp := d.MountPoint.ValueString()
 			entry.MountPoint = &mp
 		}
@@ -1734,11 +1823,7 @@ func reinstallDiskLayout(in []DiskLayoutModel) []operations.CreateServerReinstal
 			rl := operations.CreateServerReinstallServersRaidLevel(d.RaidLevel.ValueString())
 			entry.RaidLevel = &rl
 		}
-		if !d.Filesystem.IsNull() && !d.Filesystem.IsUnknown() {
-			fs := operations.CreateServerReinstallServersFilesystem(d.Filesystem.ValueString())
-			entry.Filesystem = &fs
-		}
-		if !d.MountPoint.IsNull() && !d.MountPoint.IsUnknown() {
+		if !d.MountPoint.IsNull() && !d.MountPoint.IsUnknown() && d.MountPoint.ValueString() != "" {
 			mp := d.MountPoint.ValueString()
 			entry.MountPoint = &mp
 		}

@@ -139,10 +139,10 @@ With the above, only `user_data` changes (ID or content) cause a reinstall. Chan
 ### Optional
 
 - `allow_reinstall` (Boolean) Allow server reinstallation when `operating_system`, `hostname`, `ssh_keys`, `user_data` (ID or content), `raid`, or `ipxe` changes. **Defaults to `false`.** When `false`, `hostname` changes are applied in-place via PATCH and any other reinstall-only field change fails the plan with an explicit error; set this to `true` on resources where you want reinstalls to happen automatically. See `allowed_reinstall_triggers` to further restrict which kinds of changes are permitted to cause a reinstall.
-- `allowed_reinstall_triggers` (List of String) Optional list restricting which field changes are allowed to trigger a server reinstall when `allow_reinstall = true`. When omitted, all reinstall-only field changes trigger a reinstall (default behavior). When set, only listed names cause a reinstall; changes to reinstall-only fields not in the list fail the plan with an explicit error, except `hostname` which falls back to its in-place PATCH path. Valid values: `operating_system`, `user_data`, `raid`, `ipxe`, `ssh_keys`, `hostname`. The token `user_data` covers both ID changes and content changes of the referenced `latitudesh_user_data` resource.
+- `allowed_reinstall_triggers` (List of String) Optional list restricting which field changes are allowed to trigger a server reinstall when `allow_reinstall = true`. When omitted, all reinstall-only field changes trigger a reinstall (default behavior). When set, only listed names cause a reinstall; changes to reinstall-only fields not in the list fail the plan with an explicit error, except `hostname` which falls back to its in-place PATCH path. Valid values: `operating_system`, `user_data`, `raid`, `disk_layout`, `ipxe`, `ssh_keys`, `hostname`. The token `user_data` covers both ID changes and content changes of the referenced `latitudesh_user_data` resource.
 - `billing` (String) The server billing type.
     Accepts hourly and monthly for on demand projects and yearly for reserved projects.
-- `disk_layout` (Attributes List) Custom disk layout made of one or more disk groups, used instead of `raid`. Mutually exclusive with `raid`. Write-only: the server API does not return it on read, so only the configured value is tracked in state. Changing it requires a reinstall and only succeeds when `allow_reinstall = true`. (see [below for nested schema](#nestedatt--disk_layout))
+- `disk_layout` (Attributes List) Custom disk layout made of one or more disk groups, used instead of `raid`. Mutually exclusive with `raid` and `ipxe`. The layout is refreshed from the server deploy config on read, so out-of-band changes are detected and imported servers populate it. Changing it requires a reinstall and only succeeds when `allow_reinstall = true`. The OS group's filesystem is always `ext4` (managed by the API) and is not configurable here. (see [below for nested schema](#nestedatt--disk_layout))
 - `ipxe` (String) The iPXE script to boot. Accepts either a URL pointing at the script, or the script encoded in base64. Required when `operating_system = "ipxe"`; the plan fails with an explicit error if it is missing. Updating ipxe requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.
 - `locked` (Boolean) Lock/unlock the server. A locked server cannot be deleted or updated.
 - `raid` (String) RAID mode for the server. Updating raid requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error. Mutually exclusive with `disk_layout`.
@@ -169,9 +169,8 @@ Required:
 
 Optional:
 
-- `filesystem` (String) Filesystem to format this disk group with: `ext4` or `xfs`. Not allowed for the `os` role (the OS installer chooses it).
-- `mount_point` (String) Mount point for this disk group, e.g. `/var/lib`.
-- `raid_level` (String) RAID level for this disk group: `raid-0` or `raid-1`.
+- `mount_point` (String) Mount point for this disk group, e.g. `/var/lib`. Required for the `storage` role.
+- `raid_level` (String) RAID level for this disk group: `raid-0` or `raid-1`. Requires `count >= 2`.
 
 ### Read-Only
 
