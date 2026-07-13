@@ -65,14 +65,14 @@ func TestValidateUserData(t *testing.T) {
 	}{
 		{"valid with ud_ prefix", "ud_12345", false},
 		{"valid with ud_ and alphanumeric", "ud_abc123def", false},
-		{"valid with ud_ and underscores", "ud_test_user_data", false},
-		{"valid with ud_ and hyphens", "ud_test-user-data", false},
+		{"valid long alphanumeric id", "ud_VeryLongUserDataIdentifierWithManyCharacters123", false},
+		{"invalid with underscores after prefix", "ud_test_user_data", true},
+		{"invalid with hyphens after prefix", "ud_test-user-data", true},
 		{"invalid without prefix", "12345", true},
 		{"invalid with wrong prefix", "user_data_12345", true},
 		{"invalid with partial prefix", "u_12345", true},
 		{"invalid empty string", "", true},
-		{"valid only prefix", "ud_", false}, // Empty after prefix should be valid
-		{"valid long string with prefix", "ud_very_long_user_data_identifier_with_many_characters", false},
+		{"invalid only prefix", "ud_", true},
 	}
 
 	for _, tc := range cases {
