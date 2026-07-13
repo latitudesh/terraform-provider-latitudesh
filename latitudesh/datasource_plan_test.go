@@ -53,7 +53,7 @@ func findAvailableTestPlan(t *testing.T, candidates []string) string {
 
 func TestAccDataSourcePlan(t *testing.T) {
 	if os.Getenv("TF_ACC") == "" {
-		t.Fatalf("TF_ACC must be set for acceptance tests")
+		t.Skip("TF_ACC must be set for acceptance tests")
 	}
 
 	planSlug := findAvailableTestPlan(t, testPlanCandidates)
