@@ -119,6 +119,12 @@ func testGenerateSSHPublicKey(t *testing.T) string {
 func testAccCreateProject(t *testing.T, name string) (string, func()) {
 	t.Helper()
 
+	// This helper provisions a real project with a raw SDK client, which
+	// cannot be served from VCR cassettes.
+	if mode, err := testRecordMode(); err == nil && mode == recorder.ModeReplayOnly {
+		t.Skip("testAccCreateProject requires live API access; not available in VCR replay mode")
+	}
+
 	client := createVCRClient(nil)
 	env := operations.CreateProjectEnvironmentDevelopment
 
