@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	"gopkg.in/dnaeon/go-vcr.v3/recorder"
 )
 
 // Shared acceptance-test fixture: attachment-style tests (VLAN/firewall
@@ -32,6 +33,12 @@ var testSharedFixture struct {
 // invoke it when TF_ACC is set.
 func testAccSharedServers(t *testing.T, n int) (projectID, site string, serverIDs []string) {
 	t.Helper()
+
+	// The fixture provisions real infrastructure with a raw SDK client, which
+	// cannot be served from VCR cassettes.
+	if mode, err := testRecordMode(); err == nil && mode == recorder.ModeReplayOnly {
+		t.Skip("shared server fixture requires live API access; not available in VCR replay mode")
+	}
 
 	f := &testSharedFixture
 	f.mu.Lock()
