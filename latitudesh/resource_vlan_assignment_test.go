@@ -38,6 +38,19 @@ func TestAccVlanAssignment_Basic(t *testing.T) {
 						"latitudesh_virtual_network.test", "id"),
 				),
 			},
+			{
+				// Import using the documented "<PROJECT_ID>:<VLAN_ASSIGNMENT_ID>" format.
+				ResourceName: "latitudesh_vlan_assignment.test",
+				ImportState:  true,
+				ImportStateIdFunc: func(s *terraform.State) (string, error) {
+					rs, ok := s.RootModule().Resources["latitudesh_vlan_assignment.test"]
+					if !ok {
+						return "", fmt.Errorf("resource not found in state")
+					}
+					return projectID + ":" + rs.Primary.ID, nil
+				},
+				ImportStateVerify: true,
+			},
 		},
 	})
 }

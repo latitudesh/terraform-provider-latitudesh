@@ -266,7 +266,20 @@ func (r *VlanAssignmentResource) waitForAssignmentRemoval(ctx context.Context, i
 
 func (r *VlanAssignmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	var data VlanAssignmentResourceModel
-	data.ID = types.StringValue(req.ID)
+
+	// The documented import format is "<PROJECT_ID>:<VLAN_ASSIGNMENT_ID>"; a
+	// bare assignment ID is accepted too. The project part is not needed for
+	// the lookup, so only the assignment ID is kept.
+	id := req.ID
+	if idx := strings.LastIndex(id, ":"); idx >= 0 {
+		id = id[idx+1:]
+	}
+	if id == "" {
+		resp.Diagnostics.AddError("Invalid Import ID",
+			fmt.Sprintf("expected \"<PROJECT_ID>:<VLAN_ASSIGNMENT_ID>\" or \"<VLAN_ASSIGNMENT_ID>\", got: %q", req.ID))
+		return
+	}
+	data.ID = types.StringValue(id)
 
 	r.readVlanAssignment(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
