@@ -538,13 +538,7 @@ func TestAccServer_Locked(t *testing.T) {
 }
 
 func testAccCheckServerLockedWithSite(site string, locked bool) string {
-	return fmt.Sprintf(`
-resource "latitudesh_project" "test" {
-	name              = "tf-acc-server"
-	environment       = "Development"
-	provisioning_type = "on_demand"
-}
-
+	return testAccProjectBlock("tf-acc-server") + fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "hourly"
 	project = latitudesh_project.test.id
@@ -825,13 +819,7 @@ func TestAccServer_ProjectSlugConsistency(t *testing.T) {
 // Config generators with site parameter
 
 func testAccCheckServerBasicWithSite(site string) string {
-	return fmt.Sprintf(`
-resource "latitudesh_project" "test" {
-	name              = "tf-acc-server"
-	environment       = "Development"
-	provisioning_type = "on_demand"
-}
-
+	return testAccProjectBlock("tf-acc-server") + fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
 	project = latitudesh_project.test.id
@@ -849,13 +837,7 @@ resource "latitudesh_server" "test_item" {
 }
 
 func testAccCheckServerUpdateInitialWithSite(site string) string {
-	return fmt.Sprintf(`
-resource "latitudesh_project" "test" {
-	name              = "tf-acc-server"
-	environment       = "Development"
-	provisioning_type = "on_demand"
-}
-
+	return testAccProjectBlock("tf-acc-server") + fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "hourly"
 	project = latitudesh_project.test.id
@@ -872,13 +854,7 @@ resource "latitudesh_server" "test_item" {
 }
 
 func testAccCheckServerUpdateChangedWithSite(site string) string {
-	return fmt.Sprintf(`
-resource "latitudesh_project" "test" {
-	name              = "tf-acc-server"
-	environment       = "Development"
-	provisioning_type = "on_demand"
-}
-
+	return testAccProjectBlock("tf-acc-server") + fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
 	project = latitudesh_project.test.id
@@ -895,13 +871,7 @@ resource "latitudesh_server" "test_item" {
 }
 
 func testAccCheckServerUpdateHostnameWithSite(site string) string {
-	return fmt.Sprintf(`
-resource "latitudesh_project" "test" {
-	name              = "tf-acc-server"
-	environment       = "Development"
-	provisioning_type = "on_demand"
-}
-
+	return testAccProjectBlock("tf-acc-server") + fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
 	project = latitudesh_project.test.id
@@ -919,13 +889,7 @@ resource "latitudesh_server" "test_item" {
 }
 
 func testAccServerConfigWithSSHKeysWithSite(site string) string {
-	return fmt.Sprintf(`
-resource "latitudesh_project" "test" {
-	name              = "tf-acc-server"
-	environment       = "Development"
-	provisioning_type = "on_demand"
-}
-
+	return testAccProjectBlock("tf-acc-server") + fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
 	project = latitudesh_project.test.id
@@ -944,13 +908,7 @@ resource "latitudesh_server" "test_item" {
 }
 
 func testAccCheckServerCustomTimeoutWithSite(site string) string {
-	return fmt.Sprintf(`
-resource "latitudesh_project" "test" {
-	name              = "tf-acc-server"
-	environment       = "Development"
-	provisioning_type = "on_demand"
-}
-
+	return testAccProjectBlock("tf-acc-server") + fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
 	project = latitudesh_project.test.id
@@ -973,13 +931,7 @@ resource "latitudesh_server" "test_item" {
 }
 
 func testAccCheckServerWithProjectSlugWithSite(site string) string {
-	return fmt.Sprintf(`
-resource "latitudesh_project" "test" {
-	name              = "tf-acc-server"
-	environment       = "Development"
-	provisioning_type = "on_demand"
-}
-
+	return testAccProjectBlock("tf-acc-server") + fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
 	project = latitudesh_project.test.slug

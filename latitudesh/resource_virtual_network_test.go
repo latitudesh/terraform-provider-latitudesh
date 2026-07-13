@@ -29,7 +29,7 @@ func TestAccVirtualNetwork_Basic(t *testing.T) {
 
 	// This test exercises the provider-level default project, which cannot
 	// reference a resource from the same config — pre-create it via the API.
-	projectID, cleanup := testAccCreateProject(t, "tf-acc-virtual-network")
+	projectID, cleanup := testAccCreateProject(t, "tf-acc-virtual-network-"+testRunID)
 	defer cleanup()
 
 	resource.Test(t, resource.TestCase{
@@ -144,30 +144,24 @@ func TestAccVirtualNetwork_WithTags(t *testing.T) {
 }
 
 func testAccConfigVirtualNetworkWithTags(desc, site string, tagExprs []string) string {
-	return fmt.Sprintf(`
-resource "latitudesh_project" "test" {
-  name              = "tf-acc-virtual-network-tags"
-  environment       = "Development"
-  provisioning_type = "on_demand"
-}
-
+	return testAccProjectBlock("tf-acc-virtual-network-tags") + fmt.Sprintf(`
 resource "latitudesh_tag" "a" {
-  name  = "tf-acc-vn-tag-a"
+  name  = "tf-acc-vn-tag-a-%[1]s"
   color = "#ff0000"
 }
 
 resource "latitudesh_tag" "b" {
-  name  = "tf-acc-vn-tag-b"
+  name  = "tf-acc-vn-tag-b-%[1]s"
   color = "#00ff00"
 }
 
 resource "latitudesh_virtual_network" "test_item" {
   project     = latitudesh_project.test.id
-  description = "%s"
-  site        = "%s"
-  tags        = [%s]
+  description = "%[2]s"
+  site        = "%[3]s"
+  tags        = [%[4]s]
 }
-`, desc, site, joinComma(tagExprs))
+`, testRunID, desc, site, joinComma(tagExprs))
 }
 
 func joinComma(s []string) string {
@@ -237,13 +231,7 @@ func TestAccVirtualNetwork_InvalidTagFailsBeforePOST(t *testing.T) {
 }
 
 func testAccConfigVirtualNetworkBogusTag(desc, site, bogusTagID string) string {
-	return fmt.Sprintf(`
-resource "latitudesh_project" "test" {
-  name              = "tf-acc-virtual-network-orphan"
-  environment       = "Development"
-  provisioning_type = "on_demand"
-}
-
+	return testAccProjectBlock("tf-acc-virtual-network-orphan") + fmt.Sprintf(`
 resource "latitudesh_virtual_network" "test_item" {
   project     = latitudesh_project.test.id
   description = "%s"

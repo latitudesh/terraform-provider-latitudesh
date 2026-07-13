@@ -27,7 +27,7 @@ func TestAccProject_Basic(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckProjectExists("latitudesh_project.test_item", &project),
 					resource.TestCheckResourceAttr(
-						"latitudesh_project.test_item", "name", "tf-acc-project"),
+						"latitudesh_project.test_item", "name", "tf-acc-project-"+testRunID),
 					resource.TestCheckResourceAttr(
 						"latitudesh_project.test_item", "description", "terraform acceptance test project"),
 				),
@@ -97,12 +97,12 @@ func testAccCheckProjectExists(n string, project *components.Project) resource.T
 }
 
 func testAccCheckProjectBasic() string {
-	return `
+	return fmt.Sprintf(`
 resource "latitudesh_project" "test_item" {
-  name        = "tf-acc-project"
+  name        = "tf-acc-project-%s"
   description = "terraform acceptance test project"
   environment = "Development"
   provisioning_type = "on_demand"
 }
-`
+`, testRunID)
 }

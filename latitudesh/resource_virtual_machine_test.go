@@ -124,13 +124,7 @@ func testAccCheckVirtualMachineExists(n string) resource.TestCheckFunc {
 }
 
 func testAccVirtualMachineBasic(plan string) string {
-	return fmt.Sprintf(`
-resource "latitudesh_project" "test" {
-  name              = "tf-acc-virtual-machine"
-  environment       = "Development"
-  provisioning_type = "on_demand"
-}
-
+	return testAccProjectBlock("tf-acc-virtual-machine") + fmt.Sprintf(`
 resource "latitudesh_virtual_machine" "test_item" {
   name    = %q
   plan    = %q

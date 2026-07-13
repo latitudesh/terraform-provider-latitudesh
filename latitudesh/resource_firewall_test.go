@@ -82,13 +82,7 @@ func testAccCheckFirewallExists(n string, firewall *components.FirewallData) res
 }
 
 func testAccCheckLatitudeFirewallConfig_basic() string {
-	return `
-resource "latitudesh_project" "test" {
-  name              = "tf-acc-firewall"
-  environment       = "Development"
-  provisioning_type = "on_demand"
-}
-
+	return testAccProjectBlock("tf-acc-firewall") + `
 resource "latitudesh_firewall" "test" {
   name = "test-firewall"
   project = latitudesh_project.test.id

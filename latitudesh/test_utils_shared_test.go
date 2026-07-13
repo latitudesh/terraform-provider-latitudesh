@@ -4,13 +4,32 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/acctest"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 	"gopkg.in/dnaeon/go-vcr.v3/recorder"
 )
+
+// testRunID is appended to created resource names: the API rejects duplicate
+// project names, so fixed names collide with parallel runs or with leftovers
+// from aborted ones.
+var testRunID = acctest.RandString(6)
+
+// testAccProjectBlock returns an HCL block creating a run-unique project for
+// self-contained acceptance tests.
+func testAccProjectBlock(prefix string) string {
+	return fmt.Sprintf(`
+resource "latitudesh_project" "test" {
+  name              = "%s-%s"
+  environment       = "Development"
+  provisioning_type = "on_demand"
+}
+`, prefix, testRunID)
+}
 
 // Shared acceptance-test fixture: attachment-style tests (VLAN/firewall
 // assignments, elastic IPs) only need "a server to attach things to", so one
@@ -48,7 +67,7 @@ func testAccSharedServers(t *testing.T, n int) (projectID, site string, serverID
 	ctx := context.Background()
 
 	if f.projectID == "" {
-		id, _ := testAccCreateProject(t, "tf-acc-shared")
+		id, _ := testAccCreateProject(t, "tf-acc-shared-"+testRunID)
 		f.projectID = id
 	}
 
@@ -119,12 +138,23 @@ func testAccWaitServerReady(t *testing.T, serverID string) {
 
 	client := createVCRClient(nil)
 	ctx := context.Background()
-	deadline := time.Now().Add(40 * time.Minute)
+	deadline := time.Now().Add(20 * time.Minute)
+	notFound := 0
 
 	for {
 		response, err := client.Servers.Get(ctx, serverID, nil)
-		if err == nil && response.Server != nil && response.Server.Data != nil &&
+		if err != nil {
+			// A vanished server means the platform gave up on the deploy;
+			// waiting any longer is pointless.
+			if strings.Contains(err.Error(), "404") || strings.Contains(strings.ToLower(err.Error()), "not_found") {
+				notFound++
+				if notFound >= 3 {
+					t.Fatalf("shared fixture: server %s disappeared while deploying (deploy failed on the platform side)", serverID)
+				}
+			}
+		} else if response.Server != nil && response.Server.Data != nil &&
 			response.Server.Data.Attributes != nil && response.Server.Data.Attributes.Status != nil {
+			notFound = 0
 			status := string(*response.Server.Data.Attributes.Status)
 			if status == "on" {
 				return
@@ -132,7 +162,7 @@ func testAccWaitServerReady(t *testing.T, serverID string) {
 			t.Logf("shared fixture: server %s status %s, waiting...", serverID, status)
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("shared fixture: server %s not ready after 40m", serverID)
+			t.Fatalf("shared fixture: server %s not ready after 20m", serverID)
 		}
 		time.Sleep(15 * time.Second)
 	}
