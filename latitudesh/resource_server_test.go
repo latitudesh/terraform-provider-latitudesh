@@ -3,7 +3,6 @@ package latitudesh
 import (
 	"context"
 	"fmt"
-	"os"
 	"regexp"
 	"testing"
 
@@ -18,8 +17,8 @@ import (
 
 const (
 	testServerHostname        = "terraform-ci-test.latitude.sh"
-	testServerPlan            = "c2-small-x86"
-	testServerSite            = "NYC"
+	testServerPlan            = "f4-metal-small"
+	testServerSite            = "AMS"
 	testServerOperatingSystem = "ubuntu_24_04_x64_lts"
 )
 
@@ -455,7 +454,6 @@ func TestAccServer_Update(t *testing.T) {
 		return resource.TestCase{
 			PreCheck: func() {
 				testAccTokenCheck(t)
-				testAccProjectCheck(t)
 			},
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
 			CheckDestroy:             testAccCheckServerDestroy,
@@ -506,7 +504,6 @@ func TestAccServer_Locked(t *testing.T) {
 		return resource.TestCase{
 			PreCheck: func() {
 				testAccTokenCheck(t)
-				testAccProjectCheck(t)
 			},
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
 			CheckDestroy:             testAccCheckServerDestroy,
@@ -542,9 +539,15 @@ func TestAccServer_Locked(t *testing.T) {
 
 func testAccCheckServerLockedWithSite(site string, locked bool) string {
 	return fmt.Sprintf(`
+resource "latitudesh_project" "test" {
+	name              = "tf-acc-server"
+	environment       = "Development"
+	provisioning_type = "on_demand"
+}
+
 resource "latitudesh_server" "test_item" {
 	billing = "hourly"
-	project = "%s"
+	project = latitudesh_project.test.id
 	hostname = "%s"
 	plan     = "%s"
 	site     = "%s"
@@ -552,7 +555,6 @@ resource "latitudesh_server" "test_item" {
 	locked   = %t
 }
 `,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testServerHostname,
 		testServerPlan,
 		site,
@@ -566,7 +568,6 @@ func TestAccServer_IPv6Support(t *testing.T) {
 		return resource.TestCase{
 			PreCheck: func() {
 				testAccTokenCheck(t)
-				testAccProjectCheck(t)
 			},
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
 			CheckDestroy:             testAccCheckServerDestroy,
@@ -599,7 +600,6 @@ func TestAccServer_SSHKeys_NoDrift(t *testing.T) {
 		return resource.TestCase{
 			PreCheck: func() {
 				testAccTokenCheck(t)
-				testAccProjectCheck(t)
 			},
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
 			Steps: []resource.TestStep{
@@ -688,105 +688,24 @@ func testAccCheckServerExists(n string) resource.TestCheckFunc {
 			serverOS = *server.Attributes.OperatingSystem.Slug
 		}
 
+		// The expected project is created in-config as latitudesh_project.test;
+		// the API may report it by ID or slug.
+		expectedProjectID := ""
+		expectedProjectSlug := ""
+		if prj, ok := s.RootModule().Resources["latitudesh_project.test"]; ok {
+			expectedProjectID = prj.Primary.ID
+			expectedProjectSlug = prj.Primary.Attributes["slug"]
+		}
+
 		// Check if server meets all required conditions
 		if (status == "on" || status == "inventory" || status == "deploying") &&
-			serverProjectID == os.Getenv("LATITUDESH_TEST_PROJECT") &&
+			(serverProjectID == expectedProjectID || serverProjectID == expectedProjectSlug) &&
 			serverOS == testServerOperatingSystem {
 			return nil
 		}
 
 		return fmt.Errorf("Server %s does not meet the required conditions", rs.Primary.ID)
 	}
-}
-
-func testAccCheckServerBasic() string {
-	return fmt.Sprintf(`
-resource "latitudesh_server" "test_item" {
-	billing = "monthly"
-	project = "%s"
-  	hostname = "%s"
-	plan     = "%s"
-	site     = "%s"
-	operating_system = "%s"
-}
-`,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
-		testServerHostname,
-		testServerPlan,
-		testServerSite,
-		testServerOperatingSystem,
-	)
-}
-
-func testAccCheckServerUpdateInitial() string {
-	return fmt.Sprintf(`
-resource "latitudesh_server" "test_item" {
-	project = "%s"
-  	hostname = "test-initial"
-	plan     = "%s"
-	site     = "%s"
-	operating_system = "%s"
-	billing = "hourly"
-}
-`,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
-		testServerPlan,
-		testServerSite,
-		testServerOperatingSystem,
-	)
-}
-
-func testAccCheckServerUpdateChanged() string {
-	return fmt.Sprintf(`
-resource "latitudesh_server" "test_item" {
-	project = "%s"
-  	hostname = "test-initial"
-	plan     = "%s"
-	site     = "%s"
-	operating_system = "%s"
-	billing = "monthly"
-}
-`,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
-		testServerPlan,
-		testServerSite,
-		testServerOperatingSystem,
-	)
-}
-
-func testAccCheckServerUpdateHostname() string {
-	return fmt.Sprintf(`
-resource "latitudesh_server" "test_item" {
-	project = "%s"
-  	hostname = "test-updated"
-	plan     = "%s"
-	site     = "%s"
-	operating_system = "%s"
-	billing = "monthly"
-}
-`,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
-		testServerPlan,
-		testServerSite,
-		testServerOperatingSystem,
-	)
-}
-
-func testAccServerConfigWithSSHKeys() string {
-	return fmt.Sprintf(`
-resource "latitudesh_server" "test_item" {
-  hostname         = "terraform-ci-test.latitude.sh"
-  operating_system = "ubuntu_24_04_x64_lts"
-  plan             = "%s"
-  project          = "%s"
-  site             = "%s"
-  billing          = "monthly"
-}
-`,
-		testServerPlan,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
-		testServerSite,
-	)
 }
 
 func TestAccServerUserDataValidation(t *testing.T) {
@@ -804,12 +723,11 @@ func TestAccServerUserDataValidation(t *testing.T) {
 }
 
 func testAccServerConfigUserDataInvalid() string {
+	// Plan-time validation test: the config never reaches the API, so a
+	// placeholder project is enough.
 	return fmt.Sprintf(`
-provider "latitudesh" {
-	project = "%s"
-}
-
 resource "latitudesh_server" "test" {
+	project          = "tf-acc-placeholder-project"
 	site             = "%s"
 	plan             = "%s"
 	operating_system = "%s"
@@ -817,7 +735,6 @@ resource "latitudesh_server" "test" {
 	user_data        = "invalid_user_data"  # Should fail validation
 }
 `,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testServerSite,
 		testServerPlan,
 		testServerOperatingSystem,
@@ -829,7 +746,6 @@ func TestAccServer_CustomTimeout(t *testing.T) {
 		return resource.TestCase{
 			PreCheck: func() {
 				testAccTokenCheck(t)
-				testAccProjectCheck(t)
 			},
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
 			CheckDestroy:             testAccCheckServerDestroy,
@@ -854,7 +770,6 @@ func TestAccServer_DefaultTimeout(t *testing.T) {
 		return resource.TestCase{
 			PreCheck: func() {
 				testAccTokenCheck(t)
-				testAccProjectCheck(t)
 			},
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
 			CheckDestroy:             testAccCheckServerDestroy,
@@ -874,48 +789,22 @@ func TestAccServer_DefaultTimeout(t *testing.T) {
 	})
 }
 
-func testAccCheckServerCustomTimeout() string {
-	return fmt.Sprintf(`
-resource "latitudesh_server" "test_item" {
-	billing = "monthly"
-	project = "%s"
-	hostname = "%s"
-	plan     = "%s"
-	site     = "%s"
-	operating_system = "%s"
-
-	timeouts = {
-		create = "45m"
-		update = "60m"
-	}
-}
-`,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
-		testServerHostname,
-		testServerPlan,
-		testServerSite,
-		testServerOperatingSystem,
-	)
-}
-
 func TestAccServer_ProjectSlugConsistency(t *testing.T) {
-	projectSlug := os.Getenv("LATITUDESH_TEST_PROJECT")
-
 	runTestWithSiteFallback(t, func(site string, recorder *recorder.Recorder) resource.TestCase {
 		return resource.TestCase{
 			PreCheck: func() {
 				testAccTokenCheck(t)
-				testAccProjectCheck(t)
 			},
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
 			CheckDestroy:             testAccCheckServerDestroy,
 			Steps: []resource.TestStep{
 				{
-					Config: testAccCheckServerWithProjectSlugWithSite(projectSlug, site),
+					Config: testAccCheckServerWithProjectSlugWithSite(site),
 					Check: resource.ComposeTestCheckFunc(
 						testAccCheckServerExists("latitudesh_server.test_item"),
-						resource.TestCheckResourceAttr(
-							"latitudesh_server.test_item", "project", projectSlug),
+						resource.TestCheckResourceAttrPair(
+							"latitudesh_server.test_item", "project",
+							"latitudesh_project.test", "slug"),
 						resource.TestCheckResourceAttr(
 							"latitudesh_server.test_item", "hostname", testServerHostname),
 						resource.TestCheckResourceAttr(
@@ -924,7 +813,7 @@ func TestAccServer_ProjectSlugConsistency(t *testing.T) {
 				},
 				// Verify that project value doesn't change after read
 				{
-					Config:             testAccCheckServerWithProjectSlugWithSite(projectSlug, site),
+					Config:             testAccCheckServerWithProjectSlugWithSite(site),
 					PlanOnly:           true,
 					ExpectNonEmptyPlan: false, // Should be no changes
 				},
@@ -933,39 +822,25 @@ func TestAccServer_ProjectSlugConsistency(t *testing.T) {
 	})
 }
 
-func testAccCheckServerWithProjectSlug(projectSlug string) string {
-	return fmt.Sprintf(`
-resource "latitudesh_server" "test_item" {
-	billing = "monthly"
-	project = "%s"
-	hostname = "%s"
-	plan     = "%s"
-	site     = "%s"
-	operating_system = "%s"
-}
-`,
-		projectSlug,
-		testServerHostname,
-		testServerPlan,
-		testServerSite,
-		testServerOperatingSystem,
-	)
-}
-
 // Config generators with site parameter
 
 func testAccCheckServerBasicWithSite(site string) string {
 	return fmt.Sprintf(`
+resource "latitudesh_project" "test" {
+	name              = "tf-acc-server"
+	environment       = "Development"
+	provisioning_type = "on_demand"
+}
+
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
-	project = "%s"
+	project = latitudesh_project.test.id
 	hostname = "%s"
 	plan     = "%s"
 	site     = "%s"
 	operating_system = "%s"
 }
 `,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testServerHostname,
 		testServerPlan,
 		site,
@@ -975,16 +850,21 @@ resource "latitudesh_server" "test_item" {
 
 func testAccCheckServerUpdateInitialWithSite(site string) string {
 	return fmt.Sprintf(`
+resource "latitudesh_project" "test" {
+	name              = "tf-acc-server"
+	environment       = "Development"
+	provisioning_type = "on_demand"
+}
+
 resource "latitudesh_server" "test_item" {
 	billing = "hourly"
-	project = "%s"
+	project = latitudesh_project.test.id
 	hostname = "test-initial"
 	plan     = "%s"
 	site     = "%s"
 	operating_system = "%s"
 }
 `,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testServerPlan,
 		site,
 		testServerOperatingSystem,
@@ -993,16 +873,21 @@ resource "latitudesh_server" "test_item" {
 
 func testAccCheckServerUpdateChangedWithSite(site string) string {
 	return fmt.Sprintf(`
+resource "latitudesh_project" "test" {
+	name              = "tf-acc-server"
+	environment       = "Development"
+	provisioning_type = "on_demand"
+}
+
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
-	project = "%s"
+	project = latitudesh_project.test.id
 	hostname = "test-initial"
 	plan     = "%s"
 	site     = "%s"
 	operating_system = "%s"
 }
 `,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testServerPlan,
 		site,
 		testServerOperatingSystem,
@@ -1011,9 +896,15 @@ resource "latitudesh_server" "test_item" {
 
 func testAccCheckServerUpdateHostnameWithSite(site string) string {
 	return fmt.Sprintf(`
+resource "latitudesh_project" "test" {
+	name              = "tf-acc-server"
+	environment       = "Development"
+	provisioning_type = "on_demand"
+}
+
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
-	project = "%s"
+	project = latitudesh_project.test.id
 	hostname = "test-updated"
 	plan     = "%s"
 	site     = "%s"
@@ -1021,7 +912,6 @@ resource "latitudesh_server" "test_item" {
 	allow_reinstall = false
 }
 `,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testServerPlan,
 		site,
 		testServerOperatingSystem,
@@ -1030,9 +920,15 @@ resource "latitudesh_server" "test_item" {
 
 func testAccServerConfigWithSSHKeysWithSite(site string) string {
 	return fmt.Sprintf(`
+resource "latitudesh_project" "test" {
+	name              = "tf-acc-server"
+	environment       = "Development"
+	provisioning_type = "on_demand"
+}
+
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
-	project = "%s"
+	project = latitudesh_project.test.id
 	hostname = "%s"
 	plan     = "%s"
 	site     = "%s"
@@ -1040,7 +936,6 @@ resource "latitudesh_server" "test_item" {
 	ssh_keys = []
 }
 `,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testServerHostname,
 		testServerPlan,
 		site,
@@ -1050,9 +945,15 @@ resource "latitudesh_server" "test_item" {
 
 func testAccCheckServerCustomTimeoutWithSite(site string) string {
 	return fmt.Sprintf(`
+resource "latitudesh_project" "test" {
+	name              = "tf-acc-server"
+	environment       = "Development"
+	provisioning_type = "on_demand"
+}
+
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
-	project = "%s"
+	project = latitudesh_project.test.id
 	hostname = "%s"
 	plan     = "%s"
 	site     = "%s"
@@ -1064,7 +965,6 @@ resource "latitudesh_server" "test_item" {
 	}
 }
 `,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testServerHostname,
 		testServerPlan,
 		site,
@@ -1072,18 +972,23 @@ resource "latitudesh_server" "test_item" {
 	)
 }
 
-func testAccCheckServerWithProjectSlugWithSite(projectSlug, site string) string {
+func testAccCheckServerWithProjectSlugWithSite(site string) string {
 	return fmt.Sprintf(`
+resource "latitudesh_project" "test" {
+	name              = "tf-acc-server"
+	environment       = "Development"
+	provisioning_type = "on_demand"
+}
+
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
-	project = "%s"
+	project = latitudesh_project.test.slug
 	hostname = "%s"
 	plan     = "%s"
 	site     = "%s"
 	operating_system = "%s"
 }
 `,
-		projectSlug,
 		testServerHostname,
 		testServerPlan,
 		site,

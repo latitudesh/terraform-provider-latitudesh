@@ -2,7 +2,6 @@ package latitudesh
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/acctest"
@@ -12,10 +11,7 @@ import (
 func TestAccDataSourceSSHKey_ByName(t *testing.T) {
 	t.Parallel()
 
-	pub := os.Getenv("LATITUDESH_TEST_SSH_PUBLIC_KEY")
-	if pub == "" {
-		t.Skip("LATITUDESH_TEST_SSH_PUBLIC_KEY not set; skipping acceptance test")
-	}
+	pub := testGenerateSSHPublicKey(t)
 
 	name := fmt.Sprintf("acc-ds-sshkey-name-%s", acctest.RandString(6))
 
@@ -35,7 +31,7 @@ output "ssh_key_id" {
 `, name, pub)
 
 	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { testAccTokenCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
 		Steps: []resource.TestStep{
 			{
@@ -53,19 +49,10 @@ output "ssh_key_id" {
 	})
 }
 
-func testAccPreCheck(t *testing.T) {
-	if v := os.Getenv("LATITUDESH_TEST_SSH_PUBLIC_KEY"); v == "" {
-		t.Fatal("LATITUDESH_TEST_SSH_PUBLIC_KEY must be set for acceptance tests")
-	}
-}
-
 func TestAccDataSourceSSHKey_ByID(t *testing.T) {
 	t.Parallel()
 
-	pub := os.Getenv("LATITUDESH_TEST_SSH_PUBLIC_KEY")
-	if pub == "" {
-		t.Skip("LATITUDESH_TEST_SSH_PUBLIC_KEY not set; skipping acceptance test")
-	}
+	pub := testGenerateSSHPublicKey(t)
 
 	name := fmt.Sprintf("acc-ds-sshkey-id-%s", acctest.RandString(6))
 
@@ -88,7 +75,7 @@ data "latitudesh_ssh_key" "by_id" {
 `, name, pub)
 
 	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { testAccTokenCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
 		Steps: []resource.TestStep{
 			{Config: cfg1},
@@ -109,10 +96,7 @@ data "latitudesh_ssh_key" "by_id" {
 func TestAccDataSourceSSHKey_ByFingerprint(t *testing.T) {
 	t.Parallel()
 
-	pub := os.Getenv("LATITUDESH_TEST_SSH_PUBLIC_KEY")
-	if pub == "" {
-		t.Skip("LATITUDESH_TEST_SSH_PUBLIC_KEY not set; skipping acceptance test")
-	}
+	pub := testGenerateSSHPublicKey(t)
 
 	name := fmt.Sprintf("acc-ds-sshkey-fp-%s", acctest.RandString(6))
 
@@ -135,7 +119,7 @@ data "latitudesh_ssh_key" "by_fp" {
 `, name, pub)
 
 	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { testAccTokenCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
 		Steps: []resource.TestStep{
 			{Config: cfg1},

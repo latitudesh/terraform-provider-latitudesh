@@ -3,35 +3,39 @@ package latitudesh
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
-	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
 func TestAccVlanAssignment_Basic(t *testing.T) {
-	serverID := "sv_ZWr75Zbjr5A91"
-	vlanID := "vlan_BDXM5E1Yo5rpk"
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("TF_ACC must be set for acceptance tests")
+	}
+
+	projectID, site, servers := testAccSharedServers(t, 1)
 
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
-	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)
 		},
-		Providers:    testAccProviders,
-		CheckDestroy: testAccCheckVlanAssignmentDestroy,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		CheckDestroy:             testAccCheckVlanAssignmentDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccVlanAssignmentConfig(serverID, vlanID),
+				Config: testAccVlanAssignmentConfig(projectID, site, servers[0]),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckVlanAssignmentExists("latitudesh_vlan_assignment.test"),
-					resource.TestCheckResourceAttr("latitudesh_vlan_assignment.test", "server_id", serverID),
-					resource.TestCheckResourceAttr("latitudesh_vlan_assignment.test", "virtual_network_id", vlanID),
+					resource.TestCheckResourceAttr("latitudesh_vlan_assignment.test", "server_id", servers[0]),
+					resource.TestCheckResourceAttrPair(
+						"latitudesh_vlan_assignment.test", "virtual_network_id",
+						"latitudesh_virtual_network.test", "id"),
 				),
 			},
 		},
@@ -39,7 +43,7 @@ func TestAccVlanAssignment_Basic(t *testing.T) {
 }
 
 func testAccCheckVlanAssignmentDestroy(s *terraform.State) error {
-	client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+	client := createVCRClient(nil)
 	ctx := context.Background()
 
 	for _, rs := range s.RootModule().Resources {
@@ -47,7 +51,11 @@ func testAccCheckVlanAssignmentDestroy(s *terraform.State) error {
 			continue
 		}
 
-		response, err := client.PrivateNetworks.ListAssignments(ctx, operations.GetVirtualNetworksAssignmentsRequest{})
+		listRequest := operations.GetVirtualNetworksAssignmentsRequest{}
+		if serverID := rs.Primary.Attributes["server_id"]; serverID != "" {
+			listRequest.FilterServer = &serverID
+		}
+		response, err := client.PrivateNetworks.ListAssignments(ctx, listRequest)
 		if err != nil {
 			continue
 		}
@@ -75,9 +83,13 @@ func testAccCheckVlanAssignmentExists(n string) resource.TestCheckFunc {
 			return fmt.Errorf("no ID is set")
 		}
 
-		client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+		client := createVCRClient(nil)
 		ctx := context.Background()
-		response, err := client.PrivateNetworks.ListAssignments(ctx, operations.GetVirtualNetworksAssignmentsRequest{})
+		listRequest := operations.GetVirtualNetworksAssignmentsRequest{}
+		if serverID := rs.Primary.Attributes["server_id"]; serverID != "" {
+			listRequest.FilterServer = &serverID
+		}
+		response, err := client.PrivateNetworks.ListAssignments(ctx, listRequest)
 		if err != nil {
 			return fmt.Errorf("error fetching VLAN assignments: %s", err)
 		}
@@ -97,11 +109,17 @@ func testAccCheckVlanAssignmentExists(n string) resource.TestCheckFunc {
 	}
 }
 
-func testAccVlanAssignmentConfig(serverID, vlanID string) string {
+func testAccVlanAssignmentConfig(projectID, site, serverID string) string {
 	return fmt.Sprintf(`
+resource "latitudesh_virtual_network" "test" {
+	project     = "%s"
+	site        = "%s"
+	description = "tf-acc-vlan-assignment"
+}
+
 resource "latitudesh_vlan_assignment" "test" {
 	server_id          = "%s"
-	virtual_network_id = "%s"
+	virtual_network_id = latitudesh_virtual_network.test.id
 }
-`, serverID, vlanID)
+`, projectID, site, serverID)
 }

@@ -3,17 +3,21 @@ package latitudesh
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
-	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 )
 
 const (
 	testUserDataDescription = "test description"
+	// base64 of a cloud-config YAML hash (the API requires the decoded
+	// content to be a valid YAML hash):
+	//   #cloud-config
+	//   runcmd:
+	//     - echo "Hello from Terraform acceptance test"
+	testUserDataContent = "I2Nsb3VkLWNvbmZpZwpydW5jbWQ6CiAgLSBlY2hvICJIZWxsbyBmcm9tIFRlcnJhZm9ybSBhY2NlcHRhbmNlIHRlc3QiCg=="
 )
 
 func TestAccUserDataBasic(t *testing.T) {
@@ -21,16 +25,13 @@ func TestAccUserDataBasic(t *testing.T) {
 
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
-	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)
-			testAccProjectCheck(t)
-			testAccUserDataCheck(t)
 		},
-		Providers:    testAccProviders,
-		CheckDestroy: testAccCheckUserDataDestroy,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		CheckDestroy:             testAccCheckUserDataDestroy,
 		Steps: []resource.TestStep{
 			{
 				Config: testAccCheckUserDataBasic(),
@@ -39,7 +40,7 @@ func TestAccUserDataBasic(t *testing.T) {
 					resource.TestCheckResourceAttr(
 						"latitudesh_user_data.test_item", "description", testUserDataDescription),
 					resource.TestCheckResourceAttr(
-						"latitudesh_user_data.test_item", "content", os.Getenv("LATITUDESH_TEST_USER_DATA_CONTENT")),
+						"latitudesh_user_data.test_item", "content", testUserDataContent),
 					resource.TestCheckResourceAttrSet(
 						"latitudesh_user_data.test_item", "created_at"),
 					resource.TestCheckResourceAttrSet(
@@ -51,7 +52,7 @@ func TestAccUserDataBasic(t *testing.T) {
 }
 
 func testAccCheckUserDataDestroy(s *terraform.State) error {
-	client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+	client := createVCRClient(nil)
 	ctx := context.Background()
 
 	for _, rs := range s.RootModule().Resources {
@@ -78,7 +79,7 @@ func testAccCheckUserDataExists(n string, userData *components.UserDataPropertie
 			return fmt.Errorf("No Record ID is set")
 		}
 
-		client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+		client := createVCRClient(nil)
 
 		ctx := context.Background()
 		response, err := client.UserData.Retrieve(ctx, rs.Primary.ID, nil)
@@ -99,13 +100,11 @@ func testAccCheckUserDataExists(n string, userData *components.UserDataPropertie
 func testAccCheckUserDataBasic() string {
 	return fmt.Sprintf(`
 		resource "latitudesh_user_data" "test_item" {
-			project     = "%s"
 			description = "%s"
 			content     = "%s"
 		}
 	`,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
 		testUserDataDescription,
-		os.Getenv("LATITUDESH_TEST_USER_DATA_CONTENT"),
+		testUserDataContent,
 	)
 }

@@ -8,37 +8,35 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
-	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 )
 
-// Define constants for testing
-const (
-	testFirewallName     = "test-firewall-assignment"
-	testMockFirewallID   = "fw_123456789ABC"
-	testMockAssignmentID = "fwasg_987654321ZYX"
-	testMockServerID     = "sv_BDXM5Ek1m0rpk"
-)
+const testFirewallName = "test-firewall-assignment"
 
 func TestAccLatitudeFirewallAssignment_Basic(t *testing.T) {
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("TF_ACC must be set for acceptance tests")
+	}
+
+	projectID, _, servers := testAccSharedServers(t, 1)
+
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
-	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)
-			testAccProjectCheck(t)
 		},
-		Providers:    testAccProviders,
-		CheckDestroy: testAccCheckFirewallAssignmentDestroy,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		CheckDestroy:             testAccCheckFirewallAssignmentDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCheckLatitudeFirewallAssignmentConfig(),
+				Config: testAccCheckLatitudeFirewallAssignmentConfig(projectID, servers[0]),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(
-						"latitudesh_firewall_assignment.test", "firewall_id"),
-					resource.TestCheckResourceAttrSet(
-						"latitudesh_firewall_assignment.test", "server_id"),
+					resource.TestCheckResourceAttrPair(
+						"latitudesh_firewall_assignment.test", "firewall_id",
+						"latitudesh_firewall.test", "id"),
+					resource.TestCheckResourceAttr(
+						"latitudesh_firewall_assignment.test", "server_id", servers[0]),
 				),
 			},
 		},
@@ -46,7 +44,7 @@ func TestAccLatitudeFirewallAssignment_Basic(t *testing.T) {
 }
 
 func testAccCheckFirewallAssignmentDestroy(s *terraform.State) error {
-	client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+	client := createVCRClient(nil)
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "latitudesh_firewall_assignment" {
@@ -82,63 +80,32 @@ func testAccCheckFirewallAssignmentDestroy(s *terraform.State) error {
 	return nil
 }
 
-func testAccCheckLatitudeFirewallAssignmentConfig() string {
-	// Get required environment variables
-	projectID := os.Getenv("LATITUDESH_TEST_PROJECT")
-	if projectID == "" {
-		projectID = "test-project-id" // fallback for VCR mode
-	}
-
-	serverID := os.Getenv("LATITUDESH_TEST_SERVER")
-	if serverID == "" {
-		serverID = "sv_BDXM5Ek1m0rpk" // fallback for VCR mode
-	}
-
-	// Check if LATITUDESH_FIREWALL_ID is provided
-	firewallID := os.Getenv("LATITUDESH_FIREWALL_ID")
-	if firewallID != "" {
-		// If firewall ID is provided, use it directly
-		return fmt.Sprintf(`
-resource "latitudesh_firewall_assignment" "test" {
-  firewall_id = "%s"
-  server_id = "%s"
-}
-`,
-			firewallID,
-			serverID,
-		)
-	}
-
-	// Otherwise, create a new firewall
+func testAccCheckLatitudeFirewallAssignmentConfig(projectID, serverID string) string {
 	return fmt.Sprintf(`
 resource "latitudesh_firewall" "test" {
-  name = "%s"
-  project = "%s"
-  
-  # Default rule - API will automatically add this
-  rules {
-    from = "ANY"
-    to = "ANY"
-    port = "22"
-    protocol = "TCP"
-  }
-  
-  # Custom rule
-  rules {
-    from = "0.0.0.0"
-    to = "0.0.0.0"
-    port = "22"
-    protocol = "TCP"
-  }
+	name    = "%s"
+	project = "%s"
+
+	# Default rule - API will automatically add this
+	rules {
+		from     = "ANY"
+		to       = "ANY"
+		port     = "22"
+		protocol = "TCP"
+	}
+
+	# Custom rule
+	rules {
+		from     = "0.0.0.0"
+		to       = "0.0.0.0"
+		port     = "22"
+		protocol = "TCP"
+	}
 }
 
 resource "latitudesh_firewall_assignment" "test" {
-  firewall_id = latitudesh_firewall.test.id
-  server_id = "%s"
+	firewall_id = latitudesh_firewall.test.id
+	server_id   = "%s"
 }
-`,
-		testFirewallName,
-		projectID,
-		serverID,
-	)
+`, testFirewallName, projectID, serverID)
 }

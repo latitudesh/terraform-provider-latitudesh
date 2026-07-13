@@ -2,7 +2,6 @@ package latitudesh
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -15,7 +14,6 @@ func TestAccServer_WithUserData(t *testing.T) {
 		return resource.TestCase{
 			PreCheck: func() {
 				testAccTokenCheck(t)
-				testAccProjectCheck(t)
 			},
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(rec),
 			CheckDestroy:             testAccCheckServerDestroy,
@@ -114,18 +112,29 @@ func pointersEqual(a, b *string) bool {
 
 func testAccCheckServerWithUserData(site string) string {
 	return fmt.Sprintf(`
+resource "latitudesh_project" "test" {
+	name              = "tf-acc-server-user-data"
+	environment       = "Development"
+	provisioning_type = "on_demand"
+}
+
+resource "latitudesh_user_data" "test" {
+	description = "tf-acc-server-user-data"
+	content     = "%s"
+}
+
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
-	project = "%s"
+	project = latitudesh_project.test.id
   	hostname = "%s"
 	plan     = "%s"
 	site     = "%s"
 	operating_system = "%s"
-	user_data = "ud_R82A0y9L06mMY"
+	user_data = latitudesh_user_data.test.id
 	allow_reinstall = true
 }
 `,
-		os.Getenv("LATITUDESH_TEST_PROJECT"),
+		testUserDataContent,
 		testServerHostname,
 		testServerPlan,
 		site,

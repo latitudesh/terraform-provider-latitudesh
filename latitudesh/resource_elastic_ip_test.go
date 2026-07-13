@@ -12,27 +12,28 @@ import (
 )
 
 func TestAccElasticIP_Basic(t *testing.T) {
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("TF_ACC must be set for acceptance tests")
+	}
+
 	resourceName := "latitudesh_elastic_ip.test_item"
-	serverID := os.Getenv("LATITUDESH_TEST_SERVER_ID")
-	project := os.Getenv("LATITUDESH_TEST_PROJECT")
+	projectID, _, servers := testAccSharedServers(t, 1)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)
-			testAccProjectCheck(t)
-			testAccServerCheck(t)
 		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
 		CheckDestroy:             testAccCheckElasticIPDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccConfigElasticIPBasic(project, serverID),
+				Config: testAccConfigElasticIPBasic(projectID, servers[0]),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "address"),
 					resource.TestCheckResourceAttr(resourceName, "status", "active"),
-					resource.TestCheckResourceAttr(resourceName, "server_id", serverID),
-					resource.TestCheckResourceAttr(resourceName, "project", project),
+					resource.TestCheckResourceAttr(resourceName, "server_id", servers[0]),
+					resource.TestCheckResourceAttr(resourceName, "project", projectID),
 				),
 			},
 		},
@@ -69,46 +70,42 @@ func testAccCheckElasticIPDestroy(s *terraform.State) error {
 	return nil
 }
 
-func testAccConfigElasticIPBasic(project, serverID string) string {
+func testAccConfigElasticIPBasic(projectID, serverID string) string {
 	return fmt.Sprintf(`
-provider "latitudesh" {
-  project = "%s"
-}
-
 resource "latitudesh_elastic_ip" "test_item" {
+  project   = "%s"
   server_id = "%s"
 }
-`, project, serverID)
+`, projectID, serverID)
 }
 
 func TestAccElasticIP_Move(t *testing.T) {
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("TF_ACC must be set for acceptance tests")
+	}
+
 	resourceName := "latitudesh_elastic_ip.test_item"
-	serverA := os.Getenv("LATITUDESH_TEST_SERVER_ID")
-	serverB := os.Getenv("LATITUDESH_TEST_SERVER_ID_SECONDARY")
-	project := os.Getenv("LATITUDESH_TEST_PROJECT")
+	projectID, _, servers := testAccSharedServers(t, 2)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)
-			testAccProjectCheck(t)
-			testAccServerCheck(t)
-			testAccServerSecondaryCheck(t)
 		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
 		CheckDestroy:             testAccCheckElasticIPDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccConfigElasticIPBasic(project, serverA),
+				Config: testAccConfigElasticIPBasic(projectID, servers[0]),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "server_id", serverA),
+					resource.TestCheckResourceAttr(resourceName, "server_id", servers[0]),
 					resource.TestCheckResourceAttr(resourceName, "status", "active"),
 					resource.TestCheckResourceAttrSet(resourceName, "address"),
 				),
 			},
 			{
-				Config: testAccConfigElasticIPBasic(project, serverB),
+				Config: testAccConfigElasticIPBasic(projectID, servers[1]),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "server_id", serverB),
+					resource.TestCheckResourceAttr(resourceName, "server_id", servers[1]),
 					resource.TestCheckResourceAttr(resourceName, "status", "active"),
 					resource.TestCheckResourceAttrSet(resourceName, "address"),
 				),
@@ -118,11 +115,11 @@ func TestAccElasticIP_Move(t *testing.T) {
 }
 
 func TestAccElasticIP_UnknownProject(t *testing.T) {
-	serverID := os.Getenv("LATITUDESH_TEST_SERVER_ID")
+	// PlanOnly test: the server is never provisioned, so a placeholder ID works.
+	serverID := "sv_placeholder000"
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)
-			testAccServerCheck(t)
 		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
 		Steps: []resource.TestStep{

@@ -3,7 +3,6 @@ package latitudesh
 import (
 	"context"
 	"fmt"
-	"os"
 	"regexp"
 	"testing"
 
@@ -19,10 +18,7 @@ func TestAccSSHKey_Basic(t *testing.T) {
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
 
-	pub := os.Getenv("LATITUDESH_TEST_SSH_PUBLIC_KEY")
-	if pub == "" {
-		t.Skip("LATITUDESH_TEST_SSH_PUBLIC_KEY not set")
-	}
+	pub := testGenerateSSHPublicKey(t)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -49,10 +45,7 @@ func TestAccSSHKey_Import(t *testing.T) {
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
 
-	pub := os.Getenv("LATITUDESH_TEST_SSH_PUBLIC_KEY")
-	if pub == "" {
-		t.Skip("LATITUDESH_TEST_SSH_PUBLIC_KEY not set")
-	}
+	pub := testGenerateSSHPublicKey(t)
 
 	resourceName := "latitudesh_ssh_key.test_item"
 
@@ -93,10 +86,7 @@ func TestAccSSHKey_ImportNotFound(t *testing.T) {
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
 
-	pub := os.Getenv("LATITUDESH_TEST_SSH_PUBLIC_KEY")
-	if pub == "" {
-		t.Skip("LATITUDESH_TEST_SSH_PUBLIC_KEY not set")
-	}
+	pub := testGenerateSSHPublicKey(t)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccTokenCheck(t) },
