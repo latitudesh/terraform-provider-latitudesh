@@ -39,6 +39,7 @@ type VirtualMachineResource struct {
 type VirtualMachineResourceModel struct {
 	ID              types.String   `tfsdk:"id"`
 	Name            types.String   `tfsdk:"name"`
+	Site            types.String   `tfsdk:"site"`
 	Plan            types.String   `tfsdk:"plan"`
 	Project         types.String   `tfsdk:"project"`
 	OperatingSystem types.String   `tfsdk:"operating_system"`
@@ -74,6 +75,14 @@ func (r *VirtualMachineResource) Schema(ctx context.Context, req resource.Schema
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"site": schema.StringAttribute{
+				MarkdownDescription: "The Site/region slug where the VM is provisioned (e.g. DAL, SAO). Defaults to `DAL` when omitted.",
+				Optional:            true,
+				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"name": schema.StringAttribute{
@@ -181,6 +190,11 @@ func (r *VirtualMachineResource) Create(ctx context.Context, req resource.Create
 	attrs := &components.VirtualMachinePayloadAttributes{
 		Plan:    &plan,
 		Project: &project,
+	}
+
+	if !data.Site.IsNull() && !data.Site.IsUnknown() && data.Site.ValueString() != "" {
+		site := data.Site.ValueString()
+		attrs.Site = &site
 	}
 
 	if !data.Name.IsNull() && !data.Name.IsUnknown() && data.Name.ValueString() != "" {
@@ -441,6 +455,10 @@ func (r *VirtualMachineResource) readVirtualMachine(ctx context.Context, data *V
 	a := vm.Attributes
 	if a == nil {
 		return
+	}
+
+	if a.Site != nil {
+		data.Site = types.StringValue(*a.Site)
 	}
 
 	if a.Name != nil {
