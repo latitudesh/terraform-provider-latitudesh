@@ -14,7 +14,7 @@ import (
 
 const (
 	testVMName = "qa-terraform-vm"
-	testVMPlan = "vm.small"
+	testVMPlan = "vm-small"
 )
 
 func TestAccVirtualMachine_Basic(t *testing.T) {
