@@ -287,13 +287,9 @@ func (r *VlanAssignmentResource) readVlanAssignment(ctx context.Context, data *V
 	data.Description = types.StringNull()
 	data.Status = types.StringNull()
 
-	// Filter by server so the assignment is found regardless of how many
-	// assignments the team has (the unfiltered list is paginated and the new
-	// assignment may not be on the first page).
-	listRequest := operations.GetVirtualNetworksAssignmentsRequest{}
-	if !data.ServerID.IsNull() && data.ServerID.ValueString() != "" {
-		serverID := data.ServerID.ValueString()
-		listRequest.FilterServer = &serverID
+	serverID := ""
+	if !data.ServerID.IsNull() {
+		serverID = data.ServerID.ValueString()
 	}
 
 	// The API populates `vid` asynchronously when assignments are created in
@@ -311,20 +307,10 @@ func (r *VlanAssignmentResource) readVlanAssignment(ctx context.Context, data *V
 			}
 		}
 
-		response, err := r.client.PrivateNetworks.ListAssignments(ctx, listRequest)
+		assignment, err := r.findAssignmentByID(ctx, assignmentID, serverID)
 		if err != nil {
 			diags.AddError("Client Error", "Unable to read virtual network assignments, got error: "+err.Error())
 			return
-		}
-
-		var assignment *components.VirtualNetworkAssignmentData
-		if response.VirtualNetworkAssignments != nil && response.VirtualNetworkAssignments.Data != nil {
-			for _, a := range response.VirtualNetworkAssignments.Data {
-				if a.ID != nil && *a.ID == assignmentID {
-					assignment = &a
-					break
-				}
-			}
 		}
 
 		if assignment == nil {
@@ -363,6 +349,46 @@ func (r *VlanAssignmentResource) readVlanAssignment(ctx context.Context, data *V
 	}
 	// Otherwise: exhausted retries — keep whatever Null fallbacks were
 	// initialized above.
+}
+
+// findAssignmentByID locates an assignment by its ID. When serverID is known
+// the list is filtered down to that server's assignments; otherwise (e.g.
+// terraform import, where only the ID is available) it paginates through all
+// of the team's assignments so entries beyond the first page are still found.
+func (r *VlanAssignmentResource) findAssignmentByID(ctx context.Context, assignmentID, serverID string) (*components.VirtualNetworkAssignmentData, error) {
+	pageSize := int64(100)
+
+	for pageNumber := int64(1); ; pageNumber++ {
+		page := pageNumber
+		size := pageSize
+		listRequest := operations.GetVirtualNetworksAssignmentsRequest{
+			PageSize:   &size,
+			PageNumber: &page,
+		}
+		if serverID != "" {
+			listRequest.FilterServer = &serverID
+		}
+
+		response, err := r.client.PrivateNetworks.ListAssignments(ctx, listRequest)
+		if err != nil {
+			return nil, err
+		}
+		if response.VirtualNetworkAssignments == nil || response.VirtualNetworkAssignments.Data == nil ||
+			len(response.VirtualNetworkAssignments.Data) == 0 {
+			return nil, nil
+		}
+
+		for _, a := range response.VirtualNetworkAssignments.Data {
+			if a.ID != nil && *a.ID == assignmentID {
+				assignment := a
+				return &assignment, nil
+			}
+		}
+
+		if int64(len(response.VirtualNetworkAssignments.Data)) < pageSize {
+			return nil, nil
+		}
+	}
 }
 
 func (r *VlanAssignmentResource) findAssignmentByServerAndVNet(ctx context.Context, data *VlanAssignmentResourceModel, diags *diag.Diagnostics) {
