@@ -532,6 +532,14 @@ func TestAccServer_Locked(t *testing.T) {
 							"latitudesh_server.test_item", "locked", "true"),
 					),
 				},
+				{
+					// Unlock before destroy: the API silently ignores deletion
+					// of a locked server (and of its project), which would leak
+					// both without any error.
+					Config: testAccCheckServerLockedWithSite(site, false),
+					Check: resource.TestCheckResourceAttr(
+						"latitudesh_server.test_item", "locked", "false"),
+				},
 			},
 		}
 	})
