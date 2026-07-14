@@ -212,11 +212,12 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"billing": schema.StringAttribute{
-				MarkdownDescription: "The server billing type (hourly, monthly, yearly). Defaults to monthly.",
+				MarkdownDescription: "The server billing type. Accepts `hourly` and `monthly` for on-demand projects and `yearly` for reserved projects. Defaults to `monthly`, which is charged upfront based on the proration of the current billing cycle. Use `hourly` for dynamic or short-lived workloads.",
 				Optional:            true,
 				Computed:            true,
 				Validators:          validators.Billing(),
 				PlanModifiers: []planmodifier.String{
+					planmodifiers.DefaultOnCreate{Value: validators.BillingMonthly},
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
@@ -729,9 +730,10 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	// Set default value for billing if not provided
-	if data.Billing.IsNull() || data.Billing.IsUnknown() || strings.TrimSpace(data.Billing.ValueString()) == "" {
-		data.Billing = types.StringValue("monthly")
+	// billing defaults to "monthly" at plan time via the DefaultOnCreate plan
+	// modifier; guard against unknown values from unresolved references.
+	if data.Billing.IsNull() || data.Billing.IsUnknown() {
+		data.Billing = types.StringValue(validators.BillingMonthly)
 	}
 
 	attrs := &operations.CreateServerServersAttributes{}
