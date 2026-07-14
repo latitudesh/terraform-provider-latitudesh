@@ -19,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
+	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/planmodifiers"
 	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
 
@@ -78,10 +79,11 @@ func (r *VirtualMachineResource) Schema(ctx context.Context, req resource.Schema
 				},
 			},
 			"site": schema.StringAttribute{
-				MarkdownDescription: "The Site/region slug where the VM is provisioned (e.g. DAL, SAO). Defaults to `DAL` when omitted.",
+				MarkdownDescription: "The site/region slug where the virtual machine is provisioned (case-insensitive, e.g. DAL, SAO). If not specified, the API defaults to `DAL`. Changing this forces a new resource.",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
+					planmodifiers.CaseInsensitiveDiff{},
 					stringplanmodifier.RequiresReplace(),
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -194,7 +196,9 @@ func (r *VirtualMachineResource) Create(ctx context.Context, req resource.Create
 	}
 
 	if !data.Site.IsNull() && !data.Site.IsUnknown() && data.Site.ValueString() != "" {
-		site := data.Site.ValueString()
+		// Convert site to uppercase for API compatibility (case-insensitive input)
+		// Keep original case in state, only uppercase for API call
+		site := strings.ToUpper(data.Site.ValueString())
 		attrs.Site = &site
 	}
 
@@ -458,8 +462,14 @@ func (r *VirtualMachineResource) readVirtualMachine(ctx context.Context, data *V
 		return
 	}
 
-	if a.Site != nil {
-		data.Site = types.StringValue(*a.Site)
+	// Only set site from the API when the config doesn't provide one (computed
+	// default or import) - preserve the user's input case otherwise.
+	if data.Site.IsNull() || data.Site.IsUnknown() {
+		if a.Site != nil {
+			data.Site = types.StringValue(*a.Site)
+		} else {
+			data.Site = types.StringNull()
+		}
 	}
 
 	if a.Name != nil {

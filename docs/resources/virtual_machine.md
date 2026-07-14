@@ -43,9 +43,9 @@ The resource waits for the virtual machine to reach a running state with a prima
 ### Optional
 
 - `name` (String) The virtual machine name (hostname). Defaults to `my-vm` if not set.
-- `site` (String) The Site/region slug where the VM is provisioned (e.g. DAL, SAO). Defaults to `DAL` when omitted.
 - `operating_system` (String) The operating system slug. If not specified, the API defaults to `ubuntu_24_04_x64_lts`. Changing this forces a new resource.
 - `project` (String) The project (ID or slug) to deploy the virtual machine. If not set, the provider-level `project` is used. Changing this forces a new resource.
+- `site` (String) The site/region slug where the virtual machine is provisioned (case-insensitive, e.g. DAL, SAO). If not specified, the API defaults to `DAL`. Changing this forces a new resource.
 - `ssh_keys` (List of String) List of SSH key IDs to add to the virtual machine. Changing this forces a new resource.
 - `timeouts` (Block, Optional) Configurable timeouts for virtual machine operations. (see [nested schema below](#nestedblock--timeouts))
 
