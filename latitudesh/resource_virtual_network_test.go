@@ -21,19 +21,27 @@ const (
 )
 
 func TestAccVirtualNetwork_Basic(t *testing.T) {
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("TF_ACC must be set for acceptance tests")
+	}
+
 	resourceName := "latitudesh_virtual_network.test_item"
+
+	// This test exercises the provider-level default project, which cannot
+	// reference a resource from the same config — pre-create it via the API.
+	projectID, cleanup := testAccCreateProject(t, "tf-acc-virtual-network-"+testRunID)
+	defer cleanup()
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)
-			testAccProjectCheck(t)
 		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
 		CheckDestroy:             testAccCheckVirtualNetworkDestroy,
 		Steps: []resource.TestStep{
 			{
 				Config: testAccConfigVirtualNetworkWithProviderProject(
-					os.Getenv("LATITUDESH_TEST_PROJECT"),
+					projectID,
 					testVNDesc,
 					testVNSite,
 				),
@@ -41,7 +49,7 @@ func TestAccVirtualNetwork_Basic(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "description", testVNDesc),
 					resource.TestCheckResourceAttr(resourceName, "site", testVNSite),
-					resource.TestCheckResourceAttr(resourceName, "project", os.Getenv("LATITUDESH_TEST_PROJECT")),
+					resource.TestCheckResourceAttr(resourceName, "project", projectID),
 					resource.TestCheckResourceAttrSet(resourceName, "vid"),
 					resource.TestCheckResourceAttrSet(resourceName, "region"),
 				),
@@ -96,69 +104,37 @@ resource "latitudesh_virtual_network" "test_item" {
 `, project, desc, site)
 }
 
-func testAccCheckVirtualNetworkBasic(project, desc, site string) string {
-	return fmt.Sprintf(`
-terraform {
-  required_providers {
-    latitudesh = {
-      source = "local/iac/latitudesh"
-    }
-  }
-}
-
-provider "latitudesh" {
-  project = "%s"
-}
-
-resource "latitudesh_virtual_network" "test_item" {
-  description = "%s"
-  site        = "%s"
-}
-`, project, desc, site)
-}
-
 // TestAccVirtualNetwork_WithTags exercises the previously-broken path where
 // a virtual network is created with tags, then re-planned (must be empty),
 // then has its tag set updated in-place. Before the fix in PD-6027, the
 // provider silently dropped tags on Create and hard-coded Update to error.
-//
-// Requires LATITUDESH_TEST_TAG_ID and LATITUDESH_TEST_TAG_ID_ALT to point at
-// two distinct, pre-existing custom tag IDs in the test team.
 func TestAccVirtualNetwork_WithTags(t *testing.T) {
-	tagID := os.Getenv("LATITUDESH_TEST_TAG_ID")
-	altTagID := os.Getenv("LATITUDESH_TEST_TAG_ID_ALT")
-	if tagID == "" || altTagID == "" {
-		t.Skip("LATITUDESH_TEST_TAG_ID and LATITUDESH_TEST_TAG_ID_ALT must be set for this test")
-	}
-
 	resourceName := "latitudesh_virtual_network.test_item"
-	project := os.Getenv("LATITUDESH_TEST_PROJECT")
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)
-			testAccProjectCheck(t)
 		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
 		CheckDestroy:             testAccCheckVirtualNetworkDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccConfigVirtualNetworkWithTags(project, testVNDesc, testVNSite, []string{tagID}),
+				Config: testAccConfigVirtualNetworkWithTags(testVNDesc, testVNSite, []string{"latitudesh_tag.a.id"}),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "tags.#", "1"),
-					resource.TestCheckResourceAttr(resourceName, "tags.0", tagID),
+					resource.TestCheckResourceAttrPair(resourceName, "tags.0", "latitudesh_tag.a", "id"),
 				),
 			},
 			{
 				// Idempotency — same config, plan must be empty.
-				Config:             testAccConfigVirtualNetworkWithTags(project, testVNDesc, testVNSite, []string{tagID}),
+				Config:             testAccConfigVirtualNetworkWithTags(testVNDesc, testVNSite, []string{"latitudesh_tag.a.id"}),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 			},
 			{
 				// In-place tag update must succeed (was the hard-error path).
-				Config: testAccConfigVirtualNetworkWithTags(project, testVNDesc, testVNSite, []string{tagID, altTagID}),
+				Config: testAccConfigVirtualNetworkWithTags(testVNDesc, testVNSite, []string{"latitudesh_tag.a.id", "latitudesh_tag.b.id"}),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "tags.#", "2"),
 				),
@@ -167,22 +143,25 @@ func TestAccVirtualNetwork_WithTags(t *testing.T) {
 	})
 }
 
-func testAccConfigVirtualNetworkWithTags(project, desc, site string, tagIDs []string) string {
-	quoted := make([]string, len(tagIDs))
-	for i, id := range tagIDs {
-		quoted[i] = fmt.Sprintf("%q", id)
-	}
-	return fmt.Sprintf(`
-provider "latitudesh" {
-  project = "%s"
+func testAccConfigVirtualNetworkWithTags(desc, site string, tagExprs []string) string {
+	return testAccProjectBlock("tf-acc-virtual-network-tags") + fmt.Sprintf(`
+resource "latitudesh_tag" "a" {
+  name  = "tf-acc-vn-tag-a-%[1]s"
+  color = "#ff0000"
+}
+
+resource "latitudesh_tag" "b" {
+  name  = "tf-acc-vn-tag-b-%[1]s"
+  color = "#00ff00"
 }
 
 resource "latitudesh_virtual_network" "test_item" {
-  description = "%s"
-  site        = "%s"
-  tags        = [%s]
+  project     = latitudesh_project.test.id
+  description = "%[2]s"
+  site        = "%[3]s"
+  tags        = [%[4]s]
 }
-`, project, desc, site, joinComma(quoted))
+`, testRunID, desc, site, joinComma(tagExprs))
 }
 
 func joinComma(s []string) string {
@@ -200,39 +179,33 @@ func joinComma(s []string) string {
 // validates tag IDs before the Create POST and does not leave an orphan VNet
 // in the backend when validation fails.
 func TestAccVirtualNetwork_InvalidTagFailsBeforePOST(t *testing.T) {
-	project := os.Getenv("LATITUDESH_TEST_PROJECT")
-	if project == "" {
-		t.Skip("LATITUDESH_TEST_PROJECT must be set")
-	}
-
 	// Suffix per-run so parallel CI jobs don't false-trigger each other's
-	// orphan check on the shared project.
+	// orphan check.
 	desc := fmt.Sprintf("tf-acc-pd6028-orphan-check-%s", acctest.RandString(6))
 	bogusTagID := "tag_pd6028_definitely_not_a_real_tag"
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccTokenCheck(t)
-			testAccProjectCheck(t)
 		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
 		Steps: []resource.TestStep{
 			{
-				Config:      testAccConfigVirtualNetworkWithTags(project, desc, testVNSite, []string{bogusTagID}),
+				Config:      testAccConfigVirtualNetworkBogusTag(desc, testVNSite, bogusTagID),
 				ExpectError: regexp.MustCompile(`Tag Validation Error`),
 			},
 		},
 		CheckDestroy: func(s *terraform.State) error {
 			// After the failed apply, the backend must not contain a vnet
 			// with our description — otherwise the orphan-prevention regressed.
+			// The vnet's project is created (and destroyed) in-config, so the
+			// lookup scans the team's vnets by the run-unique description.
 			ctx := context.Background()
 			client, err := newSDKClientFromEnv()
 			if err != nil {
 				return err
 			}
-			resp, err := client.PrivateNetworks.List(ctx, operations.GetVirtualNetworksRequest{
-				FilterProject: &project,
-			})
+			resp, err := client.PrivateNetworks.List(ctx, operations.GetVirtualNetworksRequest{})
 			if err != nil {
 				return fmt.Errorf("listing vnets to check for orphan: %w", err)
 			}
@@ -255,6 +228,17 @@ func TestAccVirtualNetwork_InvalidTagFailsBeforePOST(t *testing.T) {
 			return nil
 		},
 	})
+}
+
+func testAccConfigVirtualNetworkBogusTag(desc, site, bogusTagID string) string {
+	return testAccProjectBlock("tf-acc-virtual-network-orphan") + fmt.Sprintf(`
+resource "latitudesh_virtual_network" "test_item" {
+  project     = latitudesh_project.test.id
+  description = "%s"
+  site        = "%s"
+  tags        = ["%s"]
+}
+`, desc, site, bogusTagID)
 }
 
 func TestAccVirtualNetwork_UnknownProject(t *testing.T) {

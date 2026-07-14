@@ -13,11 +13,10 @@ func TestAccRole_Basic(t *testing.T) {
 
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
-	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
 
 	resource.Test(t, resource.TestCase{
-		PreCheck:  func() { testAccTokenCheck(t) },
-		Providers: testAccProviders,
+		PreCheck:                 func() { testAccTokenCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccCheckRoleBasic(),

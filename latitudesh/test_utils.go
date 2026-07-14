@@ -2,6 +2,8 @@ package latitudesh
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"fmt"
 	"log"
 	"net/http"
@@ -10,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	"golang.org/x/crypto/ssh"
 	"gopkg.in/dnaeon/go-vcr.v3/cassette"
 	"gopkg.in/dnaeon/go-vcr.v3/recorder"
 )
@@ -72,32 +74,6 @@ func testRecorder(name string, mode recorder.Mode) (*recorder.Recorder, func()) 
 	}
 }
 
-func testProviderConfigure(rec *recorder.Recorder) func(ctx context.Context, d *schema.ResourceData) (interface{}, diag.Diagnostics) {
-	return func(ctx context.Context, d *schema.ResourceData) (interface{}, diag.Diagnostics) {
-		authToken := d.Get("auth_token").(string)
-
-		var diags diag.Diagnostics
-
-		httpClient := *http.DefaultClient
-		httpClient.Transport = rec
-
-		if authToken != "" {
-			sdkClient := latitudeshgosdk.New(
-				latitudeshgosdk.WithSecurity(authToken),
-				latitudeshgosdk.WithClient(&httpClient),
-			)
-			return sdkClient, diags
-		}
-
-		sdkClient := latitudeshgosdk.New(
-			latitudeshgosdk.WithSecurity(""),
-			latitudeshgosdk.WithClient(&httpClient),
-		)
-
-		return sdkClient, diags
-	}
-}
-
 func createTestRecorder(t *testing.T) (*recorder.Recorder, func()) {
 	name := t.Name()
 	mode, err := testRecordMode()
@@ -118,6 +94,63 @@ func createTestRecorderWithSite(t *testing.T, site string) (*recorder.Recorder, 
 	}
 
 	return testRecorder(nameWithSite, mode)
+}
+
+// testGenerateSSHPublicKey generates a throwaway ed25519 public key in
+// authorized_keys format so SSH key tests never depend on external key material.
+func testGenerateSSHPublicKey(t *testing.T) string {
+	t.Helper()
+
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generating ed25519 key: %s", err)
+	}
+	sshPub, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		t.Fatalf("converting to SSH public key: %s", err)
+	}
+	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPub)))
+}
+
+// testAccCreateProject provisions a project via the API for tests that need a
+// pre-existing project (e.g. to exercise the provider-level default project,
+// which cannot reference resources created in the same config). The returned
+// cleanup function deletes it. Callers must only invoke it when TF_ACC is set.
+func testAccCreateProject(t *testing.T, name string) (string, func()) {
+	t.Helper()
+
+	// This helper provisions a real project with a raw SDK client, which
+	// cannot be served from VCR cassettes.
+	if mode, err := testRecordMode(); err == nil && mode == recorder.ModeReplayOnly {
+		t.Skip("testAccCreateProject requires live API access; not available in VCR replay mode")
+	}
+
+	client := createVCRClient(nil)
+	env := operations.CreateProjectEnvironmentDevelopment
+
+	result, err := client.Projects.Create(context.Background(), operations.CreateProjectProjectsRequestBody{
+		Data: &operations.CreateProjectProjectsData{
+			Type: operations.CreateProjectProjectsTypeProjects,
+			Attributes: &operations.CreateProjectProjectsAttributes{
+				Name:             name,
+				ProvisioningType: operations.CreateProjectProvisioningTypeOnDemand,
+				Environment:      &env,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("creating test project: %s", err)
+	}
+	if result.Object == nil || result.Object.Data == nil || result.Object.Data.ID == nil {
+		t.Fatal("test project create response missing ID")
+	}
+
+	id := *result.Object.Data.ID
+	return id, func() {
+		if _, err := client.Projects.Delete(context.Background(), id); err != nil {
+			t.Logf("cleanup: failed to delete test project %s: %s", id, err)
+		}
+	}
 }
 
 // createVCRClient creates a Latitude.sh SDK client with VCR recording/playback

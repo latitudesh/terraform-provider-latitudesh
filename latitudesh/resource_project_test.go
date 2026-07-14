@@ -7,7 +7,6 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
-	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
@@ -17,21 +16,20 @@ func TestAccProject_Basic(t *testing.T) {
 
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
-	testAccProviders["latitudesh"].ConfigureContextFunc = testProviderConfigure(recorder)
 
 	resource.Test(t, resource.TestCase{
-		PreCheck:     func() { testAccTokenCheck(t) },
-		Providers:    testAccProviders,
-		CheckDestroy: testAccCheckProjectDestroy,
+		PreCheck:                 func() { testAccTokenCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		CheckDestroy:             testAccCheckProjectDestroy,
 		Steps: []resource.TestStep{
 			{
 				Config: testAccCheckProjectBasic(),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckProjectExists("latitudesh_project.test_item", &project),
 					resource.TestCheckResourceAttr(
-						"latitudesh_project.test_item", "name", "test"),
+						"latitudesh_project.test_item", "name", "tf-acc-project-"+testRunID),
 					resource.TestCheckResourceAttr(
-						"latitudesh_project.test_item", "description", "hello"),
+						"latitudesh_project.test_item", "description", "terraform acceptance test project"),
 				),
 			},
 		},
@@ -39,7 +37,7 @@ func TestAccProject_Basic(t *testing.T) {
 }
 
 func testAccCheckProjectDestroy(s *terraform.State) error {
-	client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+	client := createVCRClient(nil)
 	ctx := context.Background()
 
 	for _, rs := range s.RootModule().Resources {
@@ -74,7 +72,7 @@ func testAccCheckProjectExists(n string, project *components.Project) resource.T
 			return fmt.Errorf("No Record ID is set")
 		}
 
-		client := testAccProvider.Meta().(*latitudeshgosdk.Latitudesh)
+		client := createVCRClient(nil)
 		ctx := context.Background()
 
 		response, err := client.Projects.List(ctx, operations.GetProjectsRequest{})
@@ -99,12 +97,12 @@ func testAccCheckProjectExists(n string, project *components.Project) resource.T
 }
 
 func testAccCheckProjectBasic() string {
-	return `
+	return fmt.Sprintf(`
 resource "latitudesh_project" "test_item" {
-  name        = "test"
-  description = "hello"
+  name        = "tf-acc-project-%s"
+  description = "terraform acceptance test project"
   environment = "Development"
   provisioning_type = "on_demand"
 }
-`
+`, testRunID)
 }

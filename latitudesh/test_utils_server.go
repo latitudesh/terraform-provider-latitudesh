@@ -10,7 +10,7 @@ import (
 )
 
 // Lista de sites para fallback (em ordem)
-var testServerSiteFallbackOrder = []string{"SAN3", "BGT", "SAO2", "AMS", "ASH", "DAL", "FRA", "CHI", "LON2"}
+var testServerSiteFallbackOrder = []string{"AMS", "CHI", "DAL", "ASH", "FRA", "LON2"}
 
 // isServersOutOfStockError detecta erro 422 com código SERVERS_OUT_OF_STOCK
 func isServersOutOfStockError(err error) bool {
@@ -77,19 +77,19 @@ func (tr *testRunner) Parallel() {
 }
 
 // Delegação para outros métodos de testing.TB
-func (tr *testRunner) Cleanup(f func())                           { tr.t.Cleanup(f) }
-func (tr *testRunner) Failed() bool                               { return tr.failed || tr.t.Failed() }
-func (tr *testRunner) FailNow()                                   { tr.failed = true; tr.t.FailNow() }
-func (tr *testRunner) Helper()                                    { tr.t.Helper() }
-func (tr *testRunner) Log(args ...interface{})                    { tr.t.Log(args...) }
-func (tr *testRunner) Logf(format string, args ...interface{})    { tr.t.Logf(format, args...) }
-func (tr *testRunner) Name() string                               { return tr.t.Name() }
-func (tr *testRunner) Setenv(key, value string)                   { tr.t.Setenv(key, value) }
-func (tr *testRunner) Skip(args ...interface{})                   { tr.t.Skip(args...) }
-func (tr *testRunner) SkipNow()                                   { tr.t.SkipNow() }
-func (tr *testRunner) Skipf(format string, args ...interface{})   { tr.t.Skipf(format, args...) }
-func (tr *testRunner) Skipped() bool                              { return tr.t.Skipped() }
-func (tr *testRunner) TempDir() string                            { return tr.t.TempDir() }
+func (tr *testRunner) Cleanup(f func())                         { tr.t.Cleanup(f) }
+func (tr *testRunner) Failed() bool                             { return tr.failed || tr.t.Failed() }
+func (tr *testRunner) FailNow()                                 { tr.failed = true; tr.t.FailNow() }
+func (tr *testRunner) Helper()                                  { tr.t.Helper() }
+func (tr *testRunner) Log(args ...interface{})                  { tr.t.Log(args...) }
+func (tr *testRunner) Logf(format string, args ...interface{})  { tr.t.Logf(format, args...) }
+func (tr *testRunner) Name() string                             { return tr.t.Name() }
+func (tr *testRunner) Setenv(key, value string)                 { tr.t.Setenv(key, value) }
+func (tr *testRunner) Skip(args ...interface{})                 { tr.t.Skip(args...) }
+func (tr *testRunner) SkipNow()                                 { tr.t.SkipNow() }
+func (tr *testRunner) Skipf(format string, args ...interface{}) { tr.t.Skipf(format, args...) }
+func (tr *testRunner) Skipped() bool                            { return tr.t.Skipped() }
+func (tr *testRunner) TempDir() string                          { return tr.t.TempDir() }
 
 // runTestWithSiteFallback executa teste com fallback automático de sites
 func runTestWithSiteFallback(t *testing.T, testCaseBuilder func(site string, recorder *recorder.Recorder) resource.TestCase) {
