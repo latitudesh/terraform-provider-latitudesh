@@ -14,7 +14,7 @@ import (
 
 const (
 	testVMName = "qa-terraform-vm"
-	testVMSite = "DAL"
+	testVMSite = "ASH"
 	testVMPlan = "vm-small"
 )
 
