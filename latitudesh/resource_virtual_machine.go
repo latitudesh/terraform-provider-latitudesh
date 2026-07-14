@@ -19,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
+	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/planmodifiers"
 	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
 
@@ -39,6 +40,7 @@ type VirtualMachineResource struct {
 type VirtualMachineResourceModel struct {
 	ID              types.String   `tfsdk:"id"`
 	Name            types.String   `tfsdk:"name"`
+	Site            types.String   `tfsdk:"site"`
 	Plan            types.String   `tfsdk:"plan"`
 	Project         types.String   `tfsdk:"project"`
 	OperatingSystem types.String   `tfsdk:"operating_system"`
@@ -74,6 +76,16 @@ func (r *VirtualMachineResource) Schema(ctx context.Context, req resource.Schema
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"site": schema.StringAttribute{
+				MarkdownDescription: "The site/region slug where the virtual machine is provisioned (case-insensitive, e.g. DAL, SAO). If not specified, the API defaults to `DAL`. Changing this forces a new resource.",
+				Optional:            true,
+				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					planmodifiers.CaseInsensitiveDiff{},
+					stringplanmodifier.RequiresReplace(),
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"name": schema.StringAttribute{
@@ -181,6 +193,13 @@ func (r *VirtualMachineResource) Create(ctx context.Context, req resource.Create
 	attrs := &components.VirtualMachinePayloadAttributes{
 		Plan:    &plan,
 		Project: &project,
+	}
+
+	if !data.Site.IsNull() && !data.Site.IsUnknown() && data.Site.ValueString() != "" {
+		// Convert site to uppercase for API compatibility (case-insensitive input)
+		// Keep original case in state, only uppercase for API call
+		site := strings.ToUpper(data.Site.ValueString())
+		attrs.Site = &site
 	}
 
 	if !data.Name.IsNull() && !data.Name.IsUnknown() && data.Name.ValueString() != "" {
@@ -343,6 +362,57 @@ func (r *VirtualMachineResource) Delete(ctx context.Context, req resource.Delete
 		resp.Diagnostics.AddError("Client Error", "Unable to delete virtual machine, got error: "+err.Error())
 		return
 	}
+
+	// Deletion is asynchronous server-side: the API accepts the request and
+	// tears the VM down afterwards. Wait until the VM is actually gone so
+	// dependent deletes (e.g. the project that contains it) don't fail with
+	// "project has active resources".
+	r.waitForVMDeleted(ctx, id, 10*time.Minute, &resp.Diagnostics)
+}
+
+func (r *VirtualMachineResource) waitForVMDeleted(ctx context.Context, id string, timeout time.Duration, diags *diag.Diagnostics) {
+	const (
+		pollInterval         = 5 * time.Second
+		maxConsecutiveErrors = 5
+	)
+
+	deadline := time.Now().Add(timeout)
+	consecutiveErrors := 0
+
+	for time.Now().Before(deadline) {
+		_, err := r.client.VirtualMachines.Get(ctx, id)
+		if err != nil {
+			var apiErr *components.APIError
+			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+				return
+			}
+			// Transient errors (5xx, network) are retried a few times; anything
+			// else will not resolve by waiting.
+			if errors.As(err, &apiErr) && apiErr.StatusCode < 500 {
+				diags.AddError("Client Error", "Unable to check virtual machine deletion: "+err.Error())
+				return
+			}
+			consecutiveErrors++
+			if consecutiveErrors >= maxConsecutiveErrors {
+				diags.AddError("Client Error", fmt.Sprintf("Unable to check virtual machine deletion after %d consecutive attempts, last error: %s", consecutiveErrors, err.Error()))
+				return
+			}
+		} else {
+			consecutiveErrors = 0
+		}
+
+		select {
+		case <-ctx.Done():
+			diags.AddError("Client Error", "Context cancelled while waiting for virtual machine deletion: "+ctx.Err().Error())
+			return
+		case <-time.After(pollInterval):
+		}
+	}
+
+	diags.AddError(
+		"Timeout waiting for virtual machine deletion",
+		fmt.Sprintf("Virtual machine %q was still present after %s.", id, timeout),
+	)
 }
 
 func (r *VirtualMachineResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
@@ -441,6 +511,16 @@ func (r *VirtualMachineResource) readVirtualMachine(ctx context.Context, data *V
 	a := vm.Attributes
 	if a == nil {
 		return
+	}
+
+	// Only set site from the API when the config doesn't provide one (computed
+	// default or import) - preserve the user's input case otherwise.
+	if data.Site.IsNull() || data.Site.IsUnknown() {
+		if a.Site != nil {
+			data.Site = types.StringValue(*a.Site)
+		} else {
+			data.Site = types.StringNull()
+		}
 	}
 
 	if a.Name != nil {

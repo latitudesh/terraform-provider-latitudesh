@@ -14,6 +14,7 @@ import (
 
 const (
 	testVMName = "qa-terraform-vm"
+	testVMSite = "ASH"
 	testVMPlan = "vm-small"
 )
 
@@ -33,6 +34,7 @@ func TestAccVirtualMachine_Basic(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckVirtualMachineExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", testVMName),
+					resource.TestCheckResourceAttr(resourceName, "site", testVMSite),
 					resource.TestCheckResourceAttr(resourceName, "plan", testVMPlan),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "primary_ipv4"),
@@ -127,8 +129,9 @@ func testAccVirtualMachineBasic(plan string) string {
 	return testAccProjectBlock("tf-acc-virtual-machine") + fmt.Sprintf(`
 resource "latitudesh_virtual_machine" "test_item" {
   name    = %q
+  site    = %q
   plan    = %q
   project = latitudesh_project.test.id
 }
-`, testVMName, plan)
+`, testVMName, testVMSite, plan)
 }
