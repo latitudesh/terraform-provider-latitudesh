@@ -27,7 +27,24 @@ func NewVlanAssignmentResource() resource.Resource {
 
 type VlanAssignmentResource struct {
 	client *latitudeshgosdk.Latitudesh
+
+	// connectTimeout and connectPollInterval bound the post-create wait for
+	// the assignment to reach status "connected". Zero values fall back to the
+	// production defaults below; tests override them to keep runs fast.
+	connectTimeout      time.Duration
+	connectPollInterval time.Duration
 }
+
+// statusConnected is the terminal status a virtual network assignment reaches
+// once provisioning has completed. Until then it sits at
+// "connecting"; if that never completes the assignment never appears in the
+// console (see issue #190).
+const statusConnected = "connected"
+
+const (
+	defaultConnectTimeout      = 2 * time.Minute
+	defaultConnectPollInterval = 3 * time.Second
+)
 
 type VlanAssignmentResourceModel struct {
 	ID               types.String `tfsdk:"id"`
@@ -155,9 +172,21 @@ func (r *VlanAssignmentResource) Create(ctx context.Context, req resource.Create
 		}
 	}
 
-	// Read the resource to populate all attributes
-	r.readVlanAssignment(ctx, &data, &resp.Diagnostics)
+	// Wait for the assignment to actually reach "connected" and populate all
+	// attributes from the connected assignment. A bare 201 only means the
+	// request was accepted; provisioning happens asynchronously and
+	// may never complete. Reporting success here without waiting is the
+	// false-success gap in issue #190 (Terraform shows the VLAN assigned while
+	// the console shows nothing).
+	persist := r.waitForAssignmentConnected(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
+		if persist {
+			// The assignment never connected and couldn't be rolled back, so it
+			// still exists remotely. Save it to state so Terraform tracks it and
+			// replaces it on the next apply (create-with-error taints it) rather
+			// than leaking it or creating a duplicate.
+			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+		}
 		return
 	}
 
@@ -264,6 +293,182 @@ func (r *VlanAssignmentResource) waitForAssignmentRemoval(ctx context.Context, i
 	}
 }
 
+// waitForAssignmentConnected polls the just-created assignment until it
+// reaches status "connected", then populates data from it. If the deadline
+// passes while the assignment is still "connecting" (or has not surfaced yet),
+// it fails the apply with an actionable diagnostic instead of silently
+// recording a phantom assignment. Reuses findAssignmentByID so the lookup is
+// filtered by server and survives pagination.
+// waitForAssignmentConnected returns whether the caller should persist the
+// assignment to state. It returns false on success (the caller saves the
+// connected assignment normally) and false when a non-connected assignment was
+// successfully rolled back (nothing to track). It returns true only when the
+// assignment never connected AND could not be rolled back — then it populates
+// data so the caller can save it to state, keeping the still-existing remote
+// assignment tracked (and tainted) for reconciliation on the next apply.
+func (r *VlanAssignmentResource) waitForAssignmentConnected(ctx context.Context, data *VlanAssignmentResourceModel, diags *diag.Diagnostics) (persist bool) {
+	timeout := r.connectTimeout
+	if timeout <= 0 {
+		timeout = defaultConnectTimeout
+	}
+	pollInterval := r.connectPollInterval
+	if pollInterval <= 0 {
+		pollInterval = defaultConnectPollInterval
+	}
+
+	assignmentID := data.ID.ValueString()
+	serverID := ""
+	if !data.ServerID.IsNull() {
+		serverID = data.ServerID.ValueString()
+	}
+
+	deadline := time.Now().Add(timeout)
+	lastStatus := ""
+	var lastAttrs *components.VirtualNetworkAssignmentDataAttributes
+
+poll:
+	for {
+		assignment, err := r.findAssignmentByID(ctx, assignmentID, serverID)
+		if err != nil {
+			// A transient lookup error (429/503/network) must not abandon the
+			// assignment we just created — keep polling within the deadline.
+			lastStatus = fmt.Sprintf("lookup error: %s", err)
+		} else if assignment != nil && assignment.Attributes != nil {
+			lastAttrs = assignment.Attributes
+			if lastAttrs.Status != nil {
+				lastStatus = *lastAttrs.Status
+			}
+			if lastStatus == statusConnected {
+				applyAssignmentAttributes(data, lastAttrs)
+				return false
+			}
+		}
+
+		if !time.Now().Add(pollInterval).Before(deadline) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			break poll
+		case <-time.After(pollInterval):
+		}
+	}
+
+	// Never reached "connected". Roll back the assignment the POST created so a
+	// half-provisioned one isn't left unmanaged in the API.
+	if r.rollbackAssignment(assignmentID) {
+		diags.AddError("Assignment Not Connected",
+			fmt.Sprintf("Virtual network assignment %q did not reach %q within %s (last status: %q). "+
+				"The request was accepted but provisioning did not complete; the assignment "+
+				"will not be visible in the console. Please retry again in a few moments.",
+				assignmentID, statusConnected, timeout, statusOrUnknown(lastStatus)))
+		return false
+	}
+
+	// Rollback failed — the assignment still exists remotely. Populate data from
+	// the last read (or nulls) so the caller can save it to state; Terraform
+	// then tracks it and replaces it on the next apply instead of leaking it.
+	if lastAttrs != nil {
+		applyAssignmentAttributes(data, lastAttrs)
+	} else {
+		data.Vid = types.Int64Null()
+		data.Description = types.StringNull()
+		data.Status = types.StringNull()
+	}
+	diags.AddError("Assignment Not Connected",
+		fmt.Sprintf("Virtual network assignment %q did not reach %q within %s (last status: %q) and could "+
+			"not be rolled back. It is now tracked in state and will be replaced on the next apply. "+
+			"Please retry again in a few moments.",
+			assignmentID, statusConnected, timeout, statusOrUnknown(lastStatus)))
+	return true
+}
+
+// rollbackAssignment removes an assignment that Create could not bring to
+// "connected", retrying transient failures within a bounded window. It runs on
+// a fresh context (the caller's may be cancelled). Returns true if the
+// assignment is gone (deleted, or already absent), false if it could not be
+// removed — the caller then keeps it in state for reconciliation.
+func (r *VlanAssignmentResource) rollbackAssignment(id string) bool {
+	if id == "" {
+		return true
+	}
+
+	interval := r.connectPollInterval
+	if interval <= 0 {
+		interval = time.Second
+	}
+
+	const attempts = 3
+	for attempt := 0; attempt < attempts; attempt++ {
+		if attempt > 0 {
+			time.Sleep(interval)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		result, err := r.client.PrivateNetworks.DeleteAssignment(ctx, id)
+		cancel()
+
+		// A 404 means the assignment is already gone — treat as success.
+		if err != nil && strings.Contains(err.Error(), "404") {
+			return true
+		}
+		// A real transport/API error (the SDK reports an empty success body as
+		// the literal "{}") — retry within the window.
+		if err != nil && err.Error() != "{}" {
+			continue
+		}
+		// No Go error: the SDK can still signal failure only in the HTTP status,
+		// so validate it like the Delete path does before declaring success.
+		if result != nil && result.HTTPMeta.Response != nil {
+			code := result.HTTPMeta.Response.StatusCode
+			if code == 404 {
+				return true
+			}
+			if code >= 400 {
+				continue
+			}
+		}
+		return true
+	}
+	return false
+}
+
+func statusOrUnknown(s string) string {
+	if s == "" {
+		return "unknown"
+	}
+	return s
+}
+
+// applyAssignmentAttributes copies the readable attributes of an assignment
+// onto the resource model. Shared by the connected-wait and the read paths so
+// the mapping stays in one place.
+func applyAssignmentAttributes(data *VlanAssignmentResourceModel, attrs *components.VirtualNetworkAssignmentDataAttributes) {
+	if attrs == nil {
+		return
+	}
+	if attrs.Server != nil && attrs.Server.ID != nil {
+		data.ServerID = types.StringValue(*attrs.Server.ID)
+	}
+	if attrs.VirtualNetworkID != nil {
+		data.VirtualNetworkID = types.StringValue(*attrs.VirtualNetworkID)
+	}
+	if attrs.Vid != nil {
+		data.Vid = types.Int64Value(*attrs.Vid)
+	} else {
+		data.Vid = types.Int64Null()
+	}
+	if attrs.Description != nil {
+		data.Description = types.StringValue(*attrs.Description)
+	} else {
+		data.Description = types.StringNull()
+	}
+	if attrs.Status != nil {
+		data.Status = types.StringValue(*attrs.Status)
+	} else {
+		data.Status = types.StringNull()
+	}
+}
+
 func (r *VlanAssignmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	var data VlanAssignmentResourceModel
 
@@ -332,24 +537,7 @@ func (r *VlanAssignmentResource) readVlanAssignment(ctx context.Context, data *V
 		}
 		found = true
 
-		if assignment.Attributes != nil {
-			attrs := assignment.Attributes
-			if attrs.Server != nil && attrs.Server.ID != nil {
-				data.ServerID = types.StringValue(*attrs.Server.ID)
-			}
-			if attrs.VirtualNetworkID != nil {
-				data.VirtualNetworkID = types.StringValue(*attrs.VirtualNetworkID)
-			}
-			if attrs.Vid != nil {
-				data.Vid = types.Int64Value(*attrs.Vid)
-			}
-			if attrs.Description != nil {
-				data.Description = types.StringValue(*attrs.Description)
-			}
-			if attrs.Status != nil {
-				data.Status = types.StringValue(*attrs.Status)
-			}
-		}
+		applyAssignmentAttributes(data, assignment.Attributes)
 
 		// If we got the vid, we're done. Otherwise retry.
 		if !data.Vid.IsNull() {
