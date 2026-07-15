@@ -9,6 +9,14 @@ on:
       - reopened
       - ready_for_review
 
+# The acceptance suite runs against one shared Latitude account/project, so two
+# runs in flight at once would create colliding resource names. Serialize them:
+# a new run queues until the previous finishes (never cancels it mid-run, which
+# would leak half-created resources).
+concurrency:
+  group: latitudesh-acceptance-tests
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest

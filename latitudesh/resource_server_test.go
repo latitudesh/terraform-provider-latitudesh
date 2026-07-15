@@ -546,10 +546,10 @@ func TestAccServer_Locked(t *testing.T) {
 }
 
 func testAccCheckServerLockedWithSite(site string, locked bool) string {
-	return testAccProjectBlock("tf-acc-server") + fmt.Sprintf(`
+	return fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "hourly"
-	project = latitudesh_project.test.id
+	project = "`+testAccProjectID()+`"
 	hostname = "%s"
 	plan     = "%s"
 	site     = "%s"
@@ -690,14 +690,10 @@ func testAccCheckServerExists(n string) resource.TestCheckFunc {
 			serverOS = *server.Attributes.OperatingSystem.Slug
 		}
 
-		// The expected project is created in-config as latitudesh_project.test;
+		// All acceptance tests run in the shared project (testAccProjectID);
 		// the API may report it by ID or slug.
-		expectedProjectID := ""
-		expectedProjectSlug := ""
-		if prj, ok := s.RootModule().Resources["latitudesh_project.test"]; ok {
-			expectedProjectID = prj.Primary.ID
-			expectedProjectSlug = prj.Primary.Attributes["slug"]
-		}
+		expectedProjectID := testAccProjectID()
+		expectedProjectSlug := testAccProjectSlugBestEffort()
 
 		// Check if server meets all required conditions
 		if (status == "on" || status == "inventory" || status == "deploying") &&
@@ -792,6 +788,7 @@ func TestAccServer_DefaultTimeout(t *testing.T) {
 }
 
 func TestAccServer_ProjectSlugConsistency(t *testing.T) {
+	projectSlug := testAccProjectSlug(t)
 	runTestWithSiteFallback(t, func(site string, recorder *recorder.Recorder) resource.TestCase {
 		return resource.TestCase{
 			PreCheck: func() {
@@ -801,12 +798,11 @@ func TestAccServer_ProjectSlugConsistency(t *testing.T) {
 			CheckDestroy:             testAccCheckServerDestroy,
 			Steps: []resource.TestStep{
 				{
-					Config: testAccCheckServerWithProjectSlugWithSite(site),
+					Config: testAccCheckServerWithProjectSlugWithSite(site, projectSlug),
 					Check: resource.ComposeTestCheckFunc(
 						testAccCheckServerExists("latitudesh_server.test_item"),
-						resource.TestCheckResourceAttrPair(
-							"latitudesh_server.test_item", "project",
-							"latitudesh_project.test", "slug"),
+						resource.TestCheckResourceAttr(
+							"latitudesh_server.test_item", "project", projectSlug),
 						resource.TestCheckResourceAttr(
 							"latitudesh_server.test_item", "hostname", testServerHostname),
 						resource.TestCheckResourceAttr(
@@ -815,7 +811,7 @@ func TestAccServer_ProjectSlugConsistency(t *testing.T) {
 				},
 				// Verify that project value doesn't change after read
 				{
-					Config:             testAccCheckServerWithProjectSlugWithSite(site),
+					Config:             testAccCheckServerWithProjectSlugWithSite(site, projectSlug),
 					PlanOnly:           true,
 					ExpectNonEmptyPlan: false, // Should be no changes
 				},
@@ -827,10 +823,10 @@ func TestAccServer_ProjectSlugConsistency(t *testing.T) {
 // Config generators with site parameter
 
 func testAccCheckServerBasicWithSite(site string) string {
-	return testAccProjectBlock("tf-acc-server") + fmt.Sprintf(`
+	return fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
-	project = latitudesh_project.test.id
+	project = "`+testAccProjectID()+`"
 	hostname = "%s"
 	plan     = "%s"
 	site     = "%s"
@@ -845,10 +841,10 @@ resource "latitudesh_server" "test_item" {
 }
 
 func testAccCheckServerUpdateInitialWithSite(site string) string {
-	return testAccProjectBlock("tf-acc-server") + fmt.Sprintf(`
+	return fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "hourly"
-	project = latitudesh_project.test.id
+	project = "`+testAccProjectID()+`"
 	hostname = "test-initial"
 	plan     = "%s"
 	site     = "%s"
@@ -862,10 +858,10 @@ resource "latitudesh_server" "test_item" {
 }
 
 func testAccCheckServerUpdateChangedWithSite(site string) string {
-	return testAccProjectBlock("tf-acc-server") + fmt.Sprintf(`
+	return fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
-	project = latitudesh_project.test.id
+	project = "`+testAccProjectID()+`"
 	hostname = "test-initial"
 	plan     = "%s"
 	site     = "%s"
@@ -879,10 +875,10 @@ resource "latitudesh_server" "test_item" {
 }
 
 func testAccCheckServerUpdateHostnameWithSite(site string) string {
-	return testAccProjectBlock("tf-acc-server") + fmt.Sprintf(`
+	return fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
-	project = latitudesh_project.test.id
+	project = "`+testAccProjectID()+`"
 	hostname = "test-updated"
 	plan     = "%s"
 	site     = "%s"
@@ -897,10 +893,10 @@ resource "latitudesh_server" "test_item" {
 }
 
 func testAccServerConfigWithSSHKeysWithSite(site string) string {
-	return testAccProjectBlock("tf-acc-server") + fmt.Sprintf(`
+	return fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
-	project = latitudesh_project.test.id
+	project = "`+testAccProjectID()+`"
 	hostname = "%s"
 	plan     = "%s"
 	site     = "%s"
@@ -916,10 +912,10 @@ resource "latitudesh_server" "test_item" {
 }
 
 func testAccCheckServerCustomTimeoutWithSite(site string) string {
-	return testAccProjectBlock("tf-acc-server") + fmt.Sprintf(`
+	return fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
-	project = latitudesh_project.test.id
+	project = "`+testAccProjectID()+`"
 	hostname = "%s"
 	plan     = "%s"
 	site     = "%s"
@@ -938,11 +934,11 @@ resource "latitudesh_server" "test_item" {
 	)
 }
 
-func testAccCheckServerWithProjectSlugWithSite(site string) string {
-	return testAccProjectBlock("tf-acc-server") + fmt.Sprintf(`
+func testAccCheckServerWithProjectSlugWithSite(site, projectSlug string) string {
+	return fmt.Sprintf(`
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
-	project = latitudesh_project.test.slug
+	project = "`+projectSlug+`"
 	hostname = "%s"
 	plan     = "%s"
 	site     = "%s"

@@ -19,16 +19,84 @@ import (
 // from aborted ones.
 var testRunID = acctest.RandString(6)
 
-// testAccProjectBlock returns an HCL block creating a run-unique project for
-// self-contained acceptance tests.
-func testAccProjectBlock(prefix string) string {
-	return fmt.Sprintf(`
-resource "latitudesh_project" "test" {
-  name              = "%s-%s"
-  environment       = "Development"
-  provisioning_type = "on_demand"
+// defaultTestProjectID is the pre-existing project (DevTools QA) that all
+// acceptance tests share. Concentrating tests in one project avoids creating a
+// throwaway project per test — those leak on aborted runs and then collide on
+// the API's unique-project-name constraint.
+const defaultTestProjectID = "proj_jv6m5JyZDNLPe"
+
+// testAccProjectID returns the shared project ID. Override with
+// LATITUDESH_TEST_PROJECT to run the suite against a different account.
+func testAccProjectID() string {
+	if v := os.Getenv("LATITUDESH_TEST_PROJECT"); v != "" {
+		return v
+	}
+	return defaultTestProjectID
 }
-`, prefix, testRunID)
+
+var (
+	testProjectSlugOnce sync.Once
+	testProjectSlug     string
+	testProjectSlugErr  error
+)
+
+// resolveProjectSlug looks up the shared project's slug from the API by
+// matching testAccProjectID(), caching the result (and any error) once.
+func resolveProjectSlug() (string, error) {
+	testProjectSlugOnce.Do(func() {
+		client := createVCRClient(nil)
+		ctx := context.Background()
+		id := testAccProjectID()
+		size := int64(100)
+
+		resp, err := client.Projects.List(ctx, operations.GetProjectsRequest{PageSize: &size})
+		for err == nil && resp != nil && resp.Projects != nil {
+			for _, p := range resp.Projects.Data {
+				if p.ID != nil && *p.ID == id && p.Attributes != nil && p.Attributes.Slug != nil {
+					testProjectSlug = *p.Attributes.Slug
+					return
+				}
+			}
+			if resp.Next == nil {
+				break
+			}
+			resp, err = resp.Next()
+		}
+		if err != nil {
+			testProjectSlugErr = err
+			return
+		}
+		testProjectSlugErr = fmt.Errorf("project %s not found while resolving its slug", id)
+	})
+	return testProjectSlug, testProjectSlugErr
+}
+
+// testAccProjectSlug returns the shared project's slug, failing the test if it
+// can't be resolved. Needed by tests that exercise the project-by-slug path
+// (which can't derive a slug from a bare ID).
+func testAccProjectSlug(t *testing.T) string {
+	t.Helper()
+
+	// The slug is resolved with a raw SDK client (no recorder), so it can't be
+	// served from a cassette. Skip in replay mode, mirroring the other
+	// live-only helpers (testAccSharedServers), so we don't make a live call
+	// before the cassette-backed provider is installed.
+	if mode, err := testRecordMode(); err == nil && mode == recorder.ModeReplayOnly {
+		t.Skip("resolving project slug requires live API access; not available in VCR replay mode")
+	}
+
+	slug, err := resolveProjectSlug()
+	if err != nil {
+		t.Fatalf("resolving shared project slug: %s", err)
+	}
+	return slug
+}
+
+// testAccProjectSlugBestEffort returns the shared project's slug, or "" if it
+// can't be resolved. For check helpers that have no *testing.T to fail.
+func testAccProjectSlugBestEffort() string {
+	slug, _ := resolveProjectSlug()
+	return slug
 }
 
 // Shared acceptance-test fixture: attachment-style tests (VLAN/firewall
@@ -67,8 +135,7 @@ func testAccSharedServers(t *testing.T, n int) (projectID, site string, serverID
 	ctx := context.Background()
 
 	if f.projectID == "" {
-		id, _ := testAccCreateProject(t, "tf-acc-shared-"+testRunID)
-		f.projectID = id
+		f.projectID = testAccProjectID()
 	}
 
 	var created []string
@@ -180,39 +247,13 @@ func testSharedFixtureTeardown() {
 	client := createVCRClient(nil)
 	ctx := context.Background()
 
+	// Only the servers this fixture provisioned are torn down. The project is
+	// pre-existing and shared (see testAccProjectID) — it must survive the run.
 	for _, id := range f.serverIDs {
 		if _, err := client.Servers.Delete(ctx, id, nil); err != nil {
 			fmt.Fprintf(os.Stderr, "shared fixture teardown: failed to delete server %s: %s\n", id, err)
 		}
 	}
-
-	// Server deletion is asynchronous and the project cannot be deleted while
-	// its servers (and their IPs) are still deprovisioning — wait them out.
-	deadline := time.Now().Add(10 * time.Minute)
-	for _, id := range f.serverIDs {
-		for {
-			response, err := client.Servers.Get(ctx, id, nil)
-			if err != nil || response.Server == nil || response.Server.Data == nil {
-				break
-			}
-			if time.Now().After(deadline) {
-				fmt.Fprintf(os.Stderr, "shared fixture teardown: server %s still deprovisioning after 10m\n", id)
-				break
-			}
-			time.Sleep(10 * time.Second)
-		}
-	}
-
-	var lastErr error
-	for attempt := 0; attempt < 6; attempt++ {
-		if attempt > 0 {
-			time.Sleep(10 * time.Second)
-		}
-		if _, lastErr = client.Projects.Delete(ctx, f.projectID); lastErr == nil {
-			return
-		}
-	}
-	fmt.Fprintf(os.Stderr, "shared fixture teardown: failed to delete project %s (clean it up manually): %s\n", f.projectID, lastErr)
 }
 
 func TestMain(m *testing.M) {
