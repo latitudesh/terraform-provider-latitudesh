@@ -36,6 +36,12 @@ func TestAccVlanAssignment_Basic(t *testing.T) {
 					resource.TestCheckResourceAttrPair(
 						"latitudesh_vlan_assignment.test", "virtual_network_id",
 						"latitudesh_virtual_network.test", "id"),
+					// PD-6552: Create must wait for the assignment to reach
+					// "connected" before succeeding, so a completed apply must
+					// report that status (with an allocated vid) — not a
+					// still-"connecting" phantom.
+					resource.TestCheckResourceAttr("latitudesh_vlan_assignment.test", "status", "connected"),
+					resource.TestCheckResourceAttrSet("latitudesh_vlan_assignment.test", "vid"),
 				),
 			},
 			{
