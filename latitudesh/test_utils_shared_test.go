@@ -76,6 +76,15 @@ func resolveProjectSlug() (string, error) {
 // (which can't derive a slug from a bare ID).
 func testAccProjectSlug(t *testing.T) string {
 	t.Helper()
+
+	// The slug is resolved with a raw SDK client (no recorder), so it can't be
+	// served from a cassette. Skip in replay mode, mirroring the other
+	// live-only helpers (testAccSharedServers), so we don't make a live call
+	// before the cassette-backed provider is installed.
+	if mode, err := testRecordMode(); err == nil && mode == recorder.ModeReplayOnly {
+		t.Skip("resolving project slug requires live API access; not available in VCR replay mode")
+	}
+
 	slug, err := resolveProjectSlug()
 	if err != nil {
 		t.Fatalf("resolving shared project slug: %s", err)
