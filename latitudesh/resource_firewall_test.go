@@ -82,10 +82,10 @@ func testAccCheckFirewallExists(n string, firewall *components.FirewallData) res
 }
 
 func testAccCheckLatitudeFirewallConfig_basic() string {
-	return testAccProjectBlock("tf-acc-firewall") + `
+	return `
 resource "latitudesh_firewall" "test" {
   name = "test-firewall"
-  project = latitudesh_project.test.id
+  project = "` + testAccProjectID() + `"
   # Default rule - API will automatically add this
   rules {
     from = "ANY"

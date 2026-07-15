@@ -126,12 +126,12 @@ func testAccCheckVirtualMachineExists(n string) resource.TestCheckFunc {
 }
 
 func testAccVirtualMachineBasic(plan string) string {
-	return testAccProjectBlock("tf-acc-virtual-machine") + fmt.Sprintf(`
+	return fmt.Sprintf(`
 resource "latitudesh_virtual_machine" "test_item" {
   name    = %q
   site    = %q
   plan    = %q
-  project = latitudesh_project.test.id
+  project = "`+testAccProjectID()+`"
 }
 `, testVMName, testVMSite, plan)
 }

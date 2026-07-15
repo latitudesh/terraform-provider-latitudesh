@@ -111,7 +111,7 @@ func pointersEqual(a, b *string) bool {
 }
 
 func testAccCheckServerWithUserData(site string) string {
-	return testAccProjectBlock("tf-acc-server-user-data") + fmt.Sprintf(`
+	return fmt.Sprintf(`
 resource "latitudesh_user_data" "test" {
 	description = "tf-acc-server-user-data"
 	content     = "%s"
@@ -119,7 +119,7 @@ resource "latitudesh_user_data" "test" {
 
 resource "latitudesh_server" "test_item" {
 	billing = "monthly"
-	project = latitudesh_project.test.id
+	project = "`+testAccProjectID()+`"
   	hostname = "%s"
 	plan     = "%s"
 	site     = "%s"

@@ -27,10 +27,9 @@ func TestAccVirtualNetwork_Basic(t *testing.T) {
 
 	resourceName := "latitudesh_virtual_network.test_item"
 
-	// This test exercises the provider-level default project, which cannot
-	// reference a resource from the same config — pre-create it via the API.
-	projectID, cleanup := testAccCreateProject(t, "tf-acc-virtual-network-"+testRunID)
-	defer cleanup()
+	// This test exercises the provider-level default project. Use the shared
+	// pre-existing project instead of creating a throwaway one.
+	projectID := testAccProjectID()
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -144,7 +143,7 @@ func TestAccVirtualNetwork_WithTags(t *testing.T) {
 }
 
 func testAccConfigVirtualNetworkWithTags(desc, site string, tagExprs []string) string {
-	return testAccProjectBlock("tf-acc-virtual-network-tags") + fmt.Sprintf(`
+	return fmt.Sprintf(`
 resource "latitudesh_tag" "a" {
   name  = "tf-acc-vn-tag-a-%[1]s"
   color = "#ff0000"
@@ -156,7 +155,7 @@ resource "latitudesh_tag" "b" {
 }
 
 resource "latitudesh_virtual_network" "test_item" {
-  project     = latitudesh_project.test.id
+  project     = "`+testAccProjectID()+`"
   description = "%[2]s"
   site        = "%[3]s"
   tags        = [%[4]s]
@@ -231,9 +230,9 @@ func TestAccVirtualNetwork_InvalidTagFailsBeforePOST(t *testing.T) {
 }
 
 func testAccConfigVirtualNetworkBogusTag(desc, site, bogusTagID string) string {
-	return testAccProjectBlock("tf-acc-virtual-network-orphan") + fmt.Sprintf(`
+	return fmt.Sprintf(`
 resource "latitudesh_virtual_network" "test_item" {
-  project     = latitudesh_project.test.id
+  project     = "`+testAccProjectID()+`"
   description = "%s"
   site        = "%s"
   tags        = ["%s"]
