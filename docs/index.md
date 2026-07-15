@@ -51,6 +51,9 @@ provider "latitudesh" {}
 
 ```hcl
 variable "billing" {
+  # hourly and monthly for on-demand projects, yearly for reserved projects.
+  # Defaults to monthly, which is charged upfront based on the proration of
+  # the current billing cycle. Use hourly for dynamic workloads.
   description = "The server billing type"
   default     = "monthly"
 }

@@ -19,10 +19,14 @@ The `latitudesh_server` resource allows you to deploy and manage bare metal serv
 
 ## Example usage
 
+> **Billing**
+>
+> `billing` defaults to `monthly`, which is charged upfront based on the proration of the current billing cycle. For dynamic or short-lived workloads, set `billing = "hourly"` explicitly. `yearly` is available for reserved projects.
+
 ```hcl
 # Create a server with custom timeouts
 resource "latitudesh_server" "server" {
-  billing           = "monthly"
+  billing           = "monthly" # hourly, monthly (default) or yearly
   hostname          = "my-server"
   plan              = "m4-metal-medium"
   site              = "ASH"
@@ -140,8 +144,7 @@ With the above, only `user_data` changes (ID or content) cause a reinstall. Chan
 
 - `allow_reinstall` (Boolean) Allow server reinstallation when `operating_system`, `hostname`, `ssh_keys`, `user_data` (ID or content), `raid`, or `ipxe` changes. **Defaults to `false`.** When `false`, `hostname` changes are applied in-place via PATCH and any other reinstall-only field change fails the plan with an explicit error; set this to `true` on resources where you want reinstalls to happen automatically. See `allowed_reinstall_triggers` to further restrict which kinds of changes are permitted to cause a reinstall.
 - `allowed_reinstall_triggers` (List of String) Optional list restricting which field changes are allowed to trigger a server reinstall when `allow_reinstall = true`. When omitted, all reinstall-only field changes trigger a reinstall (default behavior). When set, only listed names cause a reinstall; changes to reinstall-only fields not in the list fail the plan with an explicit error, except `hostname` which falls back to its in-place PATCH path. Valid values: `operating_system`, `user_data`, `raid`, `disk_layout`, `ipxe`, `ssh_keys`, `hostname`. The token `user_data` covers both ID changes and content changes of the referenced `latitudesh_user_data` resource.
-- `billing` (String) The server billing type.
-    Accepts hourly and monthly for on demand projects and yearly for reserved projects.
+- `billing` (String) The server billing type. Accepts `hourly` and `monthly` for on-demand projects and `yearly` for reserved projects. **Defaults to `monthly`**, which is charged upfront based on the proration of the current billing cycle. Use `hourly` for dynamic or short-lived workloads. When omitted, the plan shows the effective value (`billing = "monthly"` on create).
 - `disk_layout` (Attributes List) Custom disk layout made of one or more disk groups, used instead of `raid`. Mutually exclusive with `raid` and `ipxe`. The layout is refreshed from the server deploy config on read, so out-of-band changes are detected and imported servers populate it. Changing it requires a reinstall and only succeeds when `allow_reinstall = true`. The OS group's filesystem is always `ext4` (managed by the API) and is not configurable here. (see [below for nested schema](#nestedatt--disk_layout))
 - `ipxe` (String) The iPXE script to boot. Accepts either a URL pointing at the script, or the script encoded in base64. Required when `operating_system = "ipxe"`; the plan fails with an explicit error if it is missing. Updating ipxe requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.
 - `locked` (Boolean) Lock/unlock the server. A locked server cannot be deleted or updated.
