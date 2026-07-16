@@ -91,7 +91,7 @@ func runCreate(t *testing.T, r *VlanAssignmentResource) *resource.CreateResponse
 	schemaResp := &resource.SchemaResponse{}
 	r.Schema(ctx, resource.SchemaRequest{}, schemaResp)
 	sch := schemaResp.Schema
-	objType := sch.Type().TerraformType(ctx)
+	objType := sch.Type().TerraformType(ctx).(tftypes.Object)
 
 	planVal := tftypes.NewValue(objType, map[string]tftypes.Value{
 		"id":                 tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
@@ -100,6 +100,8 @@ func runCreate(t *testing.T, r *VlanAssignmentResource) *resource.CreateResponse
 		"vid":                tftypes.NewValue(tftypes.Number, tftypes.UnknownValue),
 		"description":        tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
 		"status":             tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
+		// No timeouts block configured; the resource pins connectTimeout directly.
+		"timeouts": tftypes.NewValue(objType.AttributeTypes["timeouts"], nil),
 	})
 
 	req := resource.CreateRequest{Plan: tfsdk.Plan{Raw: planVal, Schema: sch}}
