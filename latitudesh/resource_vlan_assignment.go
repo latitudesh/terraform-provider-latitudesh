@@ -232,8 +232,23 @@ func (r *VlanAssignmentResource) Read(ctx context.Context, req resource.ReadRequ
 }
 
 func (r *VlanAssignmentResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	// VLAN assignments cannot be updated, they must be replaced
-	resp.Diagnostics.AddError("Update Not Supported", "VLAN assignments cannot be updated, they must be replaced.")
+	// server_id and virtual_network_id force replacement, so the only attribute
+	// that can reach Update is the timeouts block — a config-only value that
+	// needs no API call. Carry the plan into state (keeping the computed values
+	// read at create/refresh) so adding or adjusting timeouts on an existing
+	// assignment is an in-place no-op instead of recreating it.
+	var plan, state VlanAssignmentResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	plan.Vid = state.Vid
+	plan.Description = state.Description
+	plan.Status = state.Status
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *VlanAssignmentResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
