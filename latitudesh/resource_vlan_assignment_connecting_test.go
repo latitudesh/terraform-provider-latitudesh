@@ -123,6 +123,42 @@ func newTestVlanResource(serverURL string) *VlanAssignmentResource {
 	}
 }
 
+// TestVlanAssignmentImportState_TimeoutsTyped: importing an assignment must
+// produce a state whose `timeouts` value carries the correct object type. A
+// hand-built null timeouts.Value has no attribute types ("Object[]") and fails
+// state conversion against the schema type ("Object[create:String]").
+func TestVlanAssignmentImportState_TimeoutsTyped(t *testing.T) {
+	m := &vlanMock{connectAfter: 1} // list lookup returns the assignment
+	server := m.server(t)
+	r := newTestVlanResource(server.URL)
+
+	ctx := context.Background()
+	schemaResp := &resource.SchemaResponse{}
+	r.Schema(ctx, resource.SchemaRequest{}, schemaResp)
+	sch := schemaResp.Schema
+	objType := sch.Type().TerraformType(ctx)
+
+	resp := &resource.ImportStateResponse{
+		State: tfsdk.State{Raw: tftypes.NewValue(objType, nil), Schema: sch},
+	}
+	r.ImportState(ctx, resource.ImportStateRequest{ID: "proj_TEST:vnasg_STUCK01"}, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("ImportState returned diagnostics: %v", resp.Diagnostics.Errors())
+	}
+
+	var out VlanAssignmentResourceModel
+	if diags := resp.State.Get(ctx, &out); diags.HasError() {
+		t.Fatalf("reading imported state: %v", diags.Errors())
+	}
+	if got := out.ID.ValueString(); got != "vnasg_STUCK01" {
+		t.Fatalf("expected imported id vnasg_STUCK01, got %q", got)
+	}
+	if !out.Timeouts.IsNull() {
+		t.Fatalf("expected a null timeouts on import, got %#v", out.Timeouts)
+	}
+}
+
 // TestVlanAssignmentCreate_StuckConnecting: an assignment that never leaves
 // "connecting" must fail the apply (not report success) and roll back the
 // assignment it created so nothing is left unmanaged.
