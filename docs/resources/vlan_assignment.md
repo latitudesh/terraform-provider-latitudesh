@@ -77,8 +77,6 @@ resource "latitudesh_vlan_assignment" "vlan_assignment" {
 
 - `description` (String) The Virtual Network description
 - `id` (String) The ID of this resource.
-- `server_hostname` (String) The assignment server hostname
-- `server_label` (String) The assignment server label
 - `status` (String) The assignment status
 - `vid` (Number) The vlan ID of the virtual network
 
