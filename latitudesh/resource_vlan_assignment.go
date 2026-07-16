@@ -492,6 +492,15 @@ func applyAssignmentAttributes(data *VlanAssignmentResourceModel, attrs *compone
 func (r *VlanAssignmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	var data VlanAssignmentResourceModel
 
+	// Seed from the framework's empty state so nested values like `timeouts`
+	// carry their correct object type. A timeouts.Value built by hand is a null
+	// object with no attribute types, which fails state conversion on import
+	// ("Object[]" vs "Object[create:String]").
+	resp.Diagnostics.Append(resp.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	// The documented import format is "<PROJECT_ID>:<VLAN_ASSIGNMENT_ID>"; a
 	// bare assignment ID is accepted too. The project part is not needed for
 	// the lookup, so only the assignment ID is kept.
