@@ -100,7 +100,9 @@ func (r *VlanAssignmentResource) Schema(ctx context.Context, req resource.Schema
 				MarkdownDescription: "Status of the assignment",
 				Computed:            true,
 			},
-			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
+		},
+		Blocks: map[string]schema.Block{
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{
 				Create: true,
 			}),
 		},
