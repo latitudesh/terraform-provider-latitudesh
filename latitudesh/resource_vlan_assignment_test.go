@@ -95,6 +95,62 @@ func TestAccVlanAssignment_CustomTimeout(t *testing.T) {
 	})
 }
 
+// TestAccVlanAssignment_AddTimeoutsNoRecreate: adding a timeouts block to an
+// already-applied assignment must be an in-place update, not a destroy/create.
+// It applies the assignment without timeouts, then re-applies with
+// `timeouts { create = "5m" }` added and asserts the remote ID is unchanged (a
+// recreate would allocate a new assignment with a new ID).
+func TestAccVlanAssignment_AddTimeoutsNoRecreate(t *testing.T) {
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("TF_ACC must be set for acceptance tests")
+	}
+
+	projectID, site, servers := testAccSharedServers(t, 1)
+
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+
+	const resourceName = "latitudesh_vlan_assignment.test"
+	var originalID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		CheckDestroy:             testAccCheckVlanAssignmentDestroy,
+		Steps: []resource.TestStep{
+			{
+				// Apply without a timeouts block and capture the assignment ID.
+				Config: testAccVlanAssignmentConfig(projectID, site, servers[0]),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckVlanAssignmentExists(resourceName),
+					func(s *terraform.State) error {
+						originalID = s.RootModule().Resources[resourceName].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				// Add timeouts { create = "5m" } to the same assignment. This must
+				// be applied in place: the ID must not change.
+				Config: testAccVlanAssignmentCustomTimeoutConfig(projectID, site, servers[0]),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckVlanAssignmentExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "timeouts.create", "5m"),
+					resource.TestCheckResourceAttr(resourceName, "status", "connected"),
+					func(s *terraform.State) error {
+						if got := s.RootModule().Resources[resourceName].Primary.ID; got != originalID {
+							return fmt.Errorf("assignment was recreated: id changed from %s to %s", originalID, got)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
 func testAccCheckVlanAssignmentDestroy(s *terraform.State) error {
 	client := createVCRClient(nil)
 	ctx := context.Background()
