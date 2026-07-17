@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -91,7 +92,7 @@ func runCreate(t *testing.T, r *VlanAssignmentResource) *resource.CreateResponse
 	schemaResp := &resource.SchemaResponse{}
 	r.Schema(ctx, resource.SchemaRequest{}, schemaResp)
 	sch := schemaResp.Schema
-	objType := sch.Type().TerraformType(ctx)
+	objType := sch.Type().TerraformType(ctx).(tftypes.Object)
 
 	planVal := tftypes.NewValue(objType, map[string]tftypes.Value{
 		"id":                 tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
@@ -100,6 +101,8 @@ func runCreate(t *testing.T, r *VlanAssignmentResource) *resource.CreateResponse
 		"vid":                tftypes.NewValue(tftypes.Number, tftypes.UnknownValue),
 		"description":        tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
 		"status":             tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
+		// No timeouts block configured; the resource pins connectTimeout directly.
+		"timeouts": tftypes.NewValue(objType.AttributeTypes["timeouts"], nil),
 	})
 
 	req := resource.CreateRequest{Plan: tfsdk.Plan{Raw: planVal, Schema: sch}}
@@ -118,6 +121,97 @@ func newTestVlanResource(serverURL string) *VlanAssignmentResource {
 		),
 		connectTimeout:      150 * time.Millisecond,
 		connectPollInterval: 10 * time.Millisecond,
+	}
+}
+
+// TestVlanAssignmentImportState_TimeoutsTyped: importing an assignment must
+// produce a state whose `timeouts` value carries the correct object type. A
+// hand-built null timeouts.Value has no attribute types ("Object[]") and fails
+// state conversion against the schema type ("Object[create:String]").
+func TestVlanAssignmentImportState_TimeoutsTyped(t *testing.T) {
+	m := &vlanMock{connectAfter: 1} // list lookup returns the assignment
+	server := m.server(t)
+	r := newTestVlanResource(server.URL)
+
+	ctx := context.Background()
+	schemaResp := &resource.SchemaResponse{}
+	r.Schema(ctx, resource.SchemaRequest{}, schemaResp)
+	sch := schemaResp.Schema
+	objType := sch.Type().TerraformType(ctx)
+
+	resp := &resource.ImportStateResponse{
+		State: tfsdk.State{Raw: tftypes.NewValue(objType, nil), Schema: sch},
+	}
+	r.ImportState(ctx, resource.ImportStateRequest{ID: "proj_TEST:vnasg_STUCK01"}, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("ImportState returned diagnostics: %v", resp.Diagnostics.Errors())
+	}
+
+	var out VlanAssignmentResourceModel
+	if diags := resp.State.Get(ctx, &out); diags.HasError() {
+		t.Fatalf("reading imported state: %v", diags.Errors())
+	}
+	if got := out.ID.ValueString(); got != "vnasg_STUCK01" {
+		t.Fatalf("expected imported id vnasg_STUCK01, got %q", got)
+	}
+	if !out.Timeouts.IsNull() {
+		t.Fatalf("expected a null timeouts on import, got %#v", out.Timeouts)
+	}
+}
+
+// TestVlanAssignmentUpdate_TimeoutsOnlyNoRecreate: adding/adjusting the
+// timeouts block on an already-applied assignment must be an in-place no-op —
+// it needs no API call and must not recreate the assignment or drop the
+// computed values (vid/status/description) read at create.
+func TestVlanAssignmentUpdate_TimeoutsOnlyNoRecreate(t *testing.T) {
+	r := &VlanAssignmentResource{}
+	ctx := context.Background()
+
+	schemaResp := &resource.SchemaResponse{}
+	r.Schema(ctx, resource.SchemaRequest{}, schemaResp)
+	sch := schemaResp.Schema
+	objType := sch.Type().TerraformType(ctx).(tftypes.Object)
+	timeoutsType := objType.AttributeTypes["timeouts"]
+
+	base := func(timeoutsVal tftypes.Value) tftypes.Value {
+		return tftypes.NewValue(objType, map[string]tftypes.Value{
+			"id":                 tftypes.NewValue(tftypes.String, "vnasg_1"),
+			"server_id":          tftypes.NewValue(tftypes.String, "sv_1"),
+			"virtual_network_id": tftypes.NewValue(tftypes.String, "vlan_1"),
+			"vid":                tftypes.NewValue(tftypes.Number, big.NewFloat(2043)),
+			"description":        tftypes.NewValue(tftypes.String, "desc"),
+			"status":             tftypes.NewValue(tftypes.String, statusConnected),
+			"timeouts":           timeoutsVal,
+		})
+	}
+
+	// Prior state: no timeouts block. Plan: adds timeouts { create = "5m" }.
+	stateVal := base(tftypes.NewValue(timeoutsType, nil))
+	planVal := base(tftypes.NewValue(timeoutsType, map[string]tftypes.Value{
+		"create": tftypes.NewValue(tftypes.String, "5m"),
+	}))
+
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{Raw: tftypes.NewValue(objType, nil), Schema: sch},
+	}
+	r.Update(ctx, resource.UpdateRequest{
+		Plan:  tfsdk.Plan{Raw: planVal, Schema: sch},
+		State: tfsdk.State{Raw: stateVal, Schema: sch},
+	}, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("timeouts-only Update must not error, got: %v", resp.Diagnostics.Errors())
+	}
+
+	var out VlanAssignmentResourceModel
+	resp.State.Get(ctx, &out)
+	if out.ID.ValueString() != "vnasg_1" || out.Vid.ValueInt64() != 2043 || out.Status.ValueString() != statusConnected {
+		t.Fatalf("computed values not preserved: id=%q vid=%d status=%q",
+			out.ID.ValueString(), out.Vid.ValueInt64(), out.Status.ValueString())
+	}
+	if out.Timeouts.IsNull() {
+		t.Fatalf("expected the new timeouts block to be persisted, got null")
 	}
 }
 

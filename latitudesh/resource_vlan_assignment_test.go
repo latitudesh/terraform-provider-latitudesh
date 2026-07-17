@@ -36,7 +36,7 @@ func TestAccVlanAssignment_Basic(t *testing.T) {
 					resource.TestCheckResourceAttrPair(
 						"latitudesh_vlan_assignment.test", "virtual_network_id",
 						"latitudesh_virtual_network.test", "id"),
-					// PD-6552: Create must wait for the assignment to reach
+					// Create must wait for the assignment to reach
 					// "connected" before succeeding, so a completed apply must
 					// report that status (with an allocated vid) — not a
 					// still-"connecting" phantom.
@@ -56,6 +56,96 @@ func TestAccVlanAssignment_Basic(t *testing.T) {
 					return projectID + ":" + rs.Primary.ID, nil
 				},
 				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+// TestAccVlanAssignment_CustomTimeout exercises the timeouts { create } block:
+// an operator-supplied window must be accepted and drive the connect wait, and
+// the assignment must still reach "connected". Consistent with
+// TestAccServer_CustomTimeout.
+func TestAccVlanAssignment_CustomTimeout(t *testing.T) {
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("TF_ACC must be set for acceptance tests")
+	}
+
+	projectID, site, servers := testAccSharedServers(t, 1)
+
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		CheckDestroy:             testAccCheckVlanAssignmentDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccVlanAssignmentCustomTimeoutConfig(projectID, site, servers[0]),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckVlanAssignmentExists("latitudesh_vlan_assignment.test"),
+					resource.TestCheckResourceAttr("latitudesh_vlan_assignment.test", "timeouts.create", "5m"),
+					resource.TestCheckResourceAttr("latitudesh_vlan_assignment.test", "status", "connected"),
+					resource.TestCheckResourceAttrSet("latitudesh_vlan_assignment.test", "vid"),
+				),
+			},
+		},
+	})
+}
+
+// TestAccVlanAssignment_AddTimeoutsNoRecreate: adding a timeouts block to an
+// already-applied assignment must be an in-place update, not a destroy/create.
+// It applies the assignment without timeouts, then re-applies with
+// `timeouts { create = "5m" }` added and asserts the remote ID is unchanged (a
+// recreate would allocate a new assignment with a new ID).
+func TestAccVlanAssignment_AddTimeoutsNoRecreate(t *testing.T) {
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("TF_ACC must be set for acceptance tests")
+	}
+
+	projectID, site, servers := testAccSharedServers(t, 1)
+
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+
+	const resourceName = "latitudesh_vlan_assignment.test"
+	var originalID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		CheckDestroy:             testAccCheckVlanAssignmentDestroy,
+		Steps: []resource.TestStep{
+			{
+				// Apply without a timeouts block and capture the assignment ID.
+				Config: testAccVlanAssignmentConfig(projectID, site, servers[0]),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckVlanAssignmentExists(resourceName),
+					func(s *terraform.State) error {
+						originalID = s.RootModule().Resources[resourceName].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				// Add timeouts { create = "5m" } to the same assignment. This must
+				// be applied in place: the ID must not change.
+				Config: testAccVlanAssignmentCustomTimeoutConfig(projectID, site, servers[0]),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckVlanAssignmentExists(resourceName),
+					resource.TestCheckResourceAttr(resourceName, "timeouts.create", "5m"),
+					resource.TestCheckResourceAttr(resourceName, "status", "connected"),
+					func(s *terraform.State) error {
+						if got := s.RootModule().Resources[resourceName].Primary.ID; got != originalID {
+							return fmt.Errorf("assignment was recreated: id changed from %s to %s", originalID, got)
+						}
+						return nil
+					},
+				),
 			},
 		},
 	})
@@ -139,6 +229,25 @@ resource "latitudesh_virtual_network" "test" {
 resource "latitudesh_vlan_assignment" "test" {
 	server_id          = "%s"
 	virtual_network_id = latitudesh_virtual_network.test.id
+}
+`, projectID, site, serverID)
+}
+
+func testAccVlanAssignmentCustomTimeoutConfig(projectID, site, serverID string) string {
+	return fmt.Sprintf(`
+resource "latitudesh_virtual_network" "test" {
+	project     = "%s"
+	site        = "%s"
+	description = "tf-acc-vlan-assignment"
+}
+
+resource "latitudesh_vlan_assignment" "test" {
+	server_id          = "%s"
+	virtual_network_id = latitudesh_virtual_network.test.id
+
+	timeouts {
+		create = "5m"
+	}
 }
 `, projectID, site, serverID)
 }

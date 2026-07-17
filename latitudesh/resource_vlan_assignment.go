@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -30,7 +32,8 @@ type VlanAssignmentResource struct {
 
 	// connectTimeout and connectPollInterval bound the post-create wait for
 	// the assignment to reach status "connected". Zero values fall back to the
-	// production defaults below; tests override them to keep runs fast.
+	// operator-configured timeouts { create } block (or the production defaults
+	// below); tests override them to keep runs fast.
 	connectTimeout      time.Duration
 	connectPollInterval time.Duration
 }
@@ -47,12 +50,13 @@ const (
 )
 
 type VlanAssignmentResourceModel struct {
-	ID               types.String `tfsdk:"id"`
-	ServerID         types.String `tfsdk:"server_id"`
-	VirtualNetworkID types.String `tfsdk:"virtual_network_id"`
-	Vid              types.Int64  `tfsdk:"vid"`
-	Description      types.String `tfsdk:"description"`
-	Status           types.String `tfsdk:"status"`
+	ID               types.String   `tfsdk:"id"`
+	ServerID         types.String   `tfsdk:"server_id"`
+	VirtualNetworkID types.String   `tfsdk:"virtual_network_id"`
+	Vid              types.Int64    `tfsdk:"vid"`
+	Description      types.String   `tfsdk:"description"`
+	Status           types.String   `tfsdk:"status"`
+	Timeouts         timeouts.Value `tfsdk:"timeouts"`
 }
 
 func (r *VlanAssignmentResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -97,6 +101,11 @@ func (r *VlanAssignmentResource) Schema(ctx context.Context, req resource.Schema
 				MarkdownDescription: "Status of the assignment",
 				Computed:            true,
 			},
+		},
+		Blocks: map[string]schema.Block{
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{
+				Create: true,
+			}),
 		},
 	}
 }
@@ -172,13 +181,26 @@ func (r *VlanAssignmentResource) Create(ctx context.Context, req resource.Create
 		}
 	}
 
+	// Resolve the connect-wait deadline. Tests pin r.connectTimeout to keep runs
+	// fast; otherwise honor the operator-configured timeouts { create } block,
+	// falling back to defaultConnectTimeout when it's unset.
+	connectTimeout := r.connectTimeout
+	if connectTimeout <= 0 {
+		var timeoutDiags diag.Diagnostics
+		connectTimeout, timeoutDiags = data.Timeouts.Create(ctx, defaultConnectTimeout)
+		resp.Diagnostics.Append(timeoutDiags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
 	// Wait for the assignment to actually reach "connected" and populate all
 	// attributes from the connected assignment. A bare 201 only means the
 	// request was accepted; provisioning happens asynchronously and
 	// may never complete. Reporting success here without waiting is the
 	// false-success gap in issue #190 (Terraform shows the VLAN assigned while
 	// the console shows nothing).
-	persist := r.waitForAssignmentConnected(ctx, &data, &resp.Diagnostics)
+	persist := r.waitForAssignmentConnected(ctx, &data, connectTimeout, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		if persist {
 			// The assignment never connected and couldn't be rolled back, so it
@@ -210,8 +232,23 @@ func (r *VlanAssignmentResource) Read(ctx context.Context, req resource.ReadRequ
 }
 
 func (r *VlanAssignmentResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	// VLAN assignments cannot be updated, they must be replaced
-	resp.Diagnostics.AddError("Update Not Supported", "VLAN assignments cannot be updated, they must be replaced.")
+	// server_id and virtual_network_id force replacement, so the only attribute
+	// that can reach Update is the timeouts block — a config-only value that
+	// needs no API call. Carry the plan into state (keeping the computed values
+	// read at create/refresh) so adding or adjusting timeouts on an existing
+	// assignment is an in-place no-op instead of recreating it.
+	var plan, state VlanAssignmentResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	plan.Vid = state.Vid
+	plan.Description = state.Description
+	plan.Status = state.Status
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *VlanAssignmentResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -306,8 +343,7 @@ func (r *VlanAssignmentResource) waitForAssignmentRemoval(ctx context.Context, i
 // assignment never connected AND could not be rolled back — then it populates
 // data so the caller can save it to state, keeping the still-existing remote
 // assignment tracked (and tainted) for reconciliation on the next apply.
-func (r *VlanAssignmentResource) waitForAssignmentConnected(ctx context.Context, data *VlanAssignmentResourceModel, diags *diag.Diagnostics) (persist bool) {
-	timeout := r.connectTimeout
+func (r *VlanAssignmentResource) waitForAssignmentConnected(ctx context.Context, data *VlanAssignmentResourceModel, timeout time.Duration, diags *diag.Diagnostics) (persist bool) {
 	if timeout <= 0 {
 		timeout = defaultConnectTimeout
 	}
@@ -485,6 +521,13 @@ func (r *VlanAssignmentResource) ImportState(ctx context.Context, req resource.I
 		return
 	}
 	data.ID = types.StringValue(id)
+
+	// No timeouts block is set on import, so give the field an explicitly-typed
+	// null. The zero value of timeouts.Value is a null object with no attribute
+	// types, which fails state conversion ("Object[]" vs "Object[create:String]").
+	data.Timeouts = timeouts.Value{
+		Object: types.ObjectNull(map[string]attr.Type{"create": types.StringType}),
+	}
 
 	r.readVlanAssignment(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
