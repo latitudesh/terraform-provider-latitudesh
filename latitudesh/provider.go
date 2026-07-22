@@ -2,9 +2,11 @@ package latitudesh
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -23,6 +25,24 @@ var _ provider.Provider = &latitudeshProvider{}
 type latitudeshProvider struct {
 	version    string
 	httpClient *http.Client // optional: used in tests for VCR recording/playback
+}
+
+// userAgentTransport overrides the User-Agent header on every request so the
+// API can distinguish Terraform traffic from direct Go SDK usage. The SDK's
+// own User-Agent (set before the transport runs) is preserved as a suffix.
+type userAgentTransport struct {
+	base      http.RoundTripper
+	userAgent string
+}
+
+func (t *userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	if sdkUA := req.Header.Get("User-Agent"); sdkUA != "" {
+		req.Header.Set("User-Agent", t.userAgent+" "+sdkUA)
+	} else {
+		req.Header.Set("User-Agent", t.userAgent)
+	}
+	return t.base.RoundTrip(req)
 }
 
 // latitudeshProviderModel describes the provider data model.
@@ -94,8 +114,30 @@ func (p *latitudeshProvider) Configure(ctx context.Context, req provider.Configu
 		return
 	}
 
+	userAgent := fmt.Sprintf("terraform-provider-latitudesh/%s", p.version)
+	if req.TerraformVersion != "" {
+		userAgent += fmt.Sprintf(" Terraform/%s", req.TerraformVersion)
+	}
+
+	baseClient := p.httpClient
+	if baseClient == nil {
+		// match the SDK's default client behavior
+		baseClient = &http.Client{Timeout: 60 * time.Second}
+	}
+	baseTransport := baseClient.Transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+	httpClient := &http.Client{
+		Transport:     &userAgentTransport{base: baseTransport, userAgent: userAgent},
+		Timeout:       baseClient.Timeout,
+		CheckRedirect: baseClient.CheckRedirect,
+		Jar:           baseClient.Jar,
+	}
+
 	sdkOpts := []latitudeshgosdk.SDKOption{
 		latitudeshgosdk.WithSecurity(authToken),
+		latitudeshgosdk.WithClient(httpClient),
 		latitudeshgosdk.WithRetryConfig(retry.Config{
 			Strategy: "backoff",
 			Backoff: &retry.BackoffStrategy{
@@ -106,9 +148,6 @@ func (p *latitudeshProvider) Configure(ctx context.Context, req provider.Configu
 			},
 			RetryConnectionErrors: false,
 		}),
-	}
-	if p.httpClient != nil {
-		sdkOpts = append(sdkOpts, latitudeshgosdk.WithClient(p.httpClient))
 	}
 	sdkClient := latitudeshgosdk.New(sdkOpts...)
 	project := data.Project.ValueString()
