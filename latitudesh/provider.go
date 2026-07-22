@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -120,7 +121,8 @@ func (p *latitudeshProvider) Configure(ctx context.Context, req provider.Configu
 
 	baseClient := p.httpClient
 	if baseClient == nil {
-		baseClient = &http.Client{}
+		// match the SDK's default client behavior
+		baseClient = &http.Client{Timeout: 60 * time.Second}
 	}
 	baseTransport := baseClient.Transport
 	if baseTransport == nil {
