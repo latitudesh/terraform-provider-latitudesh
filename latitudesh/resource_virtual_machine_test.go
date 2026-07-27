@@ -13,13 +13,17 @@ import (
 )
 
 const (
-	testVMName    = "qa-terraform-vm"
-	testVMSite    = "ASH"
+	testVMName = "qa-terraform-vm"
+	testVMSite = "ASH"
+	// testVMPlan is only used by the mock-backed site tests; acceptance tests
+	// discover a live plan via testAccVMPlan (PD-6519).
 	testVMPlan    = "vm-small"
 	testVMBilling = "hourly"
 )
 
 func TestAccVirtualMachine_Basic(t *testing.T) {
+	plan := testAccVMPlan(t)
+
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
 
@@ -31,12 +35,12 @@ func TestAccVirtualMachine_Basic(t *testing.T) {
 		CheckDestroy:             testAccCheckVirtualMachineDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccVirtualMachineBasic(testVMPlan),
+				Config: testAccVirtualMachineBasic(plan),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckVirtualMachineExists(resourceName),
 					resource.TestCheckResourceAttr(resourceName, "name", testVMName),
 					resource.TestCheckResourceAttr(resourceName, "site", testVMSite),
-					resource.TestCheckResourceAttr(resourceName, "plan", testVMPlan),
+					resource.TestCheckResourceAttr(resourceName, "plan", plan),
 					resource.TestCheckResourceAttr(resourceName, "billing", testVMBilling),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "primary_ipv4"),
@@ -48,6 +52,8 @@ func TestAccVirtualMachine_Basic(t *testing.T) {
 }
 
 func TestAccVirtualMachine_Import(t *testing.T) {
+	plan := testAccVMPlan(t)
+
 	recorder, teardown := createTestRecorder(t)
 	defer teardown()
 
@@ -59,7 +65,7 @@ func TestAccVirtualMachine_Import(t *testing.T) {
 		CheckDestroy:             testAccCheckVirtualMachineDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccVirtualMachineBasic(testVMPlan),
+				Config: testAccVirtualMachineBasic(plan),
 				Check:  testAccCheckVirtualMachineExists(resourceName),
 			},
 			{

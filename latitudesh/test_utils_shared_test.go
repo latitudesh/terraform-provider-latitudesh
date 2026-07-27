@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/acctest"
+	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 	"gopkg.in/dnaeon/go-vcr.v3/recorder"
 )
@@ -77,6 +78,12 @@ func resolveProjectSlug() (string, error) {
 func testAccProjectSlug(t *testing.T) string {
 	t.Helper()
 
+	// Unlike resource.Test, this helper runs before the test case is built,
+	// so it must gate on TF_ACC itself to keep plain `go test` runs offline.
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("TF_ACC must be set for acceptance tests")
+	}
+
 	// The slug is resolved with a raw SDK client (no recorder), so it can't be
 	// served from a cassette. Skip in replay mode, mirroring the other
 	// live-only helpers (testAccSharedServers), so we don't make a live call
@@ -96,6 +103,103 @@ func testAccProjectSlug(t *testing.T) string {
 // can't be resolved. For check helpers that have no *testing.T to fail.
 func testAccProjectSlugBestEffort() string {
 	slug, _ := resolveProjectSlug()
+	return slug
+}
+
+var (
+	testVMPlanOnce sync.Once
+	testVMPlanSlug string
+	testVMPlanErr  error
+)
+
+// resolveVMPlan discovers the smallest VM plan with stock at testVMSite via
+// Plans.VM.List, caching the result (and any error) once. Discovering the plan
+// (rather than hardcoding a slug) is what PD-6519 unblocked: SDK versions
+// before v1.19.0 could not unmarshal this endpoint's response at all.
+func resolveVMPlan() (string, error) {
+	testVMPlanOnce.Do(func() {
+		client := createVCRClient(nil)
+		ctx := context.Background()
+
+		resp, err := client.Plans.VM.List(ctx, nil)
+		if err != nil {
+			testVMPlanErr = err
+			return
+		}
+		if resp == nil || resp.VirtualMachinePlans == nil {
+			testVMPlanErr = fmt.Errorf("empty VM plans response")
+			return
+		}
+
+		slug := pickVMPlan(resp.VirtualMachinePlans.Data, testVMSite)
+		if slug == "" {
+			testVMPlanErr = fmt.Errorf("no VM plan with stock at %s", testVMSite)
+			return
+		}
+		testVMPlanSlug = slug
+	})
+	return testVMPlanSlug, testVMPlanErr
+}
+
+// pickVMPlan returns the slug of the smallest plan (by memory) with stock at
+// the site, or "" when none qualifies.
+func pickVMPlan(plans []components.VirtualMachinePlansData, site string) string {
+	var bestSlug string
+	var bestMemory int64
+	for _, plan := range plans {
+		attrs := plan.Attributes
+		if attrs == nil || attrs.Slug == nil || attrs.Specs == nil || attrs.Specs.Memory == nil {
+			continue
+		}
+		if !vmPlanInStockAt(attrs.Regions, site) {
+			continue
+		}
+		if bestSlug == "" || *attrs.Specs.Memory < bestMemory {
+			bestSlug = *attrs.Slug
+			bestMemory = *attrs.Specs.Memory
+		}
+	}
+	return bestSlug
+}
+
+// vmPlanInStockAt reports whether any region of the plan lists the site among
+// its in-stock locations.
+func vmPlanInStockAt(regions []components.VirtualMachinePlansRegions, site string) bool {
+	for _, region := range regions {
+		if region.Locations == nil {
+			continue
+		}
+		for _, s := range region.Locations.InStock {
+			if s == site {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// testAccVMPlan returns the slug of a VM plan deployable at testVMSite,
+// discovered from the live API, failing the test if discovery fails.
+func testAccVMPlan(t *testing.T) string {
+	t.Helper()
+
+	// Unlike resource.Test, this helper runs before the test case is built,
+	// so it must gate on TF_ACC itself to keep plain `go test` runs offline.
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("TF_ACC must be set for acceptance tests")
+	}
+
+	// Discovery uses a raw SDK client (no recorder), so it can't be served
+	// from a cassette. Skip in replay mode, mirroring the other live-only
+	// helpers (testAccProjectSlug, testAccSharedServers).
+	if mode, err := testRecordMode(); err == nil && mode == recorder.ModeReplayOnly {
+		t.Skip("VM plan discovery requires live API access; not available in VCR replay mode")
+	}
+
+	slug, err := resolveVMPlan()
+	if err != nil {
+		t.Fatalf("discovering VM plan via Plans.VM.List: %s", err)
+	}
 	return slug
 }
 
