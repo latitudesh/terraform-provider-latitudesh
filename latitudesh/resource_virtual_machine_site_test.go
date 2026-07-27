@@ -21,15 +21,21 @@ import (
 )
 
 type mockVMAPI struct {
-	mu          sync.Mutex
-	createdSite *string // site received in the create payload (nil = omitted)
-	exists      bool
-	deleted     bool
+	mu             sync.Mutex
+	createdSite    *string // site received in the create payload (nil = omitted)
+	createdBilling *string // billing received in the create payload (nil = omitted)
+	exists         bool
+	deleted        bool
 }
 
 // testVMMockSite is the canonical (uppercase) site slug the mock API returns,
 // regardless of the case sent in the create payload.
 const testVMMockSite = "DAL"
+
+// testVMMockBilling is the billing type the mock API returns, mirroring the
+// API default for on-demand projects when billing is omitted from the create
+// payload.
+const testVMMockBilling = "monthly"
 
 func (m *mockVMAPI) vmEnvelope() map[string]any {
 	return map[string]any{
@@ -39,6 +45,7 @@ func (m *mockVMAPI) vmEnvelope() map[string]any {
 			"attributes": map[string]any{
 				"name":             testVMName,
 				"site":             testVMMockSite,
+				"billing":          testVMMockBilling,
 				"status":           "Running",
 				"primary_ipv4":     "203.0.113.10",
 				"created_at":       "2026-07-14T12:00:00Z",
@@ -69,6 +76,9 @@ func (m *mockVMAPI) handler(w http.ResponseWriter, r *http.Request) {
 		}
 		if s, ok := payload.Data.Attributes["site"].(string); ok {
 			m.createdSite = &s
+		}
+		if b, ok := payload.Data.Attributes["billing"].(string); ok {
+			m.createdBilling = &b
 		}
 		m.exists = true
 		w.Header().Set("Content-Type", "application/vnd.api+json")
@@ -203,6 +213,40 @@ func TestAccVirtualMachine_SiteComputedWhenOmitted(t *testing.T) {
 			},
 			{
 				Config:   testAccVirtualMachineSiteConfig(""),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
+// When billing is omitted, it must not be sent in the create payload (the API
+// applies the project default), the computed value must be populated from the
+// API after apply, and remain stable on the next plan.
+func TestAccVirtualMachine_BillingComputedWhenOmitted(t *testing.T) {
+	mock := &mockVMAPI{}
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMockVMDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccVirtualMachineSiteConfig(fmt.Sprintf(`  site    = %q`, testVMMockSite)),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("latitudesh_virtual_machine.test_item", "billing", testVMMockBilling),
+					func(s *terraform.State) error {
+						mock.mu.Lock()
+						defer mock.mu.Unlock()
+						if mock.createdBilling != nil {
+							return fmt.Errorf("create payload included billing %q, want it omitted so the API default applies", *mock.createdBilling)
+						}
+						return nil
+					},
+				),
+			},
+			{
+				Config:   testAccVirtualMachineSiteConfig(fmt.Sprintf(`  site    = %q`, testVMMockSite)),
 				PlanOnly: true,
 			},
 		},

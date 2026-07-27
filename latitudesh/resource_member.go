@@ -279,7 +279,7 @@ func (r *MemberResource) readMember(ctx context.Context, data *MemberResourceMod
 	}
 
 	// Get all team members and find ours
-	response, err := r.client.Teams.Members.GetTeamMembers(ctx, nil, nil)
+	response, err := r.client.Teams.Members.GetTeamMembers(ctx, nil, nil, nil)
 	if err != nil {
 		diags.AddError("Client Error", "Unable to read team members, got error: "+err.Error())
 		return

@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	testVMName = "qa-terraform-vm"
-	testVMSite = "ASH"
-	testVMPlan = "vm-small"
+	testVMName    = "qa-terraform-vm"
+	testVMSite    = "ASH"
+	testVMPlan    = "vm-small"
+	testVMBilling = "hourly"
 )
 
 func TestAccVirtualMachine_Basic(t *testing.T) {
@@ -36,6 +37,7 @@ func TestAccVirtualMachine_Basic(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "name", testVMName),
 					resource.TestCheckResourceAttr(resourceName, "site", testVMSite),
 					resource.TestCheckResourceAttr(resourceName, "plan", testVMPlan),
+					resource.TestCheckResourceAttr(resourceName, "billing", testVMBilling),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "primary_ipv4"),
 					resource.TestCheckResourceAttrSet(resourceName, "status"),
@@ -83,7 +85,7 @@ func testAccCheckVirtualMachineDestroy(s *terraform.State) error {
 			continue
 		}
 
-		resp, err := client.VirtualMachines.Get(ctx, rs.Primary.ID)
+		resp, err := client.VirtualMachines.Get(ctx, rs.Primary.ID, nil)
 		if err != nil {
 			// A 404 means the VM is gone, as expected. Any other error must be
 			// surfaced rather than silently treated as a successful destroy.
@@ -114,7 +116,7 @@ func testAccCheckVirtualMachineExists(n string) resource.TestCheckFunc {
 		client := createVCRClient(nil)
 		ctx := context.Background()
 
-		resp, err := client.VirtualMachines.Get(ctx, rs.Primary.ID)
+		resp, err := client.VirtualMachines.Get(ctx, rs.Primary.ID, nil)
 		if err != nil {
 			return fmt.Errorf("error retrieving virtual machine: %w", err)
 		}
@@ -131,7 +133,8 @@ resource "latitudesh_virtual_machine" "test_item" {
   name    = %q
   site    = %q
   plan    = %q
+  billing = %q
   project = "`+testAccProjectID()+`"
 }
-`, testVMName, testVMSite, plan)
+`, testVMName, testVMSite, plan, testVMBilling)
 }

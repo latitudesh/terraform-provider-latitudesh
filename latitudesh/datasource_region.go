@@ -111,7 +111,7 @@ func (d *RegionDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	} else {
 		// Look up by slug - paginate through all regions and find matching slug
 		slug := data.Slug.ValueString()
-		result, err := d.client.Regions.Get(ctx, nil, nil)
+		result, err := d.client.Regions.Get(ctx, nil, nil, nil)
 		if err != nil {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to search for region with slug %s, got error: %s", slug, err.Error()))
 			return
