@@ -90,7 +90,7 @@ func (d *RoleDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	} else {
 		// Look up by name - get all roles and find matching name
 		name := data.Name.ValueString()
-		result, err := d.client.Roles.List(ctx, nil, nil)
+		result, err := d.client.Roles.List(ctx, nil, nil, nil)
 		if err != nil {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to search for role with name %s, got error: %s", name, err.Error()))
 			return

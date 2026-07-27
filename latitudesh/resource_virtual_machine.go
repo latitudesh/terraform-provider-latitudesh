@@ -21,10 +21,16 @@ import (
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/planmodifiers"
 	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
+	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/validators"
 )
+
+// The VM status attribute is an open set derived from the underlying KubeVirt
+// phase; the SDK models it as a plain string.
+const vmStatusRunning = "Running"
 
 var _ resource.Resource = &VirtualMachineResource{}
 var _ resource.ResourceWithImportState = &VirtualMachineResource{}
+var _ resource.ResourceWithModifyPlan = &VirtualMachineResource{}
 
 func NewVirtualMachineResource() resource.Resource {
 	return &VirtualMachineResource{}
@@ -44,6 +50,7 @@ type VirtualMachineResourceModel struct {
 	Plan            types.String   `tfsdk:"plan"`
 	Project         types.String   `tfsdk:"project"`
 	OperatingSystem types.String   `tfsdk:"operating_system"`
+	Billing         types.String   `tfsdk:"billing"`
 	SSHKeys         types.List     `tfsdk:"ssh_keys"`
 	Status          types.String   `tfsdk:"status"`
 	PrimaryIPv4     types.String   `tfsdk:"primary_ipv4"`
@@ -111,6 +118,15 @@ func (r *VirtualMachineResource) Schema(ctx context.Context, req resource.Schema
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"billing": schema.StringAttribute{
+				MarkdownDescription: "The virtual machine billing type. Accepts `hourly` and `monthly` for on-demand projects and `yearly` for reserved projects. Defaults to `monthly` (reserved projects default to `yearly`). Billing can only be upgraded in place (`hourly` -> `monthly` -> `yearly`); downgrades are not allowed.",
+				Optional:            true,
+				Computed:            true,
+				Validators:          validators.Billing(),
+				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
@@ -212,6 +228,11 @@ func (r *VirtualMachineResource) Create(ctx context.Context, req resource.Create
 		attrs.OperatingSystem = &os
 	}
 
+	if !data.Billing.IsNull() && !data.Billing.IsUnknown() && data.Billing.ValueString() != "" {
+		billing := components.VirtualMachinePayloadBilling(data.Billing.ValueString())
+		attrs.Billing = &billing
+	}
+
 	if !data.SSHKeys.IsNull() && !data.SSHKeys.IsUnknown() {
 		var sshKeys []string
 		resp.Diagnostics.Append(data.SSHKeys.ElementsAs(ctx, &sshKeys, false)...)
@@ -306,8 +327,9 @@ func (r *VirtualMachineResource) Update(ctx context.Context, req resource.Update
 	}
 
 	// Load the existing ID from state; desired attributes come from the plan.
-	var id types.String
+	var id, stateBilling types.String
 	resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("id"), &id)...)
+	resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("billing"), &stateBilling)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -326,6 +348,15 @@ func (r *VirtualMachineResource) Update(ctx context.Context, req resource.Update
 		},
 	}
 
+	// Only send billing when it actually changes: the API treats any billing
+	// value in the payload as an upgrade request and rejects it otherwise
+	// (e.g. same-value sends on reserved projects return 422).
+	if !data.Billing.IsNull() && !data.Billing.IsUnknown() && data.Billing.ValueString() != "" &&
+		data.Billing.ValueString() != stateBilling.ValueString() {
+		billing := components.VirtualMachineUpdatePayloadBilling(data.Billing.ValueString())
+		updatePayload.Data.Attributes.Billing = &billing
+	}
+
 	_, err := r.client.VirtualMachines.UpdateVirtualMachine(ctx, idStr, updatePayload)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to update virtual machine, got error: "+err.Error())
@@ -338,6 +369,33 @@ func (r *VirtualMachineResource) Update(ctx context.Context, req resource.Update
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *VirtualMachineResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// Skip create (no state) and destroy (no plan) operations.
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var planBilling, stateBilling types.String
+	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("billing"), &planBilling)...)
+	resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("billing"), &stateBilling)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Validate billing change during plan phase: only upgrades are allowed.
+	if !planBilling.IsNull() && !planBilling.IsUnknown() && !stateBilling.IsNull() && !stateBilling.IsUnknown() {
+		currentBilling := stateBilling.ValueString()
+		newBilling := planBilling.ValueString()
+
+		if currentBilling != newBilling {
+			if err := validators.ValidateBillingChange(currentBilling, newBilling); err != nil {
+				resp.Diagnostics.AddError("Billing Change Validation Error", err.Error())
+				return
+			}
+		}
+	}
 }
 
 func (r *VirtualMachineResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -380,7 +438,7 @@ func (r *VirtualMachineResource) waitForVMDeleted(ctx context.Context, id string
 	consecutiveErrors := 0
 
 	for time.Now().Before(deadline) {
-		_, err := r.client.VirtualMachines.Get(ctx, id)
+		_, err := r.client.VirtualMachines.Get(ctx, id, nil)
 		if err != nil {
 			var apiErr *components.APIError
 			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
@@ -430,7 +488,7 @@ func (r *VirtualMachineResource) waitForVMReady(ctx context.Context, id string, 
 	consecutiveErrors := 0
 
 	for time.Now().Before(deadline) {
-		result, err := r.client.VirtualMachines.Get(ctx, id)
+		result, err := r.client.VirtualMachines.Get(ctx, id, nil)
 		if err != nil {
 			// A 404 right after create (VM not queryable yet) and 5xx responses are
 			// transient: keep polling. Other API errors (401/403/422/...) will not
@@ -462,10 +520,10 @@ func (r *VirtualMachineResource) waitForVMReady(ctx context.Context, id string, 
 		if result.VirtualMachine != nil && result.VirtualMachine.Data != nil && result.VirtualMachine.Data.Attributes != nil {
 			attrs := result.VirtualMachine.Data.Attributes
 			if attrs.Status != nil {
-				lastStatus = string(*attrs.Status)
+				lastStatus = *attrs.Status
 			}
 			hasIP := attrs.PrimaryIpv4 != nil && *attrs.PrimaryIpv4 != ""
-			if attrs.Status != nil && *attrs.Status == components.VirtualMachineAttributesStatusRunning && hasIP {
+			if attrs.Status != nil && *attrs.Status == vmStatusRunning && hasIP {
 				return
 			}
 		}
@@ -487,7 +545,7 @@ func (r *VirtualMachineResource) waitForVMReady(ctx context.Context, id string, 
 func (r *VirtualMachineResource) readVirtualMachine(ctx context.Context, data *VirtualMachineResourceModel, diags *diag.Diagnostics) {
 	id := data.ID.ValueString()
 
-	result, err := r.client.VirtualMachines.Get(ctx, id)
+	result, err := r.client.VirtualMachines.Get(ctx, id, nil)
 	if err != nil {
 		var apiErr *components.APIError
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
@@ -528,9 +586,15 @@ func (r *VirtualMachineResource) readVirtualMachine(ctx context.Context, data *V
 	}
 
 	if a.Status != nil {
-		data.Status = types.StringValue(string(*a.Status))
+		data.Status = types.StringValue(*a.Status)
 	} else {
 		data.Status = types.StringNull()
+	}
+
+	if a.Billing != nil {
+		data.Billing = types.StringValue(*a.Billing)
+	} else {
+		data.Billing = types.StringNull()
 	}
 
 	if a.PrimaryIpv4 != nil {

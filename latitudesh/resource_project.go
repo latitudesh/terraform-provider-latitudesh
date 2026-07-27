@@ -249,7 +249,7 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 
 	updateRequest := operations.UpdateProjectProjectsRequestBody{
 		Data: operations.UpdateProjectProjectsData{
-			ID:         &projectID,
+			ID:         projectID,
 			Type:       operations.UpdateProjectProjectsTypeProjects,
 			Attributes: attrs,
 		},
