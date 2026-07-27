@@ -301,9 +301,15 @@ func (r *VirtualNetworkResource) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	// Use readVirtualNetworkByID which uses the Get endpoint directly
 	r.readVirtualNetworkByID(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// If readVirtualNetworkByID found no such network and nulled the ID, the
+	// network is gone; drop it from state instead of persisting a null ID.
+	if data.ID.IsNull() {
+		resp.State.RemoveResource(ctx)
 		return
 	}
 
@@ -338,6 +344,16 @@ func (r *VirtualNetworkResource) Update(ctx context.Context, req resource.Update
 
 	r.readVirtualNetworkByID(ctx, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// A network that vanished mid-update must fail the apply rather than commit
+	// a state entry with a null ID.
+	if plan.ID.IsNull() {
+		resp.Diagnostics.AddError(
+			"Virtual Network Not Found",
+			"The virtual network could not be found after updating it. It may have been deleted outside of Terraform.",
+		)
 		return
 	}
 
@@ -535,25 +551,12 @@ func (r *VirtualNetworkResource) ImportState(ctx context.Context, req resource.I
 		return
 	}
 
-	listRequest := operations.GetVirtualNetworksRequest{}
-	listResponse, err := r.client.PrivateNetworks.List(ctx, listRequest)
+	// Project is unknown at import time, so this searches every project the
+	// token can see, paginating so networks past the first page are found.
+	foundVnet, err := r.findVirtualNetworkByID(ctx, vlanID, "")
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to list virtual networks, got error: "+err.Error())
 		return
-	}
-
-	if listResponse.VirtualNetworks == nil || listResponse.VirtualNetworks.Data == nil {
-		resp.Diagnostics.AddError("API Error", "No virtual networks found")
-		return
-	}
-
-	// Find the virtual network with the matching ID
-	var foundVnet *components.VirtualNetworkData
-	for _, vnet := range listResponse.VirtualNetworks.Data {
-		if vnet.GetID() != nil && *vnet.GetID() == vlanID {
-			foundVnet = &vnet
-			break
-		}
 	}
 
 	if foundVnet == nil {
@@ -632,6 +635,49 @@ func (r *VirtualNetworkResource) ImportState(ctx context.Context, req resource.I
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
+// findVirtualNetworkByID locates a virtual network by its ID. When project is
+// known the list is filtered down to that project; otherwise (e.g. terraform
+// import, where only the ID is available) every project the token can see is
+// searched. Either way it paginates, so networks beyond the first page are
+// still found — the API serves 20 items per page by default and returns no
+// pagination metadata, so the walk stops on the first short page.
+// Returns (nil, nil) when the network genuinely does not exist.
+func (r *VirtualNetworkResource) findVirtualNetworkByID(ctx context.Context, vlanID, project string) (*components.VirtualNetworkData, error) {
+	pageSize := int64(100)
+
+	for pageNumber := int64(1); ; pageNumber++ {
+		page := pageNumber
+		size := pageSize
+		listRequest := operations.GetVirtualNetworksRequest{
+			PageSize:   &size,
+			PageNumber: &page,
+		}
+		if project != "" {
+			listRequest.FilterProject = &project
+		}
+
+		response, err := r.client.PrivateNetworks.List(ctx, listRequest)
+		if err != nil {
+			return nil, err
+		}
+		if response.VirtualNetworks == nil || response.VirtualNetworks.Data == nil ||
+			len(response.VirtualNetworks.Data) == 0 {
+			return nil, nil
+		}
+
+		for _, v := range response.VirtualNetworks.Data {
+			if v.GetID() != nil && *v.GetID() == vlanID {
+				vnet := v
+				return &vnet, nil
+			}
+		}
+
+		if int64(len(response.VirtualNetworks.Data)) < pageSize {
+			return nil, nil
+		}
+	}
+}
+
 func (r *VirtualNetworkResource) readVirtualNetworkByID(ctx context.Context, data *VirtualNetworkResourceModel, diags *diag.Diagnostics) {
 	vlanID := data.ID.ValueString()
 	if vlanID == "" {
@@ -639,25 +685,10 @@ func (r *VirtualNetworkResource) readVirtualNetworkByID(ctx context.Context, dat
 		return
 	}
 
-	listRequest := operations.GetVirtualNetworksRequest{}
-	listResponse, err := r.client.PrivateNetworks.List(ctx, listRequest)
+	foundVnet, err := r.findVirtualNetworkByID(ctx, vlanID, data.Project.ValueString())
 	if err != nil {
 		diags.AddError("Client Error", "Unable to list virtual networks, got error: "+err.Error())
 		return
-	}
-
-	if listResponse.VirtualNetworks == nil || listResponse.VirtualNetworks.Data == nil {
-		data.ID = types.StringNull()
-		return
-	}
-
-	// Find the virtual network with the matching ID
-	var foundVnet *components.VirtualNetworkData
-	for _, vnet := range listResponse.VirtualNetworks.Data {
-		if vnet.GetID() != nil && *vnet.GetID() == vlanID {
-			foundVnet = &vnet
-			break
-		}
 	}
 
 	if foundVnet == nil {
@@ -762,29 +793,11 @@ func (r *VirtualNetworkResource) readVirtualNetworkByID(ctx context.Context, dat
 
 func (r *VirtualNetworkResource) readVirtualNetwork(ctx context.Context, data *VirtualNetworkResourceModel, diags *diag.Diagnostics) {
 	vlanID := data.ID.ValueString()
-	project := data.Project.ValueString()
 
-	listRequest := operations.GetVirtualNetworksRequest{
-		FilterProject: &project,
-	}
-
-	response, err := r.client.PrivateNetworks.List(ctx, listRequest)
+	foundVnet, err := r.findVirtualNetworkByID(ctx, vlanID, data.Project.ValueString())
 	if err != nil {
 		diags.AddError("Client Error", "Unable to list virtual networks, got error: "+err.Error())
 		return
-	}
-
-	if response.VirtualNetworks == nil || response.VirtualNetworks.Data == nil {
-		data.ID = types.StringNull()
-		return
-	}
-
-	var foundVnet *components.VirtualNetworkData
-	for _, vnet := range response.VirtualNetworks.Data {
-		if vnet.GetID() != nil && *vnet.GetID() == vlanID {
-			foundVnet = &vnet
-			break
-		}
 	}
 
 	if foundVnet == nil {
