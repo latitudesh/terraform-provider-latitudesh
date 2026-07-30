@@ -8,12 +8,6 @@ on:
       - synchronize
       - reopened
       - ready_for_review
-    # `labeled`/`unlabeled` are deliberately absent. Subscribing to them would mean
-    # any label change on any PR re-evaluates the e2e condition, and on a PR that
-    # touched provider code that provisions real infrastructure — so labelling a PR
-    # `documentation` would spin up servers. The cost of that outweighs the gap it
-    # closes. Consequence: removing `e2e: skip` does not re-trigger the suite on its
-    # own; push a commit, or run this workflow from the Actions tab.
   # Run the acceptance suite deliberately: before a release, after a large
   # refactor, or to sweep tests the curated list below leaves out. There is no
   # scheduled run on purpose — the suite provisions real, billable infrastructure,
@@ -104,11 +98,16 @@ jobs:
     # passthrough and CI never sets LATITUDE_TEST_RECORDER), so a draft carrying
     # unreviewed or generated Terraform would provision real infrastructure before
     # anyone had looked at it. Marking the PR ready for review triggers this job.
+    #
+    # There is deliberately no opt-out label. A label is only read on runs that
+    # happen anyway, so removing it would not re-trigger the suite — and fixing that
+    # by subscribing to `unlabeled` would mean any label change on a provider PR
+    # provisions real infrastructure again. Draft status covers the same need
+    # without going stale, and `workflow_dispatch` covers running it on demand.
     if: |
       github.event_name == 'workflow_dispatch' ||
       (needs.changes.outputs.provider == 'true' &&
-       github.event.pull_request.draft == false &&
-       !contains(github.event.pull_request.labels.*.name, 'e2e: skip'))
+       github.event.pull_request.draft == false)
     # The acceptance suite runs against one shared Latitude account/project, so
     # two runs in flight at once would create colliding resource names.
     # Serialize them: a new run queues until the previous finishes (never
