@@ -85,3 +85,38 @@ terraform init
 Terraform will pick up your local build through the override configured in `~/.terraformrc`.
 
 > **Note:** Remove any `version` line from `required_providers` to ensure Terraform always uses your local build.
+
+## Coverage of the Latitude.sh SDK
+
+[`sdk-coverage.yaml`](sdk-coverage.yaml) is an **exception list**, not a work queue.
+An SDK service group with no entry is one we intend to expose, and scaffolding gets
+generated for it automatically — a resource, a data source, or both, according to the
+CRUD shape derived from its method names.
+
+So a new service group in an SDK bump does **not** fail CI. It produces a draft PR
+instead, and reviewing that real code is where the keep-or-drop decision gets made:
+
+- **Keep it** — merge, and the entry lands in `implemented_by`.
+- **Drop it** — close the PR and record the decision here with a `ceiling` and a
+  `rationale`, so it stops being regenerated.
+
+`ceiling` caps how much is generated (`none`, or `datasource` to allow a data source
+but no resource). `rationale` says why (`api_constraint`, `product_decision`,
+`deprecated`). Both or neither — a cap without a reason is unauditable. The reason
+matters because it decides whether the exclusion expires: an `api_constraint` is
+re-checked every run and reported once the API grows past it, while a
+`product_decision` is never revisited. Neither ever fails CI.
+
+What `TestProviderSDKCoverage` does fail on is contradiction — most often a resource
+added or renamed without updating `implemented_by`. So if you write a resource by
+hand, add its Terraform type name to the group it calls.
+
+To see the current state:
+
+```sh
+make coverage-report   # coverage, the generation queue, and recorded exclusions
+make coverage-check    # what CI enforces
+```
+
+Both run offline against the module cache and need no API token. The file's header
+comment explains every field.

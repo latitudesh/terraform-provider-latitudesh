@@ -13,6 +13,7 @@ require (
 	github.com/latitudesh/latitudesh-go-sdk v1.18.1
 	golang.org/x/crypto v0.52.0
 	gopkg.in/dnaeon/go-vcr.v3 v3.1.2
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -85,5 +86,4 @@ require (
 	google.golang.org/grpc v1.82.1 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v2 v2.3.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
