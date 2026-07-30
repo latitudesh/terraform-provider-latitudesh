@@ -8,27 +8,52 @@ on:
       - synchronize
       - reopened
       - ready_for_review
+  # Run the acceptance suite deliberately: before a release, after a large
+  # refactor, or to sweep tests the curated list below leaves out. There is no
+  # scheduled run on purpose — the suite provisions real, billable infrastructure,
+  # and on a branch nobody merged to it would cost money to learn nothing.
+  workflow_dispatch:
+    inputs:
+      acceptance_tests:
+        description: "Test name regex. Defaults to the curated list; pass TestAcc to sweep everything (slower, provisions more real infrastructure)."
+        required: false
+        default: ""
+
+env:
+  # The acceptance tests that run on pull requests. This is an allowlist: a test
+  # whose prefix is missing here never runs in CI, so a newly added resource needs
+  # its prefix added too.
+  CURATED_ACCEPTANCE_TESTS: "TestAccEnvVarAuthTokenSet|TestAccServerUserDataValidation|TestAccServer|TestAccTag|TestAccSSHKey|TestAccDataSourceSSHKey|TestAccDataSourcePlan|TestAccDataSourceTag|TestAccRegion|TestAccVirtualNetwork|TestAccVirtualMachine|TestAccFirewall|TestAccElasticIP|TestAccProject|TestAccUserData|TestAccLatitudeFirewall|TestAccVlanAssignment|TestAccRole"
 
 jobs:
-  # Detect whether the PR touches provider code. Docs-only changes (docs/,
-  # examples/, templates/, *.md, release config) skip the expensive e2e job,
-  # which provisions real infrastructure and serializes behind other runs.
+  # Detect whether the PR touches code that can change provider behavior. Tooling
+  # (cmd/, internal/sdkcoverage/) and docs cannot, so they must not trigger the
+  # expensive e2e job, which provisions real infrastructure and serializes behind
+  # other runs.
   changes:
     runs-on: ubuntu-latest
     outputs:
-      code: ${{ steps.filter.outputs.code }}
+      # A skipped filter step leaves this empty, which defaults to "true": a manual
+      # dispatch has no pull request to diff against, and should run the suite.
+      provider: ${{ steps.filter.outputs.provider || 'true' }}
     steps:
       -
         name: Checkout
         uses: actions/checkout@v4
       -
         name: Detect provider code changes
+        if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
-            code:
-              - '**/*.go'
+            provider:
+              - 'latitudesh/**/*.go'
+              - 'internal/modifiers/**'
+              - 'internal/planmodifiers/**'
+              - 'internal/provider/**'
+              - 'internal/validators/**'
+              - 'main.go'
               - 'go.mod'
               - 'go.sum'
               - '.github/workflows/test.yml'
@@ -47,10 +72,10 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '^1.23.0'
-      - 
+      -
         name: Install dependencies
         run: go get .
-      - 
+      -
         name: Build
         run: go build -v ./...
       -
@@ -59,11 +84,25 @@ jobs:
       -
         name: Run Plan Modifier Tests
         run: go test ./internal/planmodifiers -v
+      -
+        # Neither step above covers this package: the -run filter only matches tests
+        # in ./latitudesh. Without its own step the SDK coverage suite never runs.
+        name: Run SDK Coverage Tests
+        run: go test ./internal/sdkcoverage -v
 
   e2e:
     runs-on: ubuntu-latest
     needs: [build, changes]
-    if: needs.changes.outputs.code == 'true'
+    # Draft pull requests are excluded deliberately, and not just to save time:
+    # acceptance tests run against the live API (the recorder defaults to
+    # passthrough and CI never sets LATITUDE_TEST_RECORDER), so a draft carrying
+    # unreviewed or generated Terraform would provision real infrastructure before
+    # anyone had looked at it. Marking the PR ready for review triggers this job.
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (needs.changes.outputs.provider == 'true' &&
+       github.event.pull_request.draft == false &&
+       !contains(github.event.pull_request.labels.*.name, 'e2e: skip'))
     # The acceptance suite runs against one shared Latitude account/project, so
     # two runs in flight at once would create colliding resource names.
     # Serialize them: a new run queues until the previous finishes (never
@@ -92,7 +131,14 @@ jobs:
         run: go get .
       -
         name: Run E2E Tests
-        run: go test ./latitudesh -v -timeout 60m -run "TestAccEnvVarAuthTokenSet|TestAccServerUserDataValidation|TestAccServer|TestAccTag|TestAccSSHKey|TestAccDataSourceSSHKey|TestAccDataSourcePlan|TestAccDataSourceTag|TestAccRegion|TestAccVirtualNetwork|TestAccVirtualMachine|TestAccFirewall|TestAccElasticIP|TestAccProject|TestAccUserData|TestAccLatitudeFirewall|TestAccVlanAssignment|TestAccRole"
+        # The test selector goes through the environment rather than being
+        # interpolated into the command. Expression interpolation happens before the
+        # shell parses this script, so a dispatch input spliced in directly would let
+        # anyone who can dispatch run arbitrary commands — in the one step that has
+        # LATITUDESH_AUTH_TOKEN in its environment. Quoted "$ACCEPTANCE_TESTS" is
+        # only ever an argument.
+        run: go test ./latitudesh -v -timeout 60m -run "$ACCEPTANCE_TESTS"
         env:
+          ACCEPTANCE_TESTS: ${{ github.event.inputs.acceptance_tests || env.CURATED_ACCEPTANCE_TESTS }}
           TF_ACC: '1'
           LATITUDESH_AUTH_TOKEN: ${{ secrets.LATITUDESH_AUTH_TOKEN }}
