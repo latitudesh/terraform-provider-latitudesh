@@ -8,6 +8,12 @@ on:
       - synchronize
       - reopened
       - ready_for_review
+    # `labeled`/`unlabeled` are deliberately absent. Subscribing to them would mean
+    # any label change on any PR re-evaluates the e2e condition, and on a PR that
+    # touched provider code that provisions real infrastructure — so labelling a PR
+    # `documentation` would spin up servers. The cost of that outweighs the gap it
+    # closes. Consequence: removing `e2e: skip` does not re-trigger the suite on its
+    # own; push a commit, or run this workflow from the Actions tab.
   # Run the acceptance suite deliberately: before a release, after a large
   # refactor, or to sweep tests the curated list below leaves out. There is no
   # scheduled run on purpose — the suite provisions real, billable infrastructure,

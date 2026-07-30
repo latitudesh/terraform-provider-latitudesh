@@ -16,10 +16,16 @@ import (
 // "TestProvider|TestFrameworkProvider"` — the name prefix is load-bearing, so
 // renaming this test would silently drop it from CI.
 //
-// The most valuable case it catches is an SDK bump that adds a service group:
-// that is the moment new platform capability becomes reachable from the provider,
-// and the failure lands in the bump's own PR rather than being noticed months
-// later.
+// It fails only on contradictions: a group the SDK no longer exposes, a Terraform
+// type the manifest does not claim (or claims under a name the provider does not
+// register), or a half-written exclusion. An SDK bump that adds a service group is
+// NOT a failure — an undeclared group is what triggers scaffolding, and failing
+// would block every bump on a product decision its author was never asked to make.
+// Those groups surface in the report instead (`make coverage-report`).
+//
+// It is also blind to changes *within* an already-covered group: only group and
+// method names are parsed, never model fields or signatures. A new field on an
+// existing resource is invisible here.
 func TestProviderSDKCoverage(t *testing.T) {
 	sdkDir, err := sdkcoverage.PinnedModuleDir(sdkcoverage.SDKModulePath)
 	if err != nil {
