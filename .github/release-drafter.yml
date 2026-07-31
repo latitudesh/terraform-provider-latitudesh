@@ -40,3 +40,44 @@ version-resolver:
 
 exclude-labels:
   - 'skip-changelog'
+
+# Derive the category labels from the conventional-commit prefix in the PR title.
+# The categories and version-resolver above are driven entirely by labels, so
+# without this they depend on someone remembering to apply one by hand — and a PR
+# that slips through lands in "Other changes" and never influences the version
+# bump. The prefix already carries the information, so read it from there.
+#
+# Note that every matching rule is applied, not just the first, so these have to be
+# mutually exclusive. That is why the bug and maintenance rules explicitly exclude a
+# `deps` scope: this repo writes dependency bumps as `fix(deps):` / `chore(deps):`,
+# which would otherwise be categorised twice.
+#
+# Autolabeling does not work on pull requests from forks, because the token is
+# read-only there. Supporting those needs the `pull_request_target` event that sits
+# commented out in the workflow — a separate security decision. Until then, label
+# fork PRs by hand.
+autolabeler:
+  # Breaking changes are marked with `!` in the prefix (`feat(api)!: ...`), so they
+  # do not depend on anyone remembering the label either. A `feat!:` title
+  # deliberately picks up both labels: `breaking` wins the version bump, and the
+  # Breaking category is listed first.
+  - label: 'type: breaking'
+    title: ['/^\w+(\([^)]+\))?!:/']
+
+  - label: 'type: feature'
+    title: ['/^feat(\([^)]+\))?!?:/']
+
+  - label: 'type: dependencies'
+    title: ['/^\w+\(deps(-dev)?\)!?:/']
+    branch: ['/^dependabot\//']
+
+  - label: 'type: bug'
+    title: ['/^fix(?!\(deps)(\([^)]+\))?!?:/']
+
+  - label: 'type: docs'
+    title: ['/^docs(\([^)]+\))?!?:/']
+
+  # `test` is the second most common prefix in this repo's history and had no
+  # category at all before.
+  - label: 'type: maintenance'
+    title: ['/^(chore|refactor|test|ci|build|style|perf)(?!\(deps)(\([^)]+\))?!?:/']

@@ -25,5 +25,13 @@ test:
 	go test -i $(TEST) || exit 1                                                   
 	echo $(TEST) | xargs -t -n4 go test $(TESTARGS) -timeout=30s -parallel=4                    
 
-testacc: 
-	TF_ACC=1 go test $(TEST) -v $(TESTARGS) -timeout 120m 
+testacc:
+	TF_ACC=1 go test $(TEST) -v $(TESTARGS) -timeout 120m
+
+# Coverage of the pinned SDK's service groups by this provider. Both targets are
+# offline: they read the SDK from the module cache and need no API token.
+coverage-report:
+	go run ./cmd/sdkcoverage report -format text
+
+coverage-check:
+	go run ./cmd/sdkcoverage check 

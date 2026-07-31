@@ -1,0 +1,212 @@
+# Coverage of latitudesh-go-sdk service groups by this Terraform provider.
+#
+# This is an EXCEPTION LIST, not a work queue. A group with no entry here is one we
+# intend to expose, and scaffolding is generated for it automatically. Nothing waits
+# on a human writing a line first.
+#
+# The flow:
+#
+#   1. The SDK exposes a group with no entry.
+#   2. Scaffolding is generated for it — a resource, a data source, or both,
+#      according to the CRUD shape derived from its method names.
+#   3. A draft PR opens. Reviewing real generated code is where the keep-or-drop
+#      decision actually gets made.
+#   4. Merge it and the agent's entry lands in `implemented_by` — the group is
+#      covered. Drop it and record why below, so it stops being regenerated.
+#
+# Derived automatically on every run, never stored here: each group's CRUD shape.
+# So the shapes cannot rot against the SDK.
+#
+# CAVEAT: those shapes come from the SDK, which is generated from the API's OpenAPI
+# spec. When the spec is incomplete the shape understates the real API — verified
+# cases are noted below. Read a shape as a floor, not a ceiling.
+#
+# ## Fields
+#
+# implemented_by  Terraform type names this group backs. Non-empty means covered.
+#                 There is no separate status field: two sources of truth for the
+#                 same fact are free to contradict each other.
+#
+# ceiling         caps how much gets generated. Only on exclusions — "generate
+#                 everything the shape supports" is expressed by having no entry.
+#   none             generate nothing
+#   datasource       a data source is fine, do not generate a resource
+#
+# rationale       why it is capped. Required whenever ceiling is set, and vice
+#                 versa: a cap without a reason is unauditable, a reason without a
+#                 cap does not say how much to stop.
+#   api_constraint    the API does not offer enough to go further
+#   product_decision  we do not want it, whatever the API offers
+#   deprecated        the upstream endpoint is going away
+#
+# notes           context for whoever reviews this group next. Valid on its own —
+#                 an entry with only notes still generates, it just arrives with the
+#                 reviewer already warned.
+#
+# Why rationale matters: it decides whether an exclusion expires. An api_constraint
+# is only true while the API stays put, so the report re-checks it every run and
+# flags groups that have outgrown their ceiling. That flag never fails CI — an API
+# that grew is an opportunity, and whoever bumps the SDK is not who decides product
+# scope. A product_decision is exempt from the check entirely.
+#
+# ## The gate
+#
+# `TestProviderSDKCoverage` fails only on contradictions:
+#   - an entry names a group the SDK no longer exposes (renamed or removed upstream)
+#   - implemented_by names a Terraform type the provider does not register
+#   - the provider registers a type no entry claims
+#   - a ceiling without a rationale, or a rationale without a ceiling
+#   - a covered group that still carries a ceiling or rationale
+#
+# A group with no entry is NOT a failure — that is the generation trigger.
+#
+# Regenerate the raw surface with: go run ./cmd/sdkcoverage groups
+# Render the coverage table with:  make coverage-report
+
+version: 1
+sdk_module: github.com/latitudesh/latitudesh-go-sdk
+
+groups:
+  # ---------------------------------------------------------------- covered ---
+
+  ElasticIps:
+    implemented_by: [latitudesh_elastic_ip]
+
+  Firewalls:
+    implemented_by: [latitudesh_firewall, latitudesh_firewall_assignment]
+    notes: >-
+      Assignment methods are flattened onto this group (ListAssignments,
+      DeleteAssignment) as well as living on Firewalls.Assignments.
+
+  Firewalls.Assignments:
+    implemented_by: [latitudesh_firewall_assignment]
+    notes: Only Create lives here; the read and delete paths are on the parent group.
+
+  Plans:
+    implemented_by: [latitudesh_plan]
+    notes: Data source. UpdateBandwidth is not wired up, hence the -RU- shape.
+
+  PrivateNetworks:
+    implemented_by: [latitudesh_virtual_network, latitudesh_vlan_assignment]
+    notes: >-
+      Owns CRUD for virtual networks and the assignment lifecycle. Neither
+      Terraform type is named private_network.
+
+  Projects:
+    implemented_by: [latitudesh_project]
+
+  Regions:
+    implemented_by: [latitudesh_region]
+    notes: Data source. Reads a single region via Fetch, not Get.
+
+  Roles:
+    implemented_by: [latitudesh_role]
+
+  SSHKeys:
+    implemented_by: [latitudesh_ssh_key]
+    notes: Ships as both a resource and a data source under the same type name.
+
+  Servers:
+    implemented_by: [latitudesh_server]
+    notes: >-
+      Lock/Unlock/Reinstall/GetDeployConfig are folded into the resource's create
+      and update paths rather than exposed separately. The remaining actions
+      (RunAction, rescue mode, IPMI, out-of-band, scheduled deletion) are
+      deliberately not exposed.
+
+  Tags:
+    implemented_by: [latitudesh_tag]
+    notes: Also read by the server and virtual-network resources.
+
+  TeamMembers:
+    implemented_by: [latitudesh_member]
+
+  Teams.Members:
+    implemented_by: [latitudesh_member]
+    notes: Supplies the read path for latitudesh_member via GetTeamMembers.
+
+  UserData:
+    implemented_by: [latitudesh_user_data]
+    notes: Also read by the server resource to hash user-data content.
+
+  VirtualMachines:
+    implemented_by: [latitudesh_virtual_machine]
+    notes: >-
+      Network attachments and metrics are not exposed. Note the update method is
+      UpdateVirtualMachine, not Update.
+
+  VirtualNetworks:
+    implemented_by: [latitudesh_virtual_network]
+    notes: >-
+      Delete-only fragment — PrivateNetworks owns the rest of the lifecycle. The
+      derived ---D shape is expected and is not a gap.
+
+  # --------------------------------------------------------------- excluded ---
+
+  Projects.SSHKeys:
+    ceiling: none
+    rationale: deprecated
+    notes: >-
+      PostProjectSSHKey is marked Deprecated in the SDK, and the API route
+      /projects/:project_id/ssh_keys is deprecated too. Project SSH keys are
+      managed through the SSHKeys group instead.
+
+  Teams:
+    ceiling: none
+    rationale: product_decision
+    notes: >-
+      Team management does not belong in Terraform, not even as a data source.
+      (The API also has no DELETE and no show, so a resource could not be
+      well-formed anyway — but the decision stands regardless of that.)
+
+  VpnSessions:
+    ceiling: none
+    rationale: product_decision
+    notes: >-
+      A VPN session is ephemeral; Terraform state would be stale the moment after
+      apply. Not a Terraform concern whatever the API offers.
+
+  # ------------------------------------------------------------ annotations ---
+  # No ceiling, so these still generate. The notes are here so whoever reviews the
+  # generated PR starts with the context already gathered.
+
+  ObjectStorage:
+    notes: >-
+      The CR-D shape UNDERSTATES the API: PATCH /storage/buckets/:id is routed and
+      implemented but missing from the spec, as are the lifecycle_rules
+      sub-resource, a metrics endpoint, and a bucket-exists check. Scoped
+      previously as PD-6063 and paused pending storage-team spec fixes. Expect the
+      generated resource to lack update support it could have had.
+
+  BlockStorage:
+    notes: >-
+      Methods are HTTP-verb prefixed (PostStorageVolumes, DeleteStorageVolumes) and
+      DeleteStorageVolumes deletes a single volume despite the plural. The API has
+      no volume update, so the CR-D shape is real and not a spec gap.
+
+  FilesystemStorage:
+    notes: >-
+      The API genuinely has no single-item read (confirmed against the routes), so
+      import support needs thought — an API limitation, not a spec gap.
+
+  KubernetesClusters:
+    notes: >-
+      Kubeconfig retrieval and available-version listing would likely want data
+      sources of their own. GET /kubernetes_clusters/plans exists in the API but is
+      absent from the spec, so the SDK has no method for it.
+
+  VirtualMachineBackups:
+    notes: >-
+      VERIFY FIRST: the API checkout reviewed (2026-06-22) has backup domain code
+      but no HTTP routes at all. The SDK exposing this group implies production does
+      have the endpoints, but confirm before merging generated code against them.
+
+  APIKeys:
+    notes: >-
+      Full CRUD, but managing API keys through Terraform means the key material
+      lands in state — weigh that when reviewing.
+
+  Traffic:
+    notes: >-
+      Read-only reporting. The API changes its response shape based on a project
+      feature flag, so a data source needs to handle both.
