@@ -48,7 +48,7 @@ The resource waits for the virtual machine to reach a running state with a prima
 - `billing` (String) The virtual machine billing type. Accepts `hourly` and `monthly` for on-demand projects and `yearly` for reserved projects. Defaults to `monthly` (reserved projects default to `yearly`). Billing can only be upgraded in place (`hourly` -> `monthly` -> `yearly`); downgrades are not allowed.
 - `name` (String) The virtual machine name (hostname). Defaults to `my-vm` if not set.
 - `operating_system` (String) The operating system slug for the virtual machine. If not specified, the API defaults to `ubuntu_24_04_x64_lts`. Changing this forces a new resource.
-- `project` (String) The project (ID or slug) to deploy the virtual machine. If not set, the provider-level `project` is used. Changing this forces a new resource.
+- `project` (String) The project (ID or slug) to deploy the virtual machine into. Optional here only if `project` is set on the provider block; one of the two is required. Changing it forces a new resource.
 - `site` (String) The site/region slug where the virtual machine is provisioned (case-insensitive, e.g. DAL, SAO). If not specified, the API defaults to `DAL`. Changing this forces a new resource.
 - `ssh_keys` (List of String) List of SSH key IDs to add to the virtual machine. Changing this forces a new resource.
 - `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))

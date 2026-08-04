@@ -80,7 +80,7 @@ resource "latitudesh_elastic_ip" "elastic_ip" {
 
 ### Optional
 
-- `project` (String) The project (ID or Slug) that owns the Elastic IP. Falls back to the provider-level `project` default.
+- `project` (String) The project (ID or slug) that owns the Elastic IP. Optional here only if `project` is set on the provider block; one of the two is required. Changing it forces a new resource.
 - `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))
 
 ### Read-Only

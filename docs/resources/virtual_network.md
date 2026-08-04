@@ -39,7 +39,7 @@ resource "latitudesh_virtual_network" "virtual_network" {
 
 ### Optional
 
-- `project` (String) The project (ID or Slug) to deploy the virtual network
+- `project` (String) The project (ID or slug) to deploy the virtual network into. Optional here only if `project` is set on the provider block; one of the two is required. Changing it forces a new resource.
 - `tags` (List of String) List of virtual network tag IDs
 
 ### Read-Only

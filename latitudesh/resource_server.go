@@ -113,7 +113,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"project": schema.StringAttribute{
-				MarkdownDescription: "The project (ID or Slug) to deploy the server",
+				MarkdownDescription: "The project (ID or slug) to deploy the server into. Optional here only if `project` is set on the provider block; one of the two is required.",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{

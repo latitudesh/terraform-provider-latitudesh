@@ -60,7 +60,7 @@ func (r *VirtualNetworkResource) Schema(ctx context.Context, req resource.Schema
 				},
 			},
 			"project": schema.StringAttribute{
-				MarkdownDescription: "The project (ID or Slug) to deploy the virtual network",
+				MarkdownDescription: "The project (ID or slug) to deploy the virtual network into. Optional here only if `project` is set on the provider block; one of the two is required. Changing it forces a new resource.",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{

@@ -73,7 +73,7 @@ func (p *latitudeshProvider) Schema(ctx context.Context, req provider.SchemaRequ
 				Sensitive:           true,
 			},
 			"project": schema.StringAttribute{
-				MarkdownDescription: "The project ID to use for all resources. If not set, project must be defined in the resource.",
+				MarkdownDescription: "Default project (ID or slug) for resources that take a `project`. When set, those resources may omit their own `project`; when unset, each such resource must set one.",
 				Optional:            true,
 			},
 		},

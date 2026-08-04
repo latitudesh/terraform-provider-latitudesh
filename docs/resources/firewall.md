@@ -56,7 +56,7 @@ resource "latitudesh_firewall" "web_firewall" {
 
 ### Optional
 
-- `project` (String) The project id or slug. If not set, falls back to provider's project.
+- `project` (String) The project (ID or slug) that owns the firewall. Optional here only if `project` is set on the provider block; one of the two is required. Changing it forces a new resource.
 - `rules` (Block List) Firewall rules (see [below for nested schema](#nestedblock--rules))
 
 ### Read-Only

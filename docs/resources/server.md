@@ -147,7 +147,7 @@ With the above, only `user_data` changes (ID or content) cause a reinstall. Chan
 - `disk_layout` (Attributes List) Custom disk layout made of one or more disk groups, used instead of `raid`. Mutually exclusive with `raid` and `ipxe`. The layout is refreshed from the server deploy config on read, so out-of-band changes are detected and imported servers populate it. Changing it requires a reinstall and only succeeds when `allow_reinstall = true`. The OS group's filesystem is always `ext4` (managed by the API) and is not configurable here. (see [below for nested schema](#nestedatt--disk_layout))
 - `ipxe` (String) The iPXE script to boot. Accepts either a URL pointing at the script, or the script encoded in base64. Required when `operating_system = "ipxe"`; the plan fails with an explicit error if it is missing. Updating ipxe requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.
 - `locked` (Boolean) Lock/unlock the server. A locked server cannot be deleted or updated.
-- `project` (String) The project (ID or Slug) to deploy the server
+- `project` (String) The project (ID or slug) to deploy the server into. Optional here only if `project` is set on the provider block; one of the two is required.
 - `raid` (String) RAID mode for the server. Updating raid requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error. Mutually exclusive with `disk_layout`.
 - `ssh_keys` (List of String) List of server SSH key ids.
     Updating ssh_keys requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.

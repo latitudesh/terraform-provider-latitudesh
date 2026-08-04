@@ -84,7 +84,7 @@ func (r *ElasticIPResource) Schema(ctx context.Context, req resource.SchemaReque
 				},
 			},
 			"project": schema.StringAttribute{
-				MarkdownDescription: "The project (ID or Slug) that owns the Elastic IP. Falls back to the provider-level `project` default.",
+				MarkdownDescription: "The project (ID or slug) that owns the Elastic IP. Optional here only if `project` is set on the provider block; one of the two is required. Changing it forces a new resource.",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
