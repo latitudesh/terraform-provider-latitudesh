@@ -104,7 +104,15 @@ func TestAccDataSourcePlan(t *testing.T) {
 					resource.TestCheckResourceAttrSet("data.latitudesh_plan.slug_with_nvme", "cpu_clock"),
 					resource.TestCheckResourceAttrSet("data.latitudesh_plan.slug_with_nvme", "memory"),
 					resource.TestMatchResourceAttr("data.latitudesh_plan.slug_with_nvme", "features.#", regexp.MustCompile(`^[1-9]\d*$`)),
-					resource.TestCheckResourceAttrSet("data.latitudesh_plan.slug_with_nvme", "has_gpu"),
+					// f4-metal-medium is a metal storage plan with no GPU. Before the
+					// has_gpu fix the API's "gpu":{} made this report true; assert the
+					// explicit value so the regression can't return silently.
+					resource.TestCheckResourceAttr("data.latitudesh_plan.slug_with_nvme", "has_gpu", "false"),
+					// drives is exposed for #205. f4-metal-medium returns multiple disk
+					// groups, so this exercises the multi-group mapping too.
+					resource.TestMatchResourceAttr("data.latitudesh_plan.slug_with_nvme", "drives.#", regexp.MustCompile(`^[1-9]\d*$`)),
+					resource.TestMatchResourceAttr("data.latitudesh_plan.slug_with_nvme", "drives.0.count", regexp.MustCompile(`^[1-9]\d*$`)),
+					resource.TestCheckResourceAttrSet("data.latitudesh_plan.slug_with_nvme", "drives.0.type"),
 				),
 			},
 		},
