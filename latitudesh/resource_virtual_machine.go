@@ -104,7 +104,7 @@ func (r *VirtualMachineResource) Schema(ctx context.Context, req resource.Schema
 				},
 			},
 			"project": schema.StringAttribute{
-				MarkdownDescription: "The project (ID or slug) to deploy the virtual machine. If not set, the provider-level `project` is used. Changing this forces a new resource.",
+				MarkdownDescription: "The project (ID or slug) to deploy the virtual machine into. Optional here only if `project` is set on the provider block; one of the two is required. Changing it forces a new resource.",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{

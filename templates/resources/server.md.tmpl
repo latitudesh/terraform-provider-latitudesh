@@ -1,0 +1,162 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+The `latitudesh_server` resource allows you to deploy and manage bare metal servers on [Latitude.sh](https://metal.new) via Terraform.
+
+> **Reinstall behavior**
+>
+> Server reinstalls require explicit opt-in. The `allow_reinstall` attribute defaults to `false`. With the default, changing `hostname` is applied in-place via PATCH; changing `operating_system`, `ssh_keys`, `user_data`, `raid`, or `ipxe` fails the plan with an error pointing at the field. Set `allow_reinstall = true` on the resource to perform reinstalls (which destroy data on disk).
+>
+> When a reinstall-trigger field changes alongside `billing`, `tags`, or `project` in the same plan, the provider runs the reinstall first and follows up with an in-place PATCH so all changes are applied in a single apply.
+>
+> Migrating from earlier versions (pre-v3.0): if you previously relied on the default `true` (e.g., to apply OS changes), set `allow_reinstall = true` explicitly on those resources.
+
+## Example usage
+
+> **Billing**
+>
+> `billing` defaults to `monthly`, which is charged upfront based on the proration of the current billing cycle. For dynamic or short-lived workloads, set `billing = "hourly"` explicitly. `yearly` is available for reserved projects.
+
+```hcl
+# Create a server with custom timeouts
+resource "latitudesh_server" "server" {
+  billing           = "monthly" # hourly, monthly (default) or yearly
+  hostname          = "my-server"
+  plan              = "m4-metal-medium"
+  site              = "ASH"
+  operating_system  = "ubuntu_24_04_x64_lts"
+  project           = "proj_..."
+  ssh_keys          = ["ssh_..."]
+
+  timeouts = {
+    create = "45m"
+    update = "60m"
+  }
+}
+
+# Access the server's attributes
+output "server" {
+  value = latitudesh_server.server
+}
+```
+
+### Booting a custom iPXE script (e.g. Talos)
+
+When `operating_system = "ipxe"`, the `ipxe` attribute is **required**. It can be either a URL where the iPXE script is hosted, or the iPXE script encoded in base64 — the API accepts both forms.
+
+```hcl
+locals {
+  talos_ipxe = <<-EOT
+    #!ipxe
+
+    imgfree
+    kernel https://pxe.factory.talos.dev/image/<sha>/<version>/kernel-amd64 talos.platform=metal console=tty0
+    initrd https://pxe.factory.talos.dev/image/<sha>/<version>/initramfs-amd64.xz
+    boot
+  EOT
+}
+
+resource "latitudesh_server" "ipxe_node" {
+  hostname         = "talos-worker"
+  plan             = "m4-metal-large"
+  site             = "CHI"
+  project          = "proj_..."
+  operating_system = "ipxe"
+  ipxe             = base64encode(local.talos_ipxe)
+  allow_reinstall  = true
+}
+```
+
+For an iPXE script already hosted at a URL (e.g. the Talos factory PXE endpoint), pass the URL directly:
+
+```hcl
+resource "latitudesh_server" "ipxe_node" {
+  # ...
+  operating_system = "ipxe"
+  ipxe             = "https://pxe.factory.talos.dev/pxe/<sha>/<version>/metal-amd64"
+  allow_reinstall  = true
+}
+```
+
+### Reinstalling on user_data content changes
+
+When a server references a `latitudesh_user_data` resource via `user_data`, the provider also tracks changes to the **content** of that user_data resource. Editing the content and running `terraform apply` triggers a reinstall in a single apply (with `allow_reinstall = true`), so cloud-init updates land on existing servers without rotating the user_data ID.
+
+```hcl
+resource "latitudesh_user_data" "shared" {
+  description = "fleet bootstrap"
+  content     = base64encode(file("./user-data.yaml"))
+}
+
+resource "latitudesh_server" "h1" {
+  hostname         = "h1"
+  plan             = "c2-small-x86"
+  site             = "ASH"
+  operating_system = "ubuntu_24_04_x64_lts"
+  project          = "proj_..."
+  user_data        = latitudesh_user_data.shared.id
+  allow_reinstall  = true
+}
+```
+
+### Restricting which changes trigger a reinstall
+
+By default, when `allow_reinstall = true`, any reinstall-only field change triggers a reinstall. Use `allowed_reinstall_triggers` to restrict the set:
+
+```hcl
+resource "latitudesh_server" "h1" {
+  hostname                   = "h1"
+  plan                       = "c2-small-x86"
+  site                       = "ASH"
+  operating_system           = "ubuntu_24_04_x64_lts"
+  project                    = "proj_..."
+  user_data                  = latitudesh_user_data.shared.id
+  allow_reinstall            = true
+  allowed_reinstall_triggers = ["user_data"]
+}
+```
+
+With the above, only `user_data` changes (ID or content) cause a reinstall. Changes to other reinstall-only fields (`operating_system`, `raid`, `ipxe`, `ssh_keys`) fail the plan with an explicit error pointing at the excluded field. `hostname` not in the list falls back to its existing in-place PATCH path.
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+You can import a Server resource using either the CLI method or the new [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_server` resource can be imported by specifying its ID:
+
+```sh
+terraform import latitudesh_server.my_server <SERVER_ID>
+```
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration. This feature is experimental and may change in future Terraform releases. See the [Terraform documentation for details](https://developer.hashicorp.com/terraform/language/import).
+
+To use this method, create a file named `import.tf` (or any `.tf` file) with the following content:
+
+```hcl
+import {
+  to = latitudesh_server.my_server
+  id = "<SERVER_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_server.tf
+```
+
+This will generate the resource configuration for the imported server resource.
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.

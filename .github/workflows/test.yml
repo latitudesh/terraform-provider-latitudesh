@@ -15,15 +15,15 @@ on:
   workflow_dispatch:
     inputs:
       acceptance_tests:
-        description: "Test name regex. Defaults to the curated list; pass TestAcc to sweep everything (slower, provisions more real infrastructure)."
+        description: "Test name regex. Defaults to every acceptance test; narrow it to run a subset."
         required: false
         default: ""
 
 env:
-  # The acceptance tests that run on pull requests. This is an allowlist: a test
-  # whose prefix is missing here never runs in CI, so a newly added resource needs
-  # its prefix added too.
-  CURATED_ACCEPTANCE_TESTS: "TestAccEnvVarAuthTokenSet|TestAccServerUserDataValidation|TestAccServer|TestAccTag|TestAccSSHKey|TestAccDataSourceSSHKey|TestAccDataSourcePlan|TestAccDataSourceTag|TestAccRegion|TestAccVirtualNetwork|TestAccVirtualMachine|TestAccFirewall|TestAccElasticIP|TestAccProject|TestAccUserData|TestAccLatitudeFirewall|TestAccVlanAssignment|TestAccRole"
+  # Every acceptance test runs. Using the prefix rather than a hand-maintained
+  # allowlist means a newly added TestAcc* is covered automatically instead of
+  # silently skipped until someone remembers to list it.
+  ACCEPTANCE_TESTS: "TestAcc"
 
 jobs:
   # Detect whether the PR touches code that can change provider behavior. Tooling
@@ -89,6 +89,31 @@ jobs:
         # in ./latitudesh. Without its own step the SDK coverage suite never runs.
         name: Run SDK Coverage Tests
         run: go test ./internal/sdkcoverage -v
+      -
+        # tfplugindocs exports the provider schema through a real Terraform binary.
+        # Without one on PATH it downloads its own, and that download currently fails
+        # signature verification (HashiCorp's release GPG key expired). Installing
+        # Terraform here makes tfplugindocs use it instead of downloading.
+        name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      -
+        # docs/ is generated from templates/ plus the provider schema, so a hand-edit
+        # to docs/ is silently lost on the next `go generate`. Nothing checked this
+        # before, which is how the templates and the published docs drifted far enough
+        # apart that the docs documented attributes the schema does not have. Editing
+        # docs/ directly is the mistake this catches; change the template or the
+        # schema description instead.
+        name: Check generated docs are up to date
+        run: |
+          go generate ./...
+          if ! git diff --quiet -- docs/; then
+            echo "::error::docs/ is out of sync with templates/ and the provider schema."
+            echo "Run 'go generate ./...' and commit the result."
+            git diff --stat -- docs/
+            exit 1
+          fi
 
   e2e:
     runs-on: ubuntu-latest
@@ -144,6 +169,6 @@ jobs:
         # only ever an argument.
         run: go test ./latitudesh -v -timeout 60m -run "$ACCEPTANCE_TESTS"
         env:
-          ACCEPTANCE_TESTS: ${{ github.event.inputs.acceptance_tests || env.CURATED_ACCEPTANCE_TESTS }}
+          ACCEPTANCE_TESTS: ${{ github.event.inputs.acceptance_tests || env.ACCEPTANCE_TESTS }}
           TF_ACC: '1'
           LATITUDESH_AUTH_TOKEN: ${{ secrets.LATITUDESH_AUTH_TOKEN }}

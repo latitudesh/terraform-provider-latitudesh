@@ -113,7 +113,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"project": schema.StringAttribute{
-				MarkdownDescription: "The project (ID or Slug) to deploy the server",
+				MarkdownDescription: "The project (ID or slug) to deploy the server into. Optional here only if `project` is set on the provider block; one of the two is required.",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
@@ -121,7 +121,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"site": schema.StringAttribute{
-				MarkdownDescription: "The site to deploy the server (case-insensitive)",
+				MarkdownDescription: "The server site slug. Examples: `AMS`, `ASH`, `BGT`, `BUE`, `CHI`, `FRA`, `TYO4`. For a complete list of available regions and their slugs, see the [API reference](https://www.latitude.sh/docs/api-reference/get-regions).",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
 					planmodifiers.CaseInsensitiveDiff{},
@@ -129,38 +129,44 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"plan": schema.StringAttribute{
-				MarkdownDescription: "The plan to choose server from",
+				MarkdownDescription: "The server plan slug. Examples: `m4-metal-medium`, `c3-large-x86`, `f4-metal-medium`, `rs4-metal-large`, `g4-rtx6kpro-large`. For a complete list of available plans and their slugs, see the [API reference](https://www.latitude.sh/docs/api-reference/get-plans).",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"operating_system": schema.StringAttribute{
-				MarkdownDescription: "The operating system for the new server",
+				MarkdownDescription: "The server OS slug. Updating the OS requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error. Examples: `ubuntu_24_04_x64_lts`, `ubuntu_22_04_x64_lts`, `debian_12`, `rockylinux_8`, `windows_2022_std`. For a complete list of available operating systems and their slugs, see the [API reference](https://www.latitude.sh/docs/api-reference/get-plans-operating-system).",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"hostname": schema.StringAttribute{
-				MarkdownDescription: "The server hostname. Changing this value triggers a server reinstall when `allow_reinstall` is `true` (default); set `allow_reinstall = false` to perform an in-place update instead.",
-				Optional:            true,
-				Computed:            true,
-				Validators:          validators.Hostname(),
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
+				MarkdownDescription: "The server hostname. Required — the API rejects a create without it.\n" +
+					"  - Maximum length: 32 characters;\n" +
+					"  - Allowed characters: letters (a–z, A–Z), digits (0–9), dots (.), and hyphens (-);\n" +
+					"  - Must not begin or end with a dot or hyphen;\n" +
+					"  - Underscores (_) are not allowed;\n" +
+					"  - Updating hostname is applied in-place via PATCH by default. Set `allow_reinstall = true` on the resource to make hostname changes trigger a server reinstall instead.",
+				// Required as of SDK v1.19.3, which types hostname as a non-pointer on
+				// the create payload. It was Optional+Computed before, so omitting it
+				// passed validation and only failed at the API. Note this is breaking:
+				// a configuration that never set hostname now fails at plan time.
+				Required:   true,
+				Validators: validators.Hostname(),
 			},
 			"ssh_keys": schema.ListAttribute{
-				MarkdownDescription: "SSH Keys to set on the server",
-				ElementType:         types.StringType,
-				Optional:            true,
+				MarkdownDescription: "List of server SSH key ids.\n" +
+					"    Updating ssh_keys requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.",
+				ElementType: types.StringType,
+				Optional:    true,
 				PlanModifiers: []planmodifier.List{
 					listplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"user_data": schema.StringAttribute{
-				MarkdownDescription: "User data ID to assign to the server (reference to latitudesh_user_data resource)",
+				MarkdownDescription: "The id of user data to set on the server. Changes to the referenced user_data's content are also tracked automatically and trigger a reinstall when `allow_reinstall = true`. Updating user_data requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.",
 				Optional:            true,
 				Validators:          validators.UserData(),
 				PlanModifiers: []planmodifier.String{
@@ -168,37 +174,37 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"raid": schema.StringAttribute{
-				MarkdownDescription: "RAID mode for the server (raid-0, raid-1). Mutually exclusive with `disk_layout`.",
+				MarkdownDescription: "RAID mode for the server. Updating raid requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error. Mutually exclusive with `disk_layout`.",
 				Optional:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"disk_layout": schema.ListNestedAttribute{
-				MarkdownDescription: "Custom disk layout made of one or more disk groups, used instead of `raid`. Mutually exclusive with `raid` and `ipxe`. The layout is refreshed from the server deploy config on read, so out-of-band changes are detected and imported servers populate it. Changing it triggers a reinstall (requires `allow_reinstall = true`). The OS group's filesystem is always `ext4` (managed by the API) and is not configurable here.",
+				MarkdownDescription: "Custom disk layout made of one or more disk groups, used instead of `raid`. Mutually exclusive with `raid` and `ipxe`. The layout is refreshed from the server deploy config on read, so out-of-band changes are detected and imported servers populate it. Changing it requires a reinstall and only succeeds when `allow_reinstall = true`. The OS group's filesystem is always `ext4` (managed by the API) and is not configurable here.",
 				Optional:            true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"count": schema.Int64Attribute{
-							MarkdownDescription: "Number of disks to include in this group",
+							MarkdownDescription: "Number of disks to include in this group.",
 							Required:            true,
 						},
 						"role": schema.StringAttribute{
-							MarkdownDescription: "Role of this disk group (os, storage, raw)",
+							MarkdownDescription: "Role of this disk group: `os`, `storage`, or `raw`.",
 							Required:            true,
 							Validators: []validator.String{
 								stringvalidator.OneOf("os", "storage", "raw"),
 							},
 						},
 						"raid_level": schema.StringAttribute{
-							MarkdownDescription: "RAID level for this disk group (raid-0, raid-1)",
+							MarkdownDescription: "RAID level for this disk group: `raid-0` or `raid-1`. Requires `count >= 2`.",
 							Optional:            true,
 							Validators: []validator.String{
 								stringvalidator.OneOf("raid-0", "raid-1"),
 							},
 						},
 						"mount_point": schema.StringAttribute{
-							MarkdownDescription: "Mount point for this disk group",
+							MarkdownDescription: "Mount point for this disk group, e.g. `/var/lib`. Required for the `storage` role.",
 							Optional:            true,
 						},
 					},
@@ -212,7 +218,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"billing": schema.StringAttribute{
-				MarkdownDescription: "The server billing type. Accepts `hourly` and `monthly` for on-demand projects and `yearly` for reserved projects. Defaults to `monthly`, which is charged upfront based on the proration of the current billing cycle. Use `hourly` for dynamic or short-lived workloads.",
+				MarkdownDescription: "The server billing type. Accepts `hourly` and `monthly` for on-demand projects and `yearly` for reserved projects. **Defaults to `monthly`**, which is charged upfront based on the proration of the current billing cycle. Use `hourly` for dynamic or short-lived workloads. When omitted, the plan shows the effective value (`billing = \"monthly\"` on create).",
 				Optional:            true,
 				Computed:            true,
 				Validators:          validators.Billing(),
@@ -227,13 +233,13 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Optional:            true,
 			},
 			"allow_reinstall": schema.BoolAttribute{
-				MarkdownDescription: "Allow server reinstallation when `operating_system`, `hostname`, `ssh_keys`, `user_data` (ID or content), `raid`, or `ipxe` changes. Defaults to `false`. When `false`, `hostname` changes are applied in-place via PATCH and any other reinstall-only field change fails the plan with an explicit error. See `allowed_reinstall_triggers` to restrict which kinds of changes are permitted to cause a reinstall.",
+				MarkdownDescription: "Allow server reinstallation when `operating_system`, `hostname`, `ssh_keys`, `user_data` (ID or content), `raid`, or `ipxe` changes. **Defaults to `false`.** When `false`, `hostname` changes are applied in-place via PATCH and any other reinstall-only field change fails the plan with an explicit error; set this to `true` on resources where you want reinstalls to happen automatically. See `allowed_reinstall_triggers` to further restrict which kinds of changes are permitted to cause a reinstall.",
 				Optional:            true,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
 			},
 			"allowed_reinstall_triggers": schema.ListAttribute{
-				MarkdownDescription: "Optional list restricting which field changes are allowed to trigger a server reinstall when `allow_reinstall = true`. When omitted, all reinstall-only field changes trigger a reinstall (existing behavior). When set, only listed names cause a reinstall; changes to reinstall-only fields not in the list fail the plan, except `hostname` which falls back to in-place PATCH. Valid values: `operating_system`, `user_data`, `raid`, `disk_layout`, `ipxe`, `ssh_keys`, `hostname`. The token `user_data` covers both ID changes and content changes of the referenced user_data resource.",
+				MarkdownDescription: "Optional list restricting which field changes are allowed to trigger a server reinstall when `allow_reinstall = true`. When omitted, all reinstall-only field changes trigger a reinstall (default behavior). When set, only listed names cause a reinstall; changes to reinstall-only fields not in the list fail the plan with an explicit error, except `hostname` which falls back to its in-place PATCH path. Valid values: `operating_system`, `user_data`, `raid`, `disk_layout`, `ipxe`, `ssh_keys`, `hostname`. The token `user_data` covers both ID changes and content changes of the referenced `latitudesh_user_data` resource.",
 				Optional:            true,
 				ElementType:         types.StringType,
 				Validators: []validator.List{
@@ -267,7 +273,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Computed:            true,
 			},
 			"locked": schema.BoolAttribute{
-				MarkdownDescription: "Whether the server is locked",
+				MarkdownDescription: "Lock/unlock the server. A locked server cannot be deleted or updated.",
 				Computed:            true,
 				Optional:            true,
 				PlanModifiers: []planmodifier.Bool{
@@ -313,8 +319,10 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
-				Create: true,
-				Update: true,
+				Create:            true,
+				Update:            true,
+				CreateDescription: `Timeout for server creation. Default: 30 minutes. Example: "45m", "1h"`,
+				UpdateDescription: `Timeout for server update (reinstall operations). Default: 30 minutes. Example: "60m", "1h30m"`,
 			}),
 		},
 	}
@@ -750,33 +758,23 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 			"Set `project` on this resource or define a default in the provider block (provider `latitudesh` { project = \"...\" }).")
 		return
 	}
-	attrs.Project = &project
+	attrs.Project = project
 	data.Project = types.StringValue(project)
 
-	if !data.Plan.IsNull() {
-		planValue := data.Plan.ValueString()
-		plan := operations.CreateServerPlan(planValue)
-		attrs.Plan = &plan
-	}
+	// SDK v1.19.3 made project, plan, site, operating_system and hostname required
+	// on the create payload — the spec caught up with what the API always enforced.
+	// They are assigned unconditionally now; the schema still marks them Optional, so
+	// omitting one sends the zero value and the API rejects it. Tightening the schema
+	// to Required is a breaking change for existing configurations and is tracked
+	// separately.
+	attrs.Plan = operations.CreateServerPlan(data.Plan.ValueString())
 
-	if !data.Site.IsNull() {
-		// Convert site to uppercase for API compatibility (case-insensitive input)
-		// Keep original case in state, only uppercase for API call
-		siteValue := strings.ToUpper(data.Site.ValueString())
-		site := operations.CreateServerSite(siteValue)
-		attrs.Site = &site
-	}
+	// Convert site to uppercase for API compatibility (case-insensitive input).
+	// Keep original case in state, only uppercase for the API call.
+	attrs.Site = operations.CreateServerSite(strings.ToUpper(data.Site.ValueString()))
 
-	if !data.OperatingSystem.IsNull() {
-		osValue := data.OperatingSystem.ValueString()
-		os := operations.CreateServerOperatingSystem(osValue)
-		attrs.OperatingSystem = &os
-	}
-
-	if !data.Hostname.IsNull() {
-		hostname := data.Hostname.ValueString()
-		attrs.Hostname = &hostname
-	}
+	attrs.OperatingSystem = operations.CreateServerOperatingSystem(data.OperatingSystem.ValueString())
+	attrs.Hostname = data.Hostname.ValueString()
 
 	if !data.SSHKeys.IsNull() && !data.SSHKeys.IsUnknown() {
 		var sshKeys []string
@@ -1432,10 +1430,11 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 	if server.Attributes != nil {
 		attrs := server.Attributes
 
+		// hostname is Required, so it must never be nulled here: Terraform rejects a
+		// null Required attribute after apply with "provider produced inconsistent
+		// result". When the API returns nothing, keep whatever the caller already has.
 		if attrs.Hostname != nil && *attrs.Hostname != "" {
 			data.Hostname = types.StringValue(*attrs.Hostname)
-		} else {
-			data.Hostname = types.StringNull()
 		}
 
 		if attrs.Status != nil {

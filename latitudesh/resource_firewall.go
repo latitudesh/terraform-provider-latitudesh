@@ -71,7 +71,7 @@ func (r *FirewallResource) Schema(ctx context.Context, req resource.SchemaReques
 				Required:            true,
 			},
 			"project": schema.StringAttribute{
-				MarkdownDescription: "The project id or slug. If not set, falls back to provider's project.",
+				MarkdownDescription: "The project (ID or slug) that owns the firewall. Optional here only if `project` is set on the provider block; one of the two is required. Changing it forces a new resource.",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
@@ -207,9 +207,9 @@ func (r *FirewallResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	createRequest := operations.CreateFirewallFirewallsRequestBody{
-		Data: operations.CreateFirewallData{
-			Type: operations.CreateFirewallTypeFirewalls,
-			Attributes: &operations.CreateFirewallAttributes{
+		Data: operations.CreateFirewallFirewallsData{
+			Type: operations.CreateFirewallFirewallsTypeFirewalls,
+			Attributes: &operations.CreateFirewallFirewallsAttributes{
 				Name:    name,
 				Project: project,
 				Rules:   rules,

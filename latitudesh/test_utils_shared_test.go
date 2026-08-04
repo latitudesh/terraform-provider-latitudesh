@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/acctest"
+	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 	"gopkg.in/dnaeon/go-vcr.v3/recorder"
@@ -20,19 +21,57 @@ import (
 // from aborted ones.
 var testRunID = acctest.RandString(6)
 
-// defaultTestProjectID is the pre-existing project (DevTools QA) that all
-// acceptance tests share. Concentrating tests in one project avoids creating a
-// throwaway project per test — those leak on aborted runs and then collide on
-// the API's unique-project-name constraint.
+// defaultTestProjectID is the pre-existing project the recorded VCR cassettes were
+// captured against. It is used only in replay mode, where no project is created.
 const defaultTestProjectID = "proj_jv6m5JyZDNLPe"
 
-// testAccProjectID returns the shared project ID. Override with
-// LATITUDESH_TEST_PROJECT to run the suite against a different account.
+var (
+	testProjectOnce    sync.Once
+	testProjectID      string
+	testProjectCreated bool
+)
+
+// testAccProjectID returns the one project every acceptance test shares,
+// creating it on first use so the whole run is self-contained and leaves nothing
+// behind (testSharedFixtureTeardown deletes it). Resolution, in order:
+//
+//   - replay mode      → defaultTestProjectID, the cassette's project, not created
+//     (no live call).
+//   - otherwise (live) → a fresh `tf-acc-shared-<runID>` project.
+//
+// It returns "" if creation fails; callers that have a *testing.T should fail on
+// that, and the underlying error is logged to stderr since most call sites embed
+// this in an HCL string and have no way to report it.
 func testAccProjectID() string {
-	if v := os.Getenv("LATITUDESH_TEST_PROJECT"); v != "" {
-		return v
-	}
-	return defaultTestProjectID
+	testProjectOnce.Do(func() {
+		if mode, err := testRecordMode(); err == nil && mode == recorder.ModeReplayOnly {
+			testProjectID = defaultTestProjectID
+			return
+		}
+
+		name := fmt.Sprintf("tf-acc-shared-%s", testRunID)
+		client := createVCRClient(nil)
+		result, err := client.Projects.Create(context.Background(), operations.CreateProjectProjectsRequestBody{
+			Data: &operations.CreateProjectProjectsData{
+				Type: operations.CreateProjectProjectsTypeProjects,
+				Attributes: &operations.CreateProjectProjectsAttributes{
+					Name:             name,
+					ProvisioningType: operations.CreateProjectProvisioningTypeOnDemand,
+				},
+			},
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "shared project: creating %q: %s\n", name, err)
+			return
+		}
+		if result.Object == nil || result.Object.Data == nil || result.Object.Data.ID == nil {
+			fmt.Fprintln(os.Stderr, "shared project: create response missing ID")
+			return
+		}
+		testProjectID = *result.Object.Data.ID
+		testProjectCreated = true
+	})
+	return testProjectID
 }
 
 var (
@@ -216,6 +255,11 @@ var testSharedFixture struct {
 	projectID string
 	site      string
 	serverIDs []string
+
+	// hostnames records what was requested for each server in serverIDs, by index,
+	// so a test can compare it against what the API reports back without
+	// provisioning anything of its own.
+	hostnames []string
 }
 
 // testAccSharedServers returns the shared project, its site, and n server IDs,
@@ -240,11 +284,18 @@ func testAccSharedServers(t *testing.T, n int) (projectID, site string, serverID
 
 	if f.projectID == "" {
 		f.projectID = testAccProjectID()
+		if f.projectID == "" {
+			t.Fatal("shared fixture: no project available (creation may have failed; see stderr)")
+		}
 	}
 
 	var created []string
 	for len(f.serverIDs) < n {
-		hostname := fmt.Sprintf("tf-acc-shared-%d.latitude.sh", len(f.serverIDs)+1)
+		// Deliberately mixed case: the hostname attribute is Required and not
+		// Computed, so the provider would produce an inconsistent result if the API
+		// normalized case. Every test that borrows this fixture exercises that
+		// round-trip for free, and TestAccServer_HostnameCase asserts it explicitly.
+		hostname := fmt.Sprintf("tf-Acc-Shared-%d.latitude.sh", len(f.serverIDs)+1)
 
 		sites := testServerSiteFallbackOrder
 		if f.site != "" {
@@ -264,11 +315,11 @@ func testAccSharedServers(t *testing.T, n int) (projectID, site string, serverID
 				Data: &operations.CreateServerServersData{
 					Type: operations.CreateServerServersTypeServers,
 					Attributes: &operations.CreateServerServersAttributes{
-						Project:         &f.projectID,
-						Plan:            &plan,
-						Site:            &siteAttr,
-						OperatingSystem: &osAttr,
-						Hostname:        &hostname,
+						Project:         f.projectID,
+						Plan:            plan,
+						Site:            siteAttr,
+						OperatingSystem: osAttr,
+						Hostname:        hostname,
 						Billing:         &billing,
 					},
 				},
@@ -293,6 +344,7 @@ func testAccSharedServers(t *testing.T, n int) (projectID, site string, serverID
 		}
 
 		f.serverIDs = append(f.serverIDs, serverID)
+		f.hostnames = append(f.hostnames, hostname)
 		created = append(created, serverID)
 	}
 
@@ -301,6 +353,19 @@ func testAccSharedServers(t *testing.T, n int) (projectID, site string, serverID
 	}
 
 	return f.projectID, f.site, append([]string(nil), f.serverIDs[:n]...)
+}
+
+// testAccSharedServerHostname returns the hostname requested for the shared server
+// at index i, so a test can compare it against what the API reports.
+func testAccSharedServerHostname(i int) string {
+	f := &testSharedFixture
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if i < 0 || i >= len(f.hostnames) {
+		return ""
+	}
+	return f.hostnames[i]
 }
 
 // testAccWaitServerReady polls the server until it reports status "on".
@@ -340,22 +405,58 @@ func testAccWaitServerReady(t *testing.T, serverID string) {
 }
 
 func testSharedFixtureTeardown() {
-	f := &testSharedFixture
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	if f.projectID == "" {
-		return
-	}
-
 	client := createVCRClient(nil)
 	ctx := context.Background()
 
-	// Only the servers this fixture provisioned are torn down. The project is
-	// pre-existing and shared (see testAccProjectID) — it must survive the run.
-	for _, id := range f.serverIDs {
+	f := &testSharedFixture
+	f.mu.Lock()
+	serverIDs := append([]string(nil), f.serverIDs...)
+	f.mu.Unlock()
+
+	for _, id := range serverIDs {
 		if _, err := client.Servers.Delete(ctx, id, nil); err != nil {
 			fmt.Fprintf(os.Stderr, "shared fixture teardown: failed to delete server %s: %s\n", id, err)
+		}
+	}
+
+	// Only a project this run created is torn down; the replay-mode default is left
+	// untouched. The project delete is driven by the singleton state, not the
+	// server fixture, because a test can create the project via testAccProjectID()
+	// without ever touching the shared servers.
+	if !testProjectCreated {
+		return
+	}
+
+	// Bare-metal deletion is asynchronous, and deleting a project that still holds
+	// servers is rejected. Wait for the fixture's servers to disappear before
+	// deleting the project, so the run leaves nothing behind. Servers created by
+	// individual tests are expected to be gone already via their own CheckDestroy;
+	// if one leaked, the project delete below logs the failure rather than hanging.
+	testAccWaitServersGone(ctx, client, serverIDs)
+
+	if _, err := client.Projects.Delete(ctx, testProjectID); err != nil {
+		fmt.Fprintf(os.Stderr, "shared fixture teardown: failed to delete project %s: %s\n", testProjectID, err)
+	}
+}
+
+// testAccWaitServersGone blocks until each server 404s or a deadline passes. It
+// never fails the run — teardown is best-effort cleanup — but a project delete
+// attempted before its servers are gone would be rejected, so it is worth waiting.
+func testAccWaitServersGone(ctx context.Context, client *latitudeshgosdk.Latitudesh, serverIDs []string) {
+	deadline := time.Now().Add(20 * time.Minute)
+	for _, id := range serverIDs {
+		for {
+			_, err := client.Servers.Get(ctx, id, nil)
+			if err != nil && (strings.Contains(err.Error(), "404") ||
+				strings.Contains(strings.ToLower(err.Error()), "not_found")) {
+				break
+			}
+			if time.Now().After(deadline) {
+				fmt.Fprintf(os.Stderr, "shared fixture teardown: server %s still present after 20m; "+
+					"project delete may fail\n", id)
+				break
+			}
+			time.Sleep(15 * time.Second)
 		}
 	}
 }

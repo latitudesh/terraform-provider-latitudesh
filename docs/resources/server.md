@@ -1,8 +1,8 @@
 ---
-page_title: "latitudesh_server Resource - terraform-provider-latitudesh"
+page_title: "latitudesh_server Resource - latitudesh"
 subcategory: ""
 description: |-
-  
+  Server resource
 ---
 
 # latitudesh_server (Resource)
@@ -129,7 +129,7 @@ With the above, only `user_data` changes (ID or content) cause a reinstall. Chan
 
 ### Required
 
-- `hostname` (String) The server hostname
+- `hostname` (String) The server hostname. Required — the API rejects a create without it.
   - Maximum length: 32 characters;
   - Allowed characters: letters (a–z, A–Z), digits (0–9), dots (.), and hyphens (-);
   - Must not begin or end with a dot or hyphen;
@@ -137,7 +137,6 @@ With the above, only `user_data` changes (ID or content) cause a reinstall. Chan
   - Updating hostname is applied in-place via PATCH by default. Set `allow_reinstall = true` on the resource to make hostname changes trigger a server reinstall instead.
 - `operating_system` (String) The server OS slug. Updating the OS requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error. Examples: `ubuntu_24_04_x64_lts`, `ubuntu_22_04_x64_lts`, `debian_12`, `rockylinux_8`, `windows_2022_std`. For a complete list of available operating systems and their slugs, see the [API reference](https://www.latitude.sh/docs/api-reference/get-plans-operating-system).
 - `plan` (String) The server plan slug. Examples: `m4-metal-medium`, `c3-large-x86`, `f4-metal-medium`, `rs4-metal-large`, `g4-rtx6kpro-large`. For a complete list of available plans and their slugs, see the [API reference](https://www.latitude.sh/docs/api-reference/get-plans).
-- `project` (String) The id or slug of the project.
 - `site` (String) The server site slug. Examples: `AMS`, `ASH`, `BGT`, `BUE`, `CHI`, `FRA`, `TYO4`. For a complete list of available regions and their slugs, see the [API reference](https://www.latitude.sh/docs/api-reference/get-regions).
 
 ### Optional
@@ -148,19 +147,24 @@ With the above, only `user_data` changes (ID or content) cause a reinstall. Chan
 - `disk_layout` (Attributes List) Custom disk layout made of one or more disk groups, used instead of `raid`. Mutually exclusive with `raid` and `ipxe`. The layout is refreshed from the server deploy config on read, so out-of-band changes are detected and imported servers populate it. Changing it requires a reinstall and only succeeds when `allow_reinstall = true`. The OS group's filesystem is always `ext4` (managed by the API) and is not configurable here. (see [below for nested schema](#nestedatt--disk_layout))
 - `ipxe` (String) The iPXE script to boot. Accepts either a URL pointing at the script, or the script encoded in base64. Required when `operating_system = "ipxe"`; the plan fails with an explicit error if it is missing. Updating ipxe requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.
 - `locked` (Boolean) Lock/unlock the server. A locked server cannot be deleted or updated.
+- `project` (String) The project (ID or slug) to deploy the server into. Optional here only if `project` is set on the provider block; one of the two is required.
 - `raid` (String) RAID mode for the server. Updating raid requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error. Mutually exclusive with `disk_layout`.
 - `ssh_keys` (List of String) List of server SSH key ids.
     Updating ssh_keys requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.
-- `tags` (List of String) List of server tags
-- `timeouts` (Block, Optional) Configurable timeouts for server operations. (see [nested schema below](#nestedblock--timeouts))
+- `tags` (List of String) List of server tag IDs
+- `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))
 - `user_data` (String) The id of user data to set on the server. Changes to the referenced user_data's content are also tracked automatically and trigger a reinstall when `allow_reinstall = true`. Updating user_data requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.
 
-### Nested Schema for `timeouts`
+### Read-Only
 
-Optional:
-
-- `create` (String) Timeout for server creation. Default: 30 minutes. Example: "45m", "1h"
-- `update` (String) Timeout for server update (reinstall operations). Default: 30 minutes. Example: "60m", "1h30m"
+- `created_at` (String) The timestamp for when the server was created
+- `id` (String) Server identifier
+- `interfaces` (Attributes List) List of network interfaces (see [below for nested schema](#nestedatt--interfaces))
+- `primary_ipv4` (String) Primary IPv4 address of the server
+- `primary_ipv6` (String) Primary IPv6 address of the server
+- `region` (String) The region where the server is deployed
+- `status` (String) Server power status
+- `user_data_content_hash` (String) SHA256 hex digest of the user_data `content` currently tracked for this server. Maintained automatically by the provider; a change in this value triggers a server reinstall when `allow_reinstall = true` and `user_data` is an allowed reinstall trigger.
 
 <a id="nestedatt--disk_layout"></a>
 ### Nested Schema for `disk_layout`
@@ -175,14 +179,24 @@ Optional:
 - `mount_point` (String) Mount point for this disk group, e.g. `/var/lib`. Required for the `storage` role.
 - `raid_level` (String) RAID level for this disk group: `raid-0` or `raid-1`. Requires `count >= 2`.
 
-### Read-Only
 
-- `created` (String) The timestamp for when the server was created
-- `id` (String) The ID of this resource.
-- `primary_ipv4` (String) The server IPv4 address
-- `primary_ipv6` (String) The server IPv6 address
-- `updated` (String) The timestamp for the last time the server was updated
-- `user_data_content_hash` (String) SHA256 hex digest of the user_data content currently tracked for this server. Maintained automatically by the provider; a change in this value triggers a reinstall when `allow_reinstall = true` and `user_data` is an allowed reinstall trigger.
+<a id="nestedatt--timeouts"></a>
+### Nested Schema for `timeouts`
+
+Optional:
+
+- `create` (String) Timeout for server creation. Default: 30 minutes. Example: "45m", "1h"
+- `update` (String) Timeout for server update (reinstall operations). Default: 30 minutes. Example: "60m", "1h30m"
+
+
+<a id="nestedatt--interfaces"></a>
+### Nested Schema for `interfaces`
+
+Read-Only:
+
+- `description` (String) Description
+- `mac_address` (String) MAC address
+- `name` (String) Interface name
 
 ## Import
 
@@ -218,4 +232,3 @@ terraform plan -generate-config-out=generated_server.tf
 This will generate the resource configuration for the imported server resource.
 
 > **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.
-

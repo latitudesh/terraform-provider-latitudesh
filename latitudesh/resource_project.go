@@ -37,6 +37,8 @@ type ProjectResourceModel struct {
 	ProvisioningType types.String `tfsdk:"provisioning_type"`
 	Slug             types.String `tfsdk:"slug"`
 	Tags             types.List   `tfsdk:"tags"`
+	CreatedAt        types.String `tfsdk:"created_at"`
+	UpdatedAt        types.String `tfsdk:"updated_at"`
 }
 
 func (r *ProjectResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -80,6 +82,14 @@ func (r *ProjectResource) Schema(ctx context.Context, req resource.SchemaRequest
 				MarkdownDescription: "Project tags",
 				ElementType:         types.StringType,
 				Optional:            true,
+			},
+			"created_at": schema.StringAttribute{
+				MarkdownDescription: "The timestamp for when the project was created",
+				Computed:            true,
+			},
+			"updated_at": schema.StringAttribute{
+				MarkdownDescription: "The timestamp for the last time the project was updated",
+				Computed:            true,
 			},
 		},
 	}
@@ -327,6 +337,10 @@ func (r *ProjectResource) readProject(ctx context.Context, data *ProjectResource
 
 	if project == nil {
 		data.ID = types.StringNull()
+		// Computed attributes must carry a known value even on this path, so state is
+		// never set with them left unresolved.
+		data.CreatedAt = types.StringNull()
+		data.UpdatedAt = types.StringNull()
 		return
 	}
 
@@ -349,6 +363,20 @@ func (r *ProjectResource) readProject(ctx context.Context, data *ProjectResource
 
 		if data.ProvisioningType.IsNull() {
 			data.ProvisioningType = types.StringValue("on_demand")
+		}
+
+		// Computed, so they must always resolve to a known value — null when the API
+		// omits them, never left unknown.
+		if project.Attributes.CreatedAt != nil {
+			data.CreatedAt = types.StringValue(*project.Attributes.CreatedAt)
+		} else {
+			data.CreatedAt = types.StringNull()
+		}
+
+		if project.Attributes.UpdatedAt != nil {
+			data.UpdatedAt = types.StringValue(*project.Attributes.UpdatedAt)
+		} else {
+			data.UpdatedAt = types.StringNull()
 		}
 
 		data.Tags = types.ListNull(types.StringType)

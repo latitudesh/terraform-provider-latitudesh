@@ -76,15 +76,17 @@ func (r *MemberResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "Last name of the team member",
 				Optional:            true,
 			},
+			// Required as of SDK v1.19.3, which types both as non-pointers on the invite
+			// payload. They were Optional+Computed before, so omitting either passed
+			// validation and only failed at the API. Breaking for any configuration
+			// that relied on that.
 			"email": schema.StringAttribute{
-				MarkdownDescription: "Email address of the team member",
-				Optional:            true,
-				Computed:            true,
+				MarkdownDescription: "Email address of the team member to invite. Required — the API rejects an invite without it.",
+				Required:            true,
 			},
 			"role": schema.StringAttribute{
-				MarkdownDescription: "Role of the team member (owner, administrator, collaborator, billing)",
-				Optional:            true,
-				Computed:            true,
+				MarkdownDescription: "Role of the team member. One of `owner`, `administrator`, `collaborator` or `billing`. Required — the API rejects an invite without it.",
+				Required:            true,
 			},
 			// Computed attributes
 			"mfa_enabled": schema.BoolAttribute{
@@ -337,16 +339,15 @@ func (r *MemberResource) readMember(ctx context.Context, data *MemberResourceMod
 			data.LastName = types.StringNull()
 		}
 
+		// email and role are Required, so they must never be nulled here: Terraform
+		// rejects a null Required attribute after apply. Keep the caller's value when
+		// the API does not return one.
 		if member.Attributes.Email != nil {
 			data.Email = types.StringValue(*member.Attributes.Email)
-		} else {
-			data.Email = types.StringNull()
 		}
 
 		if member.Attributes.Role != nil && member.Attributes.Role.Name != nil {
 			data.Role = types.StringValue(*member.Attributes.Role.Name)
-		} else {
-			data.Role = types.StringNull()
 		}
 
 		if member.Attributes.MfaEnabled != nil {
@@ -375,8 +376,6 @@ func (r *MemberResource) readMember(ctx context.Context, data *MemberResourceMod
 	} else {
 		data.FirstName = types.StringNull()
 		data.LastName = types.StringNull()
-		data.Email = types.StringNull()
-		data.Role = types.StringNull()
 		data.MfaEnabled = types.BoolNull()
 		data.CreatedAt = types.StringNull()
 		data.UpdatedAt = types.StringNull()

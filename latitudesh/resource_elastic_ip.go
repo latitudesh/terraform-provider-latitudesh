@@ -84,7 +84,7 @@ func (r *ElasticIPResource) Schema(ctx context.Context, req resource.SchemaReque
 				},
 			},
 			"project": schema.StringAttribute{
-				MarkdownDescription: "The project (ID or Slug) that owns the Elastic IP. Falls back to the provider-level `project` default.",
+				MarkdownDescription: "The project (ID or slug) that owns the Elastic IP. Optional here only if `project` is set on the provider block; one of the two is required. Changing it forces a new resource.",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
@@ -190,13 +190,21 @@ func (r *ElasticIPResource) Create(ctx context.Context, req resource.CreateReque
 	// by set-difference instead of relying on server/status fields being populated.
 	preCreateIDs := r.snapshotElasticIPIDs(ctx, effectiveProject)
 
+	// server_id became optional in SDK v1.19.3, because the new bgp mode uses
+	// server_ids instead and rejects server_id. Only send it when set, so an
+	// unassigned elastic IP no longer posts an empty string. The provider does not
+	// expose bgp mode yet, so the API default (routed) is left implicit.
+	attributes := components.CreateElasticIPAttributes{
+		ProjectID: effectiveProject,
+	}
+	if serverID != "" {
+		attributes.ServerID = &serverID
+	}
+
 	createRequest := components.CreateElasticIP{
 		Data: components.CreateElasticIPData{
-			Type: components.CreateElasticIPTypeElasticIps,
-			Attributes: components.CreateElasticIPAttributes{
-				ProjectID: effectiveProject,
-				ServerID:  serverID,
-			},
+			Type:       components.CreateElasticIPTypeElasticIps,
+			Attributes: &attributes,
 		},
 	}
 

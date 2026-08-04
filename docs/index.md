@@ -2,137 +2,129 @@
 page_title: "Provider: Latitude.sh"
 ---
 
-# Terraform Provider for Latitude.sh
+# Latitude.sh Provider
 
-The Latitude.sh provider allows you to interact with the resources supported by [Latitude.sh](https://www.latitude.sh). The provider must be configured with valid credentials before it can be used.
+The Latitude.sh provider is used to interact with the resources supported by [Latitude.sh](https://www.latitude.sh). The provider needs to be configured with the proper credentials before it can be used.
 
-Use the navigation menu on the left to explore the available resources. Please note that all resources require authentication.
+Use the navigation to the left to read about the available resources.
 
-> **Upgrading to v2:** If you are migrating from version 1.x to 2.x, please see the [Migration Guide](https://github.com/latitudesh/terraform-provider-latitudesh/blob/main/MIGRATION_GUIDE_v2.md).
+All resources require authentication. API keys can be obtained from your Latitude.sh dashboard.
 
-## Authentication
+## Example usage
 
-API keys can be created in the [Latitude.sh dashboard](https://www.latitude.sh/dashboard/api-keys).
+The files below form one working configuration: the server references a project,
+an SSH key, and the `plan`/`region` data sources declared alongside it.
 
-The provider supports authentication via the environment variable `LATITUDESH_AUTH_TOKEN`, or explicitly using the `auth_token` argument in the provider configuration.
+`main.tf` — provider and Terraform settings
 
-Export your API key:
+```terraform
+terraform {
+  required_providers {
+    latitudesh = {
+      source = "latitudesh/latitudesh"
+    }
+  }
+}
 
-```sh
-export LATITUDESH_AUTH_TOKEN="<your-api-key-here>"
-```
-
-Or configure your provider with `auth_token`:
-
-```hcl
+# Configure the provider
 provider "latitudesh" {
   auth_token = var.latitudesh_token
 }
 ```
 
-## Example Usage
+`variables.tf` — input variables
 
-#### `main.tf`
-
-```hcl
-terraform {
-  required_providers {
-    latitudesh = {
-      source  = "latitudesh/latitudesh"
-      version = ">= 2.5.0"
-    }
-  }
-}
-
-provider "latitudesh" {}
-```
-
-#### `variables.tf`
-
-```hcl
-variable "billing" {
-  # hourly and monthly for on-demand projects, yearly for reserved projects.
-  # Defaults to monthly, which is charged upfront based on the proration of
-  # the current billing cycle. Use hourly for dynamic workloads.
-  description = "The server billing type"
-  default     = "monthly"
-}
-
-variable "hostname" {
-  description = "The server hostname"
-  default     = "terraform-latitudesh"
-}
-
-variable "operating_system" {
-  description = "The server OS"
-  default     = "ubuntu_24_04_x64_lts"
+```terraform
+variable "latitudesh_token" {
+  description = "Latitude.sh API token"
 }
 
 variable "plan" {
-  description = "The server plan"
-  default     = "c2-small-x86"
+  description = "Latitude.sh server plan"
+  default     = "s3-large-x86"
 }
 
-data "latitudesh_region" "region" {
-  slug = "SAO2"
+variable "region" {
+  description = "Latitude.sh server region slug"
+  default     = "ASH"
+}
+
+variable "ssh_public_key" {
+  description = "Latitude.sh SSH public key"
 }
 ```
 
-#### `resources.tf`
+`latitudesh_project.tf` — the project the server is deployed into
 
-```hcl
-resource "latitudesh_project" "new_project" {
-  name              = "The project name must be unique"
-  description       = "The project description"
-  environment       = "Development" # Development, Production or Staging
+```terraform
+resource "latitudesh_project" "project" {
+  name             = "Project name"
+  description      = "Description of project"
+  environment      = "Development" # Development, Production or Staging
   provisioning_type = "on_demand"   # on_demand or reserved
 }
+```
 
+`latitudesh_ssh_key.tf` — the SSH key granted to the server
+
+```terraform
 resource "latitudesh_ssh_key" "ssh_key" {
-  name        = "Name of the SSH Key"
-  public_key  = "ssh-ed25519 AAA...REPLACE_ME... user@example.com"
+  # Note: project attribute removed in v2.0.0 (now team-scoped)
+  # Only kept in test schemas for backwards compatibility
+  name       = "John's Key"
+  public_key = var.ssh_public_key
 }
 ```
 
-```hcl
-# A project must be created before creating a server
+`latitudesh_plan.tf` and `latitudesh_region.tf` — look up a plan and region by slug
+
+```terraform
+data "latitudesh_plan" "plan" {
+  name = var.plan
+}
+```
+
+```terraform
+data "latitudesh_region" "region" {
+  slug = var.region
+}
+```
+
+`latitudesh_server.tf` — the server itself
+
+```terraform
 resource "latitudesh_server" "server" {
-  billing          = var.billing
-  hostname         = var.hostname
-  operating_system = var.operating_system
-  plan             = var.plan
-  project          = latitudesh_project.new_project.id  # You can use the project id or slug
+  hostname         = "terraform-latitudesh"
+  operating_system = "ubuntu_22_04_x64_lts"
+  plan             = data.latitudesh_plan.plan.slug
+  project          = latitudesh_project.project.id      # You can use the project id or slug
   site             = data.latitudesh_region.region.slug # You can use the site id or slug
   ssh_keys         = [latitudesh_ssh_key.ssh_key.id]
-}
-```
+  billing          = "hourly"                           # Required for on_demand projects: hourly, monthly
+  allow_reinstall  = true                               # Allow reinstall for OS/SSH/UserData/RAID/iPXE changes
 
-## Importing existing resources
+  # Custom disk layout (alternative to `raid`, mutually exclusive with `raid` and `ipxe`).
+  # One group per disk role; the OS filesystem is always ext4 (managed by the API).
+  # disk_layout = [
+  #   { count = 2, role = "os", raid_level = "raid-1" },
+  #   { count = 2, role = "storage", raid_level = "raid-0", mount_point = "/data" },
+  # ]
 
-You can import existing Latitude.sh resources into your Terraform state using the `import` block. This is useful when you already have a resource deployed and you want to manage using Terraform.
-
-Example of importing a server:
-
-```hcl
-terraform {
-  required_providers {
-    latitudesh = {
-      source  = "latitudesh/latitudesh"
-      version = ">= 2.5.0"
-    }
+  timeouts {
+    create = "45m"  # Timeout for server creation (default: 30m)
+    update = "60m"  # Timeout for server updates/reinstalls (default: 30m)
   }
 }
 
-import {
-  to = latitudesh_server.server
-  id = "sv_your_server_id_here"
+output "server_state" {
+  value = latitudesh_server.server
 }
 ```
 
-Then run:
+<!-- schema generated by tfplugindocs -->
+## Schema
 
-```sh
-terraform plan -generate-config-out=server.tf
-```
+### Optional
 
-This will create a `server.tf` file with the current configuration of your imported server, which you can then customize as needed.
+- `auth_token` (String, Sensitive) Latitude.sh API authentication token. Can also be set via the LATITUDESH_AUTH_TOKEN environment variable.
+- `project` (String) Default project (ID or slug) for resources that take a `project`. When set, those resources may omit their own `project`; when unset, each such resource must set one.
