@@ -124,8 +124,8 @@ func (r *SSHKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 		Data: operations.PostSSHKeySSHKeysData{
 			Type: operations.PostSSHKeySSHKeysTypeSSHKeys,
 			Attributes: &operations.PostSSHKeySSHKeysAttributes{
-				Name:      &name,
-				PublicKey: &publicKey,
+				Name:      name,
+				PublicKey: publicKey,
 			},
 		},
 	}

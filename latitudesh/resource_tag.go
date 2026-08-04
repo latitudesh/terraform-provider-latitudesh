@@ -120,7 +120,7 @@ func (r *TagResource) Create(ctx context.Context, req resource.CreateRequest, re
 	}
 
 	attrs := &operations.CreateTagTagsAttributes{
-		Name: &name,
+		Name: name,
 	}
 
 	if !data.Description.IsNull() {

@@ -216,6 +216,11 @@ var testSharedFixture struct {
 	projectID string
 	site      string
 	serverIDs []string
+
+	// hostnames records what was requested for each server in serverIDs, by index,
+	// so a test can compare it against what the API reports back without
+	// provisioning anything of its own.
+	hostnames []string
 }
 
 // testAccSharedServers returns the shared project, its site, and n server IDs,
@@ -244,7 +249,11 @@ func testAccSharedServers(t *testing.T, n int) (projectID, site string, serverID
 
 	var created []string
 	for len(f.serverIDs) < n {
-		hostname := fmt.Sprintf("tf-acc-shared-%d.latitude.sh", len(f.serverIDs)+1)
+		// Deliberately mixed case: the hostname attribute is Required and not
+		// Computed, so the provider would produce an inconsistent result if the API
+		// normalized case. Every test that borrows this fixture exercises that
+		// round-trip for free, and TestAccServer_HostnameCase asserts it explicitly.
+		hostname := fmt.Sprintf("tf-Acc-Shared-%d.latitude.sh", len(f.serverIDs)+1)
 
 		sites := testServerSiteFallbackOrder
 		if f.site != "" {
@@ -264,11 +273,11 @@ func testAccSharedServers(t *testing.T, n int) (projectID, site string, serverID
 				Data: &operations.CreateServerServersData{
 					Type: operations.CreateServerServersTypeServers,
 					Attributes: &operations.CreateServerServersAttributes{
-						Project:         &f.projectID,
-						Plan:            &plan,
-						Site:            &siteAttr,
-						OperatingSystem: &osAttr,
-						Hostname:        &hostname,
+						Project:         f.projectID,
+						Plan:            plan,
+						Site:            siteAttr,
+						OperatingSystem: osAttr,
+						Hostname:        hostname,
 						Billing:         &billing,
 					},
 				},
@@ -293,6 +302,7 @@ func testAccSharedServers(t *testing.T, n int) (projectID, site string, serverID
 		}
 
 		f.serverIDs = append(f.serverIDs, serverID)
+		f.hostnames = append(f.hostnames, hostname)
 		created = append(created, serverID)
 	}
 
@@ -301,6 +311,19 @@ func testAccSharedServers(t *testing.T, n int) (projectID, site string, serverID
 	}
 
 	return f.projectID, f.site, append([]string(nil), f.serverIDs[:n]...)
+}
+
+// testAccSharedServerHostname returns the hostname requested for the shared server
+// at index i, so a test can compare it against what the API reports.
+func testAccSharedServerHostname(i int) string {
+	f := &testSharedFixture
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if i < 0 || i >= len(f.hostnames) {
+		return ""
+	}
+	return f.hostnames[i]
 }
 
 // testAccWaitServerReady polls the server until it reports status "on".

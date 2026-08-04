@@ -190,13 +190,21 @@ func (r *ElasticIPResource) Create(ctx context.Context, req resource.CreateReque
 	// by set-difference instead of relying on server/status fields being populated.
 	preCreateIDs := r.snapshotElasticIPIDs(ctx, effectiveProject)
 
+	// server_id became optional in SDK v1.19.3, because the new bgp mode uses
+	// server_ids instead and rejects server_id. Only send it when set, so an
+	// unassigned elastic IP no longer posts an empty string. The provider does not
+	// expose bgp mode yet, so the API default (routed) is left implicit.
+	attributes := components.CreateElasticIPAttributes{
+		ProjectID: effectiveProject,
+	}
+	if serverID != "" {
+		attributes.ServerID = &serverID
+	}
+
 	createRequest := components.CreateElasticIP{
 		Data: components.CreateElasticIPData{
-			Type: components.CreateElasticIPTypeElasticIps,
-			Attributes: components.CreateElasticIPAttributes{
-				ProjectID: effectiveProject,
-				ServerID:  serverID,
-			},
+			Type:       components.CreateElasticIPTypeElasticIps,
+			Attributes: &attributes,
 		},
 	}
 

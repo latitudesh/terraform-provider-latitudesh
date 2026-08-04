@@ -207,9 +207,9 @@ func (r *FirewallResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	createRequest := operations.CreateFirewallFirewallsRequestBody{
-		Data: operations.CreateFirewallData{
-			Type: operations.CreateFirewallTypeFirewalls,
-			Attributes: &operations.CreateFirewallAttributes{
+		Data: operations.CreateFirewallFirewallsData{
+			Type: operations.CreateFirewallFirewallsTypeFirewalls,
+			Attributes: &operations.CreateFirewallFirewallsAttributes{
 				Name:    name,
 				Project: project,
 				Rules:   rules,
