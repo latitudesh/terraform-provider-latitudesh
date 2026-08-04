@@ -90,6 +90,15 @@ jobs:
         name: Run SDK Coverage Tests
         run: go test ./internal/sdkcoverage -v
       -
+        # tfplugindocs exports the provider schema through a real Terraform binary.
+        # Without one on PATH it downloads its own, and that download currently fails
+        # signature verification (HashiCorp's release GPG key expired). Installing
+        # Terraform here makes tfplugindocs use it instead of downloading.
+        name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      -
         # docs/ is generated from templates/ plus the provider schema, so a hand-edit
         # to docs/ is silently lost on the next `go generate`. Nothing checked this
         # before, which is how the templates and the published docs drifted far enough
