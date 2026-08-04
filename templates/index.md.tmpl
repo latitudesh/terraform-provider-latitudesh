@@ -12,14 +12,31 @@ All resources require authentication. API keys can be obtained from your Latitud
 
 ## Example usage
 
-`main.tf` example
+The files below form one working configuration: the server references a project,
+an SSH key, and the `plan`/`region` data sources declared alongside it.
+
+`main.tf` — provider and Terraform settings
 
 {{ tffile "examples/main.tf" }}
 
-`variables.tf` example
+`variables.tf` — input variables
 
 {{ tffile "examples/variables.tf" }}
 
-`latitudesh_server.tf` example
+`latitudesh_project.tf` — the project the server is deployed into
+
+{{ tffile "examples/latitudesh_project.tf" }}
+
+`latitudesh_ssh_key.tf` — the SSH key granted to the server
+
+{{ tffile "examples/latitudesh_ssh_key.tf" }}
+
+`latitudesh_plan.tf` and `latitudesh_region.tf` — look up a plan and region by slug
+
+{{ tffile "examples/latitudesh_plan.tf" }}
+
+{{ tffile "examples/latitudesh_region.tf" }}
+
+`latitudesh_server.tf` — the server itself
 
 {{ tffile "examples/latitudesh_server.tf" }}

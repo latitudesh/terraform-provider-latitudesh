@@ -1,8 +1,7 @@
 terraform {
   required_providers {
     latitudesh = {
-      source  = "latitudesh/latitudesh"
-      version = "2.1.3"
+      source = "latitudesh/latitudesh"
     }
   }
 }

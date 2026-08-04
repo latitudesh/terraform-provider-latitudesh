@@ -89,6 +89,22 @@ jobs:
         # in ./latitudesh. Without its own step the SDK coverage suite never runs.
         name: Run SDK Coverage Tests
         run: go test ./internal/sdkcoverage -v
+      -
+        # docs/ is generated from templates/ plus the provider schema, so a hand-edit
+        # to docs/ is silently lost on the next `go generate`. Nothing checked this
+        # before, which is how the templates and the published docs drifted far enough
+        # apart that the docs documented attributes the schema does not have. Editing
+        # docs/ directly is the mistake this catches; change the template or the
+        # schema description instead.
+        name: Check generated docs are up to date
+        run: |
+          go generate ./...
+          if ! git diff --quiet -- docs/; then
+            echo "::error::docs/ is out of sync with templates/ and the provider schema."
+            echo "Run 'go generate ./...' and commit the result."
+            git diff --stat -- docs/
+            exit 1
+          fi
 
   e2e:
     runs-on: ubuntu-latest
