@@ -167,7 +167,15 @@ jobs:
         # anyone who can dispatch run arbitrary commands — in the one step that has
         # LATITUDESH_AUTH_TOKEN in its environment. Quoted "$ACCEPTANCE_TESTS" is
         # only ever an argument.
-        run: go test ./latitudesh -v -timeout 60m -run "$ACCEPTANCE_TESTS"
+        #
+        # The timeout has to exceed the real duration of the whole suite, because
+        # ACCEPTANCE_TESTS defaults to every TestAcc*. Provisioning bare metal is
+        # measured in tens of minutes per dedicated server, and go test enforces
+        # -timeout by killing the binary: Terraform's destroy never runs, so a
+        # timeout does not just fail the run, it leaks billable servers into the
+        # shared account. 60m did not cover the suite; the local guidance has been
+        # 180m since the suite became self-contained.
+        run: go test ./latitudesh -v -timeout 180m -run "$ACCEPTANCE_TESTS"
         env:
           ACCEPTANCE_TESTS: ${{ github.event.inputs.acceptance_tests || env.ACCEPTANCE_TESTS }}
           TF_ACC: '1'
