@@ -15,15 +15,15 @@ on:
   workflow_dispatch:
     inputs:
       acceptance_tests:
-        description: "Test name regex. Defaults to the curated list; pass TestAcc to sweep everything (slower, provisions more real infrastructure)."
+        description: "Test name regex. Defaults to every acceptance test; narrow it to run a subset."
         required: false
         default: ""
 
 env:
-  # The acceptance tests that run on pull requests. This is an allowlist: a test
-  # whose prefix is missing here never runs in CI, so a newly added resource needs
-  # its prefix added too.
-  CURATED_ACCEPTANCE_TESTS: "TestAccEnvVarAuthTokenSet|TestAccServerUserDataValidation|TestAccServer|TestAccTag|TestAccSSHKey|TestAccDataSourceSSHKey|TestAccDataSourcePlan|TestAccDataSourceTag|TestAccRegion|TestAccVirtualNetwork|TestAccVirtualMachine|TestAccFirewall|TestAccElasticIP|TestAccProject|TestAccUserData|TestAccLatitudeFirewall|TestAccVlanAssignment|TestAccRole"
+  # Every acceptance test runs. Using the prefix rather than a hand-maintained
+  # allowlist means a newly added TestAcc* is covered automatically instead of
+  # silently skipped until someone remembers to list it.
+  ACCEPTANCE_TESTS: "TestAcc"
 
 jobs:
   # Detect whether the PR touches code that can change provider behavior. Tooling
@@ -160,6 +160,6 @@ jobs:
         # only ever an argument.
         run: go test ./latitudesh -v -timeout 60m -run "$ACCEPTANCE_TESTS"
         env:
-          ACCEPTANCE_TESTS: ${{ github.event.inputs.acceptance_tests || env.CURATED_ACCEPTANCE_TESTS }}
+          ACCEPTANCE_TESTS: ${{ github.event.inputs.acceptance_tests || env.ACCEPTANCE_TESTS }}
           TF_ACC: '1'
           LATITUDESH_AUTH_TOKEN: ${{ secrets.LATITUDESH_AUTH_TOKEN }}
