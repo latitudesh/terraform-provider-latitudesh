@@ -27,8 +27,18 @@ Plan data source - retrieve server plan information
 - `cpu_cores` (Number) Number of CPU cores
 - `cpu_count` (Number) Number of CPUs
 - `cpu_type` (String) CPU type
+- `drives` (Attributes List) Disk groups included in the plan. Sum each group's `count` to derive the total disk count for `latitudesh_server.disk_layout`. (see [below for nested schema](#nestedatt--drives))
 - `features` (List of String) List of plan features
 - `gpu_count` (Number) Number of GPUs if available
 - `gpu_type` (String) GPU type if available
 - `has_gpu` (Boolean) Whether the plan includes GPU
 - `memory` (Number) Total memory
+
+<a id="nestedatt--drives"></a>
+### Nested Schema for `drives`
+
+Read-Only:
+
+- `count` (Number) Number of disks in this group
+- `size` (String) Size of each disk in this group, as free-form text returned by the API (e.g. "1.9 TB", "480GB")
+- `type` (String) Disk type for this group (e.g. SSD, HDD, NVME)
