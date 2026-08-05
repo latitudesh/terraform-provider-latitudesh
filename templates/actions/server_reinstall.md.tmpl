@@ -1,0 +1,33 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Reinstalls a [Latitude.sh](https://latitude.sh/) server: the disks are erased and the operating system is redeployed.
+
+The `latitudesh_server` resource already reinstalls on its own when a reinstall-only attribute changes and `allow_reinstall = true`. This action covers what that path cannot: reinstalling **without changing desired state**. Use it to recover a server stuck in `failed_deployment`, to re-image on demand, or to wipe a machine before handing it to another workload.
+
+~> **Requires Terraform v1.14 or later.** Actions are not available on earlier CLI versions.
+
+## Example usage
+
+{{ tffile .ExampleFile }}
+
+Invoke it directly, outside of any resource change:
+
+```sh
+terraform apply -invoke=action.latitudesh_server_reinstall.rebuild
+```
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Behavior
+
+- **Every attribute other than `server_id` is optional.** Omit one and the reinstall keeps the value the server was last deployed with, which is what makes a bare `server_id` config a plain rebuild.
+- **The action does not update Terraform state.** Setting an attribute to something the target `latitudesh_server` resource does not declare leaves that resource drifted, and the next plan shows a diff — which, on a resource with `allow_reinstall = true`, would reinstall the server again. Keep the resource configuration and the action configuration in agreement.
+- **`wait_for_ready` defaults to `true`**, so the action blocks until the server reports `on` and fails when it lands in `failed_deployment` or `failed_disk_erasing`. Status changes are streamed as progress events while it waits.
+- **Reinstalling erases the disks.** There is no undo, and the action asks for no confirmation beyond the plan Terraform shows before applying.

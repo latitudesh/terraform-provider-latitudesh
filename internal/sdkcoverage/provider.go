@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/hashicorp/terraform-plugin-framework/action"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -13,9 +14,9 @@ import (
 // each registered constructor for its own Metadata.
 //
 // Reading the registration at runtime rather than grepping the source keeps the
-// reconciliation honest: Resources()/DataSources() is what Terraform actually
-// serves, so a resource that exists as a file but was never registered does not
-// count as shipped, and a rename cannot slip past.
+// reconciliation honest: Resources()/DataSources()/Actions() is what Terraform
+// actually serves, so a resource that exists as a file but was never registered
+// does not count as shipped, and a rename cannot slip past.
 //
 // The parameter is the framework's provider.Provider interface, so this package
 // still never imports the provider implementation — the gate test lives in that
@@ -44,6 +45,16 @@ func ShippedTypeNames(ctx context.Context, p provider.Provider, providerTypeName
 		var resp datasource.MetadataResponse
 		newDataSource().Metadata(ctx, datasource.MetadataRequest{ProviderTypeName: providerTypeName}, &resp)
 		add(resp.TypeName)
+	}
+
+	// Actions are optional on the provider interface, so a provider that
+	// registers none is not a failure to introspect.
+	if withActions, ok := p.(provider.ProviderWithActions); ok {
+		for _, newAction := range withActions.Actions(ctx) {
+			var resp action.MetadataResponse
+			newAction().Metadata(ctx, action.MetadataRequest{ProviderTypeName: providerTypeName}, &resp)
+			add(resp.TypeName)
+		}
 	}
 
 	sort.Strings(names)

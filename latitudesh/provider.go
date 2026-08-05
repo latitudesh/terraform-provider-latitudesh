@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework/action"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
@@ -20,6 +21,7 @@ import (
 
 // Ensure latitudeshProvider satisfies various provider interfaces
 var _ provider.Provider = &latitudeshProvider{}
+var _ provider.ProviderWithActions = &latitudeshProvider{}
 
 // latitudeshProvider defines the provider implementation.
 type latitudeshProvider struct {
@@ -158,8 +160,12 @@ func (p *latitudeshProvider) Configure(ctx context.Context, req provider.Configu
 		UserDataHashCache: &sync.Map{},
 	}
 
+	// Each of these is a separate field on purpose: the framework hands resources,
+	// data sources and actions their own copy, and leaving one unset means that
+	// kind gets nil ProviderData and no client at all.
 	resp.ResourceData = providerContext
 	resp.DataSourceData = providerContext
+	resp.ActionData = providerContext
 }
 
 func (p *latitudeshProvider) Resources(ctx context.Context) []func() resource.Resource {
@@ -186,5 +192,13 @@ func (p *latitudeshProvider) DataSources(ctx context.Context) []func() datasourc
 		NewRoleDataSource,
 		NewSSHKeyDataSource,
 		NewTagDataSource,
+	}
+}
+
+// Actions registers the provider's actions. Actions require Terraform 1.14 or
+// later; older CLIs simply never ask for them.
+func (p *latitudeshProvider) Actions(ctx context.Context) []func() action.Action {
+	return []func() action.Action{
+		NewServerReinstallAction,
 	}
 }
