@@ -168,14 +168,10 @@ jobs:
         # LATITUDESH_AUTH_TOKEN in its environment. Quoted "$ACCEPTANCE_TESTS" is
         # only ever an argument.
         #
-        # The timeout is generous on purpose, and not because the suite is slow:
-        # measured end to end it takes about 13 minutes (748s of test time on run
-        # 30939420173, all 57 acceptance tests against the live API). The headroom
-        # is there because of how go test enforces -timeout — it kills the test
-        # binary, so Terraform's destroy steps and the shared-fixture teardown never
-        # run. Hitting the cap therefore leaks billable servers into the shared
-        # account instead of merely failing the run, which makes a cap anywhere near
-        # the real duration a bad trade.
+        # The timeout is deliberately far above how long the suite takes: go test
+        # enforces -timeout by killing the binary, so destroy steps and the shared
+        # fixture teardown never run and the cap leaks billable servers instead of
+        # just failing the run.
         run: go test ./latitudesh -v -timeout 180m -run "$ACCEPTANCE_TESTS"
         env:
           ACCEPTANCE_TESTS: ${{ github.event.inputs.acceptance_tests || env.ACCEPTANCE_TESTS }}

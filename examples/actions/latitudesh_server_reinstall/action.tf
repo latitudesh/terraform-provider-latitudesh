@@ -20,8 +20,14 @@ action "latitudesh_server_reinstall" "rebuild" {
 }
 
 # To rebuild during a normal apply, trigger the action from something that tracks
-# *when* to rebuild rather than from the server itself. Bumping the variable
+# *when* to rebuild rather than from the server itself. Bumping this variable
 # reinstalls the machine; the server's own configuration stays put.
+variable "reimage_generation" {
+  description = "Bump to reinstall latitudesh_server.web on the next apply."
+  type        = number
+  default     = 1
+}
+
 resource "terraform_data" "reimage_generation" {
   input = var.reimage_generation
 
