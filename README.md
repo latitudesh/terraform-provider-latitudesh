@@ -18,7 +18,7 @@ Check the [latest releases](https://github.com/latitudesh/terraform-provider-lat
 
 To get started, make sure you have:
 
-- [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.6
+- [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.6, or >= 1.14 to use [actions](docs/actions/server_reinstall.md)
 - A [Latitude.sh API key](https://www.latitude.sh/dashboard/api-keys)
 
 Then add the provider to your `terraform` block:

@@ -107,12 +107,14 @@ groups:
     notes: Ships as both a resource and a data source under the same type name.
 
   Servers:
-    implemented_by: [latitudesh_server]
+    implemented_by: [latitudesh_server, latitudesh_server_reinstall]
     notes: >-
-      Lock/Unlock/Reinstall/GetDeployConfig are folded into the resource's create
-      and update paths rather than exposed separately. The remaining actions
-      (RunAction, rescue mode, IPMI, out-of-band, scheduled deletion) are
-      deliberately not exposed.
+      Lock/Unlock/GetDeployConfig are folded into the resource's create and update
+      paths rather than exposed separately. Reinstall is folded in too (an update
+      that changes a reinstall-only field) and additionally exposed as the
+      latitudesh_server_reinstall action, for reinstalling without changing
+      desired state. The remaining actions (RunAction, rescue mode, IPMI,
+      out-of-band, scheduled deletion) are deliberately not exposed.
 
   Tags:
     implemented_by: [latitudesh_tag]

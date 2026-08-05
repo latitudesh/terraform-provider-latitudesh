@@ -11,6 +11,12 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 )
 
+// serverPollInterval is how long waitForServerStatus sleeps between status polls.
+// It is a variable rather than a constant only so tests can drive a scripted
+// status sequence in milliseconds instead of minutes; nothing in the provider
+// changes it at runtime.
+var serverPollInterval = 30 * time.Second
+
 // waitForServerStatus polls a server until it reaches a terminal state, appending
 // a diagnostic when it fails or the wait runs out.
 //
@@ -33,7 +39,7 @@ func waitForServerStatus(
 ) {
 	// Configs
 	timeout := configuredTimeout
-	pollInterval := 30 * time.Second
+	pollInterval := serverPollInterval
 	maxRetries := 5
 
 	// Check if we're in test mode with short deadline
