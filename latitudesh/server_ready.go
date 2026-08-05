@@ -42,15 +42,16 @@ func waitForServerStatus(
 	pollInterval := serverPollInterval
 	maxRetries := 5
 
-	// Check if we're in test mode with short deadline
+	// Never give up early on a short context: this function returning without a
+	// diagnostic means "the operation finished successfully", and a server that was
+	// never polled has not finished anything. A context that expires first surfaces
+	// as a cancellation from the poll loop below, which is the honest outcome.
+	//
+	// This previously short-circuited when the context had under two minutes left,
+	// so that unit tests would not sit through the poll interval. Tests set
+	// serverPollInterval instead, which does not require the production path to lie.
 	if deadline, ok := ctx.Deadline(); ok {
 		remaining := time.Until(deadline)
-
-		// If context deadline is very short (< 2 minutes), we're likely in a unit test
-		// Skip wait to prevent test timeouts
-		if remaining < 2*time.Minute {
-			return
-		}
 
 		// Adjust timeout to not exceed context deadline
 		if remaining < timeout {

@@ -50,8 +50,9 @@ func TestAccServerReinstallAction_Live(t *testing.T) {
 	serverPollInterval = 5 * time.Second
 	t.Cleanup(func() { serverPollInterval = previousInterval })
 
+	// No PreCheck: the token is already checked above, because it has to be
+	// verified before testAccSharedServers provisions anything.
 	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { testAccTokenCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
 		Steps: []resource.TestStep{
 			{
