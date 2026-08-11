@@ -79,14 +79,20 @@ jobs:
         name: Build
         run: go build -v ./...
       -
+        # No -run filter on purpose. It used to be -run "TestProvider|TestFrameworkProvider",
+        # which silently excluded every unit test whose name did not start with those two
+        # prefixes, so new unit tests passed locally and never ran here. Acceptance tests
+        # in this package all guard on TF_ACC and skip when it is unset, so running the
+        # whole package needs no credentials.
         name: Run Unit Tests
-        run: go test ./latitudesh -v -timeout 10m -run "TestProvider|TestFrameworkProvider"
+        run: go test ./latitudesh -v -timeout 10m
       -
         name: Run Plan Modifier Tests
         run: go test ./internal/planmodifiers -v
       -
-        # Neither step above covers this package: the -run filter only matches tests
-        # in ./latitudesh. Without its own step the SDK coverage suite never runs.
+        # Neither step above covers this package: they name ./latitudesh and
+        # ./internal/planmodifiers explicitly. Without its own step the SDK coverage
+        # suite never runs.
         name: Run SDK Coverage Tests
         run: go test ./internal/sdkcoverage -v
       -
