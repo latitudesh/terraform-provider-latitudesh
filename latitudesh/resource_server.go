@@ -147,13 +147,18 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					"  - Allowed characters: letters (a–z, A–Z), digits (0–9), dots (.), and hyphens (-);\n" +
 					"  - Must not begin or end with a dot or hyphen;\n" +
 					"  - Underscores (_) are not allowed;\n" +
+					"  - These rules are checked only for hostnames this plan creates or changes. A server imported with a hostname that predates them keeps planning cleanly until you rename it;\n" +
 					"  - Updating hostname is applied in-place via PATCH by default. Set `allow_reinstall = true` on the resource to make hostname changes trigger a server reinstall instead.",
 				// Required as of SDK v1.19.3, which types hostname as a non-pointer on
 				// the create payload. It was Optional+Computed before, so omitting it
 				// passed validation and only failed at the API. Note this is breaking:
 				// a configuration that never set hostname now fails at plan time.
-				Required:   true,
-				Validators: validators.Hostname(),
+				//
+				// The shape rules are enforced in ModifyPlan (validateHostnameOnChange)
+				// rather than here: schema validators run in ValidateResourceConfig,
+				// which has no state, so they cannot tell an imported legacy hostname
+				// apart from one the practitioner just typed.
+				Required: true,
 			},
 			"ssh_keys": schema.ListAttribute{
 				MarkdownDescription: "List of server SSH key ids.\n" +
@@ -210,7 +215,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"ipxe": schema.StringAttribute{
-				MarkdownDescription: "The iPXE script to boot. Accepts either a URL pointing at the script, or the script encoded in base64. Required when `operating_system = \"ipxe\"`; the plan fails with an explicit error if it is missing. Updating ipxe requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.",
+				MarkdownDescription: "The iPXE script to boot. Accepts either a URL pointing at the script, or the script encoded in base64. Required when `operating_system = \"ipxe\"`; the plan fails with an explicit error if it is missing. That check applies only when this plan sets or changes `operating_system` or `ipxe`, so a server imported with `operating_system = \"ipxe\"` and no script of its own — one provisioned through Tinkerbell, for example — keeps planning cleanly. Updating ipxe requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.",
 				Optional:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
@@ -346,12 +351,29 @@ func (r *ServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 		return
 	}
 
+	// Both plan-time guards below judge values, so they run only against what
+	// this plan creates or changes. Applied to unchanged state they would
+	// re-validate data the API already holds and accepted, which is unfixable
+	// from the configuration and blocks `terraform plan` for imported servers.
+	isCreate := req.State.Raw.IsNull()
+
 	// Plan-time guard: operating_system = "ipxe" requires the ipxe attribute.
 	// Catches misconfiguration before any API call (API otherwise returns 422).
-	if err := requiresIpxeAttribute(plan.OperatingSystem, plan.Ipxe); err != nil {
+	if err := requiresIpxeAttributeOnChange(isCreate, state.OperatingSystem, state.Ipxe, plan.OperatingSystem, plan.Ipxe); err != nil {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("ipxe"),
 			"Missing iPXE script",
+			err.Error(),
+		)
+		return
+	}
+
+	// Plan-time guard: hostname shape. Lives here rather than in the schema
+	// because schema validators only ever see the configuration.
+	if err := validateHostnameOnChange(isCreate, state.Hostname, plan.Hostname); err != nil {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("hostname"),
+			"Invalid hostname",
 			err.Error(),
 		)
 		return
@@ -936,6 +958,45 @@ func requiresIpxeAttribute(operatingSystem, ipxe types.String) error {
 		return fmt.Errorf("operating_system = \"ipxe\" requires the ipxe attribute to be set (URL or base64-encoded script)")
 	}
 	return nil
+}
+
+// requiresIpxeAttributeOnChange applies requiresIpxeAttribute only to values
+// this plan creates or changes.
+//
+// Servers provisioned outside Terraform — Tinkerbell ones, for example — report
+// operating_system = "ipxe" with no script of their own, and the API is content
+// with that. Re-asserting the rule against unchanged state made `terraform plan`
+// fail on every such imported server with no config that could fix it, since the
+// missing value lives in the API rather than in the configuration.
+//
+// A reinstall triggered by some other field on a script-less ipxe server still
+// reaches the API's own 422; the provider does not try to pre-empt that, because
+// it cannot tell that case apart from a deploy the API would have accepted.
+func requiresIpxeAttributeOnChange(isCreate bool, stateOS, stateIpxe, planOS, planIpxe types.String) error {
+	if !isCreate && stateOS.Equal(planOS) && stateIpxe.Equal(planIpxe) {
+		return nil
+	}
+	return requiresIpxeAttribute(planOS, planIpxe)
+}
+
+// validateHostnameOnChange runs the hostname rules only when this plan creates
+// the server or changes its hostname.
+//
+// The rules describe what the provider will send to the API, not what the API
+// is holding: accounts contain servers whose hostnames predate them (spaces,
+// ampersands, more than 32 characters). Because `hostname` is Required, such a
+// value has to be written into the configuration to import the server at all,
+// so validating it on an unchanged value left renaming production as the only
+// way to get a clean plan. These rules therefore cannot live in the schema —
+// schema validators run in ValidateResourceConfig, which never sees state.
+func validateHostnameOnChange(isCreate bool, stateHostname, planHostname types.String) error {
+	if planHostname.IsNull() || planHostname.IsUnknown() {
+		return nil
+	}
+	if !isCreate && stateHostname.Equal(planHostname) {
+		return nil
+	}
+	return validators.ValidateHostname(planHostname.ValueString())
 }
 
 // inPlaceFieldsChanged reports whether billing, tags or project differ between
