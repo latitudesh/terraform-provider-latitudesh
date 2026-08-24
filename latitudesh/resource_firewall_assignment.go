@@ -107,7 +107,7 @@ func (r *FirewallAssignmentResource) Create(ctx context.Context, req resource.Cr
 		Data: operations.CreateFirewallAssignmentFirewallsAssignmentsData{
 			Type: operations.CreateFirewallAssignmentFirewallsAssignmentsTypeFirewallAssignments,
 			Attributes: &operations.CreateFirewallAssignmentFirewallsAssignmentsAttributes{
-				ServerID: serverID,
+				ServerID: &serverID,
 			},
 		},
 	}
@@ -370,7 +370,7 @@ func (r *FirewallAssignmentResource) populateAssignmentData(data *FirewallAssign
 func (r *FirewallAssignmentResource) findFirewallForAssignment(ctx context.Context, data *FirewallAssignmentResourceModel, diags *diag.Diagnostics) {
 	assignmentID := data.ID.ValueString()
 
-	response, err := r.client.Firewalls.List(ctx, nil, nil, nil)
+	response, err := r.client.Firewalls.List(ctx, nil, nil, nil, nil)
 	if err != nil {
 		diags.AddError("Client Error", "Unable to list firewalls to find assignment, got error: "+err.Error())
 		return
