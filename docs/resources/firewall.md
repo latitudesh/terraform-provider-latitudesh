@@ -58,6 +58,7 @@ resource "latitudesh_firewall" "web_firewall" {
 
 - `project` (String) The project (ID or slug) that owns the firewall. Optional here only if `project` is set on the provider block; one of the two is required. Changing it forces a new resource.
 - `rules` (Block List) Firewall rules (see [below for nested schema](#nestedblock--rules))
+- `tags` (List of String) List of tag IDs to attach to the firewall. Updates replace the full set. Note: the API cannot represent an empty tag set — removing every tag from the configuration leaves the existing tags in place instead of clearing them; keep at least one tag, or detach them out-of-band. Populated on import.
 
 ### Read-Only
 

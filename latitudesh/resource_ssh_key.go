@@ -295,7 +295,7 @@ func (r *SSHKeyResource) updateSSHKey(ctx context.Context, data *SSHKeyResourceM
 
 	updateRequest := operations.PutSSHKeySSHKeysRequestBody{
 		Data: operations.PutSSHKeySSHKeysData{
-			ID:   &keyID,
+			ID:   keyID,
 			Type: operations.PutSSHKeySSHKeysTypeSSHKeys,
 			Attributes: &operations.PutSSHKeySSHKeysAttributes{
 				Name: &name,

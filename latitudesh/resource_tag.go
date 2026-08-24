@@ -129,8 +129,9 @@ func (r *TagResource) Create(ctx context.Context, req resource.CreateRequest, re
 	}
 
 	if !data.Color.IsNull() {
-		color := normalizeHexColor(data.Color.ValueString())
-		attrs.Color = &color
+		// CreateTagTagsAttributes.Color is a required (non-pointer) field in the
+		// SDK; the empty-color guard above already ensures it is set here.
+		attrs.Color = normalizeHexColor(data.Color.ValueString())
 	}
 
 	createTagType := operations.CreateTagTagsTypeTags

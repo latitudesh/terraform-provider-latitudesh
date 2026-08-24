@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
+	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
 
@@ -111,7 +112,7 @@ func (d *RegionDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	} else {
 		// Look up by slug - paginate through all regions and find matching slug
 		slug := data.Slug.ValueString()
-		result, err := d.client.Regions.Get(ctx, nil, nil, nil)
+		result, err := d.client.Regions.Get(ctx, operations.GetRegionsRequest{})
 		if err != nil {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to search for region with slug %s, got error: %s", slug, err.Error()))
 			return

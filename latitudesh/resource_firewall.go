@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -47,6 +48,7 @@ type FirewallResourceModel struct {
 	ID      types.String        `tfsdk:"id"`
 	Name    types.String        `tfsdk:"name"`
 	Project types.String        `tfsdk:"project"`
+	Tags    types.List          `tfsdk:"tags"`
 	Rules   []FirewallRuleModel `tfsdk:"rules"`
 }
 
@@ -77,6 +79,18 @@ func (r *FirewallResource) Schema(ctx context.Context, req resource.SchemaReques
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"tags": schema.ListAttribute{
+				MarkdownDescription: "List of tag IDs to attach to the firewall. Updates replace the full set. " +
+					"Note: the API cannot represent an empty tag set — removing every tag from the " +
+					"configuration leaves the existing tags in place instead of clearing them; keep at " +
+					"least one tag, or detach them out-of-band. Populated on import.",
+				ElementType: types.StringType,
+				Optional:    true,
+				Computed:    true,
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
 				},
 			},
 		},
@@ -212,9 +226,14 @@ func (r *FirewallResource) Create(ctx context.Context, req resource.CreateReques
 			Attributes: &operations.CreateFirewallFirewallsAttributes{
 				Name:    name,
 				Project: project,
-				Rules:   rules,
+				// nil when no tags are configured; omitempty drops it from the payload.
+				Tags:  firewallTagIDs(ctx, data.Tags, &resp.Diagnostics),
+				Rules: rules,
 			},
 		},
+	}
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	result, err := r.client.Firewalls.Create(ctx, createRequest)
@@ -256,7 +275,7 @@ func (r *FirewallResource) findFirewallByProjectAndName(ctx context.Context, dat
 	name := data.Name.ValueString()
 
 	// Get firewalls filtered by project
-	response, err := r.client.Firewalls.List(ctx, &project, nil, nil)
+	response, err := r.client.Firewalls.List(ctx, &project, nil, nil, nil)
 	if err != nil {
 		diags.AddError("Client Error", "Unable to list firewalls to find created firewall, got error: "+err.Error())
 		return
@@ -353,10 +372,16 @@ func (r *FirewallResource) Update(ctx context.Context, req resource.UpdateReques
 		Data: operations.UpdateFirewallFirewallsData{
 			Type: operations.UpdateFirewallFirewallsTypeFirewalls,
 			Attributes: &operations.UpdateFirewallFirewallsAttributes{
-				Name:  &name,
+				Name: &name,
+				// Replaces the full tag set. nil (no tags) is omitted by omitempty,
+				// which the API reads as "leave tags unchanged" — it cannot clear them.
+				Tags:  firewallTagIDs(ctx, plan.Tags, &resp.Diagnostics),
 				Rules: rules,
 			},
 		},
+	}
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	if _, err := r.client.Firewalls.Update(ctx, firewallID, updateRequest); err != nil {
@@ -409,6 +434,61 @@ func (r *FirewallResource) ImportState(ctx context.Context, req resource.ImportS
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
+// firewallTagIDs extracts the configured tag IDs to send to the API. It returns
+// nil when the list is null or unknown so omitempty drops the field from the
+// payload (the API then leaves the current tags untouched).
+func firewallTagIDs(ctx context.Context, list types.List, diags *diag.Diagnostics) []string {
+	if list.IsNull() || list.IsUnknown() {
+		return nil
+	}
+	var ids []string
+	diags.Append(list.ElementsAs(ctx, &ids, false)...)
+	return ids
+}
+
+// firewallTagsToState maps the firewall's API tags to a list of tag IDs for
+// state. When the prior list already holds the same set of IDs its order is
+// preserved, so a differing API order does not churn the plan (and, for the
+// Computed attribute, the post-apply state still matches the plan).
+func firewallTagsToState(ctx context.Context, current types.List, apiTags []components.Tags, diags *diag.Diagnostics) types.List {
+	ids := make([]string, 0, len(apiTags))
+	for _, t := range apiTags {
+		if t.ID != nil {
+			ids = append(ids, *t.ID)
+		}
+	}
+
+	if !current.IsNull() && !current.IsUnknown() {
+		var currentIDs []string
+		if d := current.ElementsAs(ctx, &currentIDs, false); !d.HasError() && sameStringSet(currentIDs, ids) {
+			return current
+		}
+	}
+
+	list, d := types.ListValueFrom(ctx, types.StringType, ids)
+	diags.Append(d...)
+	return list
+}
+
+// sameStringSet reports whether a and b contain the same elements regardless of
+// order (multiset comparison).
+func sameStringSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	counts := make(map[string]int, len(a))
+	for _, s := range a {
+		counts[s]++
+	}
+	for _, s := range b {
+		counts[s]--
+		if counts[s] < 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func (r *FirewallResource) readFirewall(ctx context.Context, data *FirewallResourceModel, diags *diag.Diagnostics) {
 	firewallID := data.ID.ValueString()
 
@@ -445,6 +525,11 @@ func (r *FirewallResource) readFirewall(ctx context.Context, data *FirewallResou
 		if attributes.Project != nil && attributes.Project.ID != nil {
 			data.Project = types.StringValue(*attributes.Project.ID)
 		}
+
+		// The GET response returns tags as full objects; map them back to the ID
+		// list, preserving the prior order when the set is unchanged so a differing
+		// API order neither churns the plan nor breaks post-apply consistency.
+		data.Tags = firewallTagsToState(ctx, data.Tags, attributes.Tags, diags)
 
 		// Only update rules if we don't have configured rules to preserve user configuration
 		// This prevents the API from adding extra rules that would cause count mismatches

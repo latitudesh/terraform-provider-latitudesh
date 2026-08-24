@@ -74,6 +74,7 @@ type ServerResourceModel struct {
 	Raid                     types.String      `tfsdk:"raid"`
 	DiskLayout               []DiskLayoutModel `tfsdk:"disk_layout"`
 	Ipxe                     types.String      `tfsdk:"ipxe"`
+	BgpReady                 types.Bool        `tfsdk:"bgp_ready"`
 	Billing                  types.String      `tfsdk:"billing"`
 	Tags                     types.List        `tfsdk:"tags"`
 	AllowReinstall           types.Bool        `tfsdk:"allow_reinstall"`
@@ -219,6 +220,16 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Optional:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"bgp_ready": schema.BoolAttribute{
+				MarkdownDescription: "Deploy the server onto hardware capable of announcing an Elastic IP over BGP. " +
+					"This is a deploy-time only flag: the API accepts it only when the server is created and never returns it, " +
+					"so the provider keeps the configured value in state and does not refresh it from the API. " +
+					"Changing it after creation forces the server to be recreated. When omitted, the API default applies.",
+				Optional: true,
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
 				},
 			},
 			"billing": schema.StringAttribute{
@@ -655,6 +666,13 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 	if !data.Ipxe.IsNull() {
 		ipxe := data.Ipxe.ValueString()
 		attrs.Ipxe = &ipxe
+	}
+
+	// bgp_ready is a deploy-time only flag: the API accepts it solely on create
+	// and never returns it, so it is sent here and never read back.
+	if !data.BgpReady.IsNull() && !data.BgpReady.IsUnknown() {
+		bgpReady := data.BgpReady.ValueBool()
+		attrs.BgpReady = &bgpReady
 	}
 
 	if !data.Billing.IsNull() {
