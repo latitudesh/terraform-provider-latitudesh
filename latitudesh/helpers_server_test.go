@@ -8,11 +8,6 @@ import (
 
 func strPtr(s string) *string { return &s }
 
-// buildInterfacesList must produce a stable, deterministic ordering regardless
-// of the order the API returns the interfaces in. Without a canonical sort the
-// provider raises "Provider produced inconsistent result after apply" on
-// .interfaces[N].mac_address whenever any update re-reads the server and the
-// API happens to reshuffle the list.
 func TestBuildInterfacesList_StableOrderRegardlessOfInput(t *testing.T) {
 	a := components.Interfaces{Name: strPtr("eth0"), MacAddress: strPtr("90:5a:08:16:db:04")}
 	b := components.Interfaces{Name: strPtr("eth1"), MacAddress: strPtr("90:5a:08:2d:d6:8b")}

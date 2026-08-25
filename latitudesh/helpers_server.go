@@ -26,14 +26,6 @@ func listIfaces(vals []attr.Value) (types.List, diag.Diagnostics) {
 	return types.ListValue(ifaceType, vals)
 }
 
-// buildInterfacesList converts the API interface slice into a Terraform list
-// with a canonical, deterministic order. The API does not guarantee a stable
-// ordering between reads, and `interfaces` is a Computed list, so an unsorted
-// list makes index positions meaningless: on the next apply Terraform compares
-// interfaces[N] from state against a possibly-reshuffled read and raises
-// "Provider produced inconsistent result after apply" on interfaces[N].mac_address.
-// Sorting by (name, mac_address, description) pins each interface to a stable
-// position regardless of how the API returns them.
 func buildInterfacesList(ifaces []components.Interfaces) (types.List, diag.Diagnostics) {
 	if len(ifaces) == 0 {
 		return emptyIfaces(), nil
@@ -61,9 +53,6 @@ func buildInterfacesList(ifaces []components.Interfaces) (types.List, diag.Diagn
 	return listIfaces(objs)
 }
 
-// ifaceSortKey builds a total-order key from the interface fields. The NUL
-// separator keeps the fields from bleeding into each other (e.g. so "ab"+"c"
-// and "a"+"bc" sort distinctly).
 func ifaceSortKey(iface components.Interfaces) string {
 	return derefString(iface.Name) + "\x00" + derefString(iface.MacAddress) + "\x00" + derefString(iface.Description)
 }
