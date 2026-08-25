@@ -81,9 +81,6 @@ func (r *TagResource) Schema(ctx context.Context, req resource.SchemaRequest, re
 			"slug": schema.StringAttribute{
 				MarkdownDescription: "The tag slug",
 				Computed:            true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 		},
 	}
