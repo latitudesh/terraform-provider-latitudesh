@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -18,6 +19,7 @@ import (
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/modifiers"
+	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/planmodifiers"
 	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
 
@@ -81,6 +83,9 @@ func (r *TagResource) Schema(ctx context.Context, req resource.SchemaRequest, re
 			"slug": schema.StringAttribute{
 				MarkdownDescription: "The tag slug",
 				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					planmodifiers.RecomputeOnChange{SourceAttribute: path.Root("name")},
+				},
 			},
 		},
 	}
