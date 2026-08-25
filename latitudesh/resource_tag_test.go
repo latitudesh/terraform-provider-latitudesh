@@ -332,3 +332,44 @@ resource "latitudesh_tag" "imported_tag" {
 }
 `
 }
+
+// TestAccTag_RenameUpdatesSlug guards against the computed slug being frozen by
+// UseStateForUnknown: renaming the tag must recompute the slug, otherwise the
+// stale planned slug trips "Provider produced inconsistent result after apply".
+func TestAccTag_RenameUpdatesSlug(t *testing.T) {
+	recorder, teardown := createTestRecorder(t)
+	defer teardown()
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccTokenCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
+		CheckDestroy:             testAccCheckTagDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCheckTagNamed("env:prod"),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("latitudesh_tag.test_item", "slug", "env-prod"),
+				),
+			},
+			{
+				Config: testAccCheckTagNamed("env_prod"),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("latitudesh_tag.test_item", "name", "env_prod"),
+					resource.TestCheckResourceAttr("latitudesh_tag.test_item", "slug", "env_prod"),
+				),
+			},
+		},
+	})
+}
+
+func testAccCheckTagNamed(name string) string {
+	return fmt.Sprintf(`
+resource "latitudesh_tag" "test_item" {
+  name        = "%s"
+  description = "%s"
+  color       = "%s"
+}
+`, name, testTagDescription, testTagColor)
+}
