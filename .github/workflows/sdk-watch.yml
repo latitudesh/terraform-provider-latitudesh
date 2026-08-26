@@ -1,0 +1,306 @@
+name: "SDK coverage watch"
+
+# Phase 1 of the auto-scaffolding pipeline: on a weekly cadence (or on demand),
+# reconcile the *latest* published latitudesh-go-sdk against what this provider
+# ships and keep a single tracking issue up to date with the groups that have no
+# coverage yet. This job never spends money and never writes code — detection is
+# the $0 path, and it stays that way by construction (no Anthropic key is present
+# in any job here). The scaffolding agent that turns a pending group into a draft
+# PR is added to this same file in a later PR.
+on:
+  # Weekly is enough: a new SDK service group is rare (2 in 29 releases), and the
+  # acceptance criterion is a delta surfaced within 7 days.
+  schedule:
+    - cron: "0 9 * * 1" # Mondays 09:00 UTC
+  workflow_dispatch:
+    inputs:
+      group:
+        description: "Single SDK group to scaffold (consumed by the scaffold job added later; ignored by detection)."
+        required: false
+        default: ""
+      dry_run:
+        description: "Render the tracking issue to the run summary without creating or editing anything."
+        required: false
+        type: boolean
+        default: false
+  # Inert until the SDK repository is wired to send this event (a later PR). It is
+  # declared now so turning it on there is a one-line change in the SDK repo, not
+  # an edit to this workflow.
+  repository_dispatch:
+    types: [sdk-release]
+
+# Read-only by default. The one job that needs to write issues elevates its own
+# permissions; keeping the default minimal means a new job cannot quietly gain
+# write access.
+permissions:
+  contents: read
+
+# Never run two of these at once (a manual dispatch on top of the cron), so the
+# tracking issue is not upserted twice concurrently. Do not cancel a run in
+# flight — a half-finished issue edit is worse than waiting.
+concurrency:
+  group: sdk-scaffold
+  cancel-in-progress: false
+
+jobs:
+  # Reconcile the latest SDK against the provider and emit the coverage report as
+  # JSON. No API token, no Anthropic key: this analyzes source in the module cache.
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      pending: ${{ steps.report.outputs.pending }}
+      pinned: ${{ steps.resolve.outputs.pinned }}
+      latest: ${{ steps.resolve.outputs.latest }}
+      pinned_check_ok: ${{ steps.pinned_check.outputs.ok }}
+    steps:
+      # Every action here is pinned to an immutable commit SHA: this workflow's
+      # sibling job writes issues, so a mutable tag would let reviewed action code
+      # change underneath us without any change to this repository.
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: "^1.23.0"
+
+      - name: Resolve pinned and latest SDK versions
+        id: resolve
+        env:
+          SDK_MODULE: github.com/latitudesh/latitudesh-go-sdk
+        run: |
+          set -euo pipefail
+          pinned=$(go list -m -f '{{.Version}}' "$SDK_MODULE")
+          latest=$(go list -m -versions -json "$SDK_MODULE" | jq -r '.Versions[-1] // empty')
+          if [ -z "$latest" ]; then
+            echo "::error::could not resolve the latest version of $SDK_MODULE"
+            exit 1
+          fi
+          echo "pinned=$pinned" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "Pinned $pinned, latest $latest"
+
+      - name: Report coverage against the latest SDK
+        id: report
+        env:
+          SDK_MODULE: github.com/latitudesh/latitudesh-go-sdk
+          LATEST: ${{ steps.resolve.outputs.latest }}
+        run: |
+          set -euo pipefail
+          # Parse the latest SDK straight from the module cache. This never edits
+          # go.mod: the provider is still built against the pinned SDK, and only
+          # the surface parser reads the newer source via -sdk-dir. That is how a
+          # new group is detected without committing to the bump.
+          dir=$(go mod download -json "$SDK_MODULE@$LATEST" | jq -r '.Dir')
+          if [ -z "$dir" ] || [ "$dir" = "null" ]; then
+            echo "::error::could not download $SDK_MODULE@$LATEST"
+            exit 1
+          fi
+          go run ./cmd/sdkcoverage report -format json -sdk-dir "$dir" > report.json
+          pending=$(jq -r '.counts.pending' report.json)
+          echo "pending=$pending" >> "$GITHUB_OUTPUT"
+          echo "$pending group(s) pending against $LATEST"
+
+      - name: Check the pinned SDK for contradictions
+        id: pinned_check
+        # Advisory here, not fatal: a contradiction on the pinned SDK is already a
+        # unit-test failure on every PR, so failing this job would only suppress
+        # the tracking issue the run exists to publish. Surface it in the issue
+        # instead. (main has no required checks, so this weekly pass is a genuine
+        # backstop.)
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          if go run ./cmd/sdkcoverage check > pinned_check.txt 2>&1; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::pinned SDK has coverage contradictions; see the tracking issue"
+          fi
+          cat pinned_check.txt
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sdk-coverage-report
+          path: |
+            report.json
+            pinned_check.txt
+          retention-days: 14
+          # v4 artifacts are immutable per run (not per attempt): without this,
+          # "Re-run all jobs" hits a 409 on the attempt-1 artifact and the retry
+          # dies before reaching whatever actually failed.
+          overwrite: true
+
+  # Upsert one fixed tracking issue from the report. Separated from detect so the
+  # write-scoped token lives only where issues are actually edited.
+  issue:
+    needs: detect
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      # This job never checks out the repo, so gh has no git remote to infer the
+      # repository from — without GH_REPO every gh call below fails.
+      GH_REPO: ${{ github.repository }}
+      TRACKING_LABEL: sdk-coverage
+      MARKER: "<!-- sdk-coverage-tracking -->"
+      PENDING: ${{ needs.detect.outputs.pending }}
+      PINNED: ${{ needs.detect.outputs.pinned }}
+      LATEST: ${{ needs.detect.outputs.latest }}
+      PINNED_CHECK_OK: ${{ needs.detect.outputs.pinned_check_ok }}
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
+    steps:
+      - name: Download coverage report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: sdk-coverage-report
+
+      - name: Build the issue body
+        run: |
+          set -euo pipefail
+          {
+            echo "$MARKER"
+            echo "# SDK coverage: ${PENDING} group(s) pending generation"
+            echo
+            echo "_Generated by \`.github/workflows/sdk-watch.yml\`. Edits are overwritten on the next run._"
+            echo
+            echo "Pinned SDK: \`${PINNED}\`. Latest published: \`${LATEST}\`."
+            echo
+            counts=$(jq -r '.counts | "\(.covered) of \(.total) service groups covered — \(.pending) pending, \(.excluded) excluded, \(.unshaped) too partial to generate."' report.json)
+            echo "$counts"
+
+            if [ "${PINNED_CHECK_OK}" = "false" ]; then
+              echo
+              echo "> [!WARNING]"
+              echo "> The pinned SDK (\`${PINNED}\`) has coverage contradictions. This normally fails a PR's unit tests; seeing it here means something reached \`main\` unchecked. Fix \`sdk-coverage.yaml\` and/or the provider registration."
+            fi
+
+            # Violations against the LATEST SDK never fail a PR (nothing pins that
+            # version yet), so this issue is the only place they surface. Ignoring
+            # them would present a renamed or removed group as ordinary pending work.
+            latest_violations=$(jq -r '.counts.violations' report.json)
+            if [ "$latest_violations" -gt 0 ]; then
+              echo
+              echo "> [!WARNING]"
+              echo "> Reconciling the latest SDK (\`${LATEST}\`) reports ${latest_violations} violation(s) — usually a group renamed or removed upstream. The pending list below may be incomplete or mislabeled until \`sdk-coverage.yaml\` catches up:"
+              echo
+              jq -r '.violations[] | "> - " + (if (.group // "") != "" then "`" + .group + "`: " else "" end) + .message' report.json
+            fi
+
+            echo
+            echo "## Pending generation"
+            echo
+            if [ "${PENDING}" -eq 0 ]; then
+              echo "None — every SDK service group is either covered or explicitly excluded. 🎉"
+            else
+              echo "Each group below is exposed by latitudesh-go-sdk but not by this provider. Scaffolding produces a resource, a data source, or both, per the derived CRUD shape. Reviewing that generated PR is where the keep-or-drop call is made; to drop one, record a \`ceiling\` + \`rationale\` for its group in \`sdk-coverage.yaml\`."
+              echo
+              jq -r '
+                .pending[]
+                | "- [ ] `\(.group)` → `\(.suggested_type_name)` — `\(.crud)`, generates \(.generates | join(" + "))"
+                  + (if (.notes // "") != "" then "\n  - " + (.notes | gsub("\\s+";" ") | ltrimstr(" ")) else "" end)
+              ' report.json
+            fi
+
+            revisit=$(jq -r '.counts.revisit' report.json)
+            if [ "$revisit" -gt 0 ]; then
+              echo
+              echo "## Worth revisiting"
+              echo
+              echo "Excluded on API grounds, but the SDK has since grown past the recorded ceiling. Not urgent — re-triage when convenient."
+              echo
+              jq -r '.revisit[] | "- `\(.group)` — recorded ceiling `\(.ceiling)`, now `\(.crud)`"' report.json
+            fi
+
+            echo
+            echo "## Open scaffold PRs"
+            echo
+            # A failed listing must not read as "None open." — that would claim a
+            # clean slate exactly when we know nothing.
+            if prs=$(gh pr list --label scaffold --state open --json number,title,url --jq '.[] | "- #\(.number) [\(.title)](\(.url))"'); then
+              if [ -n "$prs" ]; then
+                echo "$prs"
+              else
+                echo "None open."
+              fi
+            else
+              echo "_Could not list scaffold PRs — check the workflow run log._"
+            fi
+
+            echo
+            echo "## Housekeeping"
+            echo
+            echo "A scaffold PR closed without merging is parked until \`sdk-coverage.yaml\` records a \`ceiling\` + \`rationale\` for its group — otherwise the next run just regenerates it."
+          } > body.md
+
+          echo "----- issue body -----"
+          cat body.md
+          echo "----------------------"
+
+      - name: Render only (dry run)
+        if: env.DRY_RUN == 'true'
+        run: |
+          set -euo pipefail
+          {
+            echo "## Dry run — tracking issue not modified"
+            echo
+            cat body.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Ensure the tracking label exists
+        if: env.DRY_RUN != 'true'
+        run: |
+          gh label create "$TRACKING_LABEL" \
+            --color 0e8a16 \
+            --description "Auto-scaffolding: SDK groups the provider does not yet cover" \
+            2>/dev/null || true
+
+      - name: Upsert the tracking issue
+        if: env.DRY_RUN != 'true'
+        run: |
+          set -euo pipefail
+          # Oldest marker-carrying issue wins: gh returns newest-first, so taking
+          # .[0] as-is would let any newer labeled issue displace the long-lived
+          # tracker and fragment its history.
+          existing=$(gh issue list --label "$TRACKING_LABEL" --state open --limit 100 \
+            --json number,body --jq \
+            "map(select(.body | contains(\"$MARKER\"))) | sort_by(.number) | .[0].number // empty")
+
+          title="SDK coverage: ${PENDING} group(s) pending generation"
+          violations=$(jq -r '.counts.violations' report.json)
+          if [ "$violations" -gt 0 ]; then
+            title="SDK coverage: ${PENDING} pending, ${violations} violation(s) against ${LATEST}"
+          fi
+          if [ "${PINNED_CHECK_OK}" != "true" ]; then
+            title="${title} — pinned SDK check failing"
+          fi
+
+          # Close only when there is truly nothing to report: zero pending, a
+          # clean latest reconcile, AND a passing pinned check. The pinned check
+          # is this run's backstop — main has no required status checks, so a
+          # contradiction that reached it unchecked surfaces nowhere else; closing
+          # over it would bury the one warning this workflow exists to keep
+          # visible. Anything but an explicit "true" (including an empty output
+          # from a broken step) keeps the issue open.
+          if [ "${PENDING}" -eq 0 ] && [ "$violations" -eq 0 ] && [ "${PINNED_CHECK_OK}" = "true" ]; then
+            if [ -n "$existing" ]; then
+              gh issue comment "$existing" --body "All SDK service groups are now covered or excluded as of \`${LATEST}\`. Closing; a future run opens a fresh tracking issue if a coverage gap reappears."
+              gh issue close "$existing"
+              echo "Closed tracking issue #$existing"
+            else
+              echo "Nothing pending and no open tracking issue — done."
+            fi
+            exit 0
+          fi
+
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --title "$title" --body-file body.md
+            echo "Updated tracking issue #$existing"
+          else
+            gh issue create --title "$title" --label "$TRACKING_LABEL" --body-file body.md
+            echo "Created a new tracking issue"
+          fi
