@@ -7,12 +7,14 @@
 //	sdkcoverage report            # markdown coverage table
 //	sdkcoverage check             # exit 1 on any violation
 //	sdkcoverage groups            # dump the raw SDK surface (no manifest needed)
+//	sdkcoverage shipped           # registered Terraform type names by kind, as JSON
 //
 // Everything runs offline against the module cache; no API token is involved.
 package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -56,6 +58,8 @@ func run(args []string) error {
 		return runReport(*manifestPath, *sdkDir, *format)
 	case "check":
 		return runCheck(*manifestPath, *sdkDir)
+	case "shipped":
+		return runShipped()
 	default:
 		usage()
 		return fmt.Errorf("unknown command %q", command)
@@ -63,11 +67,12 @@ func run(args []string) error {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `usage: sdkcoverage <report|check|groups> [flags]
+	fmt.Fprint(os.Stderr, `usage: sdkcoverage <report|check|groups|shipped> [flags]
 
   report   render the coverage table (markdown by default)
   check    exit non-zero when the SDK, the manifest, and the provider disagree
   groups   dump the raw SDK service-group surface, for seeding the manifest
+  shipped  dump the registered Terraform type names by kind, as JSON
 
 flags:
   -manifest path   coverage manifest (default: sdk-coverage.yaml at the repo root)
@@ -153,6 +158,23 @@ func runCheck(manifestPath, sdkDir string) error {
 		fmt.Fprintf(os.Stderr, "  - %s\n", v)
 	}
 	return fmt.Errorf("coverage manifest is out of sync")
+}
+
+// runShipped prints the provider's registered type names split by kind. The
+// scaffold validation gate consumes this to verify that every REQUESTED kind was
+// actually registered — the merged view cannot answer that, because one kind
+// claiming a type name (ssh_key the resource) hides whether the sibling kind
+// (ssh_key the data source) was ever wired up.
+func runShipped() error {
+	ctx := context.Background()
+	shipped := sdkcoverage.ShippedByKind(ctx, latitudesh.New("dev")(), providerTypeName)
+
+	data, err := json.MarshalIndent(shipped, "", "  ")
+	if err != nil {
+		return fmt.Errorf("sdkcoverage: rendering shipped types: %w", err)
+	}
+	fmt.Println(string(data))
+	return nil
 }
 
 func reconcile(manifestPath, sdkDir string) (sdkcoverage.Report, string, error) {
