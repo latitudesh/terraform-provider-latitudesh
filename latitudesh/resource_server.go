@@ -11,7 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -1416,31 +1415,7 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 		}
 
 		if attrs.Interfaces != nil {
-			var ifaceObjs []attr.Value
-
-			for _, iface := range attrs.Interfaces {
-				var nameVal, macVal, descVal attr.Value
-
-				nameVal = optionalString(iface.Name)
-				macVal = optionalString(iface.MacAddress)
-				descVal = optionalString(iface.Description)
-
-				obj, _ := types.ObjectValue(
-					map[string]attr.Type{
-						"name":        types.StringType,
-						"mac_address": types.StringType,
-						"description": types.StringType,
-					},
-					map[string]attr.Value{
-						"name":        nameVal,
-						"mac_address": macVal,
-						"description": descVal,
-					},
-				)
-				ifaceObjs = append(ifaceObjs, obj)
-			}
-
-			list, diags2 := listIfaces(ifaceObjs)
+			list, diags2 := buildInterfacesList(attrs.Interfaces)
 			diags.Append(diags2...)
 			data.Interfaces = list
 		} else {
