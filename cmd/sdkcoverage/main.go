@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/sdkcoverage"
 	"github.com/latitudesh/terraform-provider-latitudesh/v2/latitudesh"
@@ -170,15 +169,7 @@ func reconcile(manifestPath, sdkDir string) (sdkcoverage.Report, string, error) 
 	ctx := context.Background()
 	shipped := sdkcoverage.ShippedTypeNames(ctx, latitudesh.New("dev")(), providerTypeName)
 
-	// Module-cache directories are named module@version; keep only the version so
-	// the reports show the same string `go list -m` prints and automation can
-	// compare it directly. A hand-picked -sdk-dir basename passes through as-is.
-	version := filepath.Base(dir)
-	if at := strings.LastIndex(version, "@"); at >= 0 {
-		version = version[at+1:]
-	}
-
-	return sdkcoverage.Reconcile(surface, manifest, shipped), version, nil
+	return sdkcoverage.Reconcile(surface, manifest, shipped), sdkcoverage.VersionFromDir(dir), nil
 }
 
 func loadSurface(sdkDir string) (sdkcoverage.Surface, string, error) {
