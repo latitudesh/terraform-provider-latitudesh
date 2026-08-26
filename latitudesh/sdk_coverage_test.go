@@ -12,9 +12,9 @@ import (
 // what latitudesh-go-sdk exposes and what this provider ships.
 //
 // It is a static check: no network, no API token, no TF_ACC. It runs on every PR
-// as part of the existing unit-test step, which matches `-run
-// "TestProvider|TestFrameworkProvider"` — the name prefix is load-bearing, so
-// renaming this test would silently drop it from CI.
+// in CI as part of `go test ./latitudesh` (the "Run Unit Tests" step, which no
+// longer filters by name), so the whole package is exercised and this test is
+// picked up automatically rather than by a load-bearing name prefix.
 //
 // It fails only on contradictions: a group the SDK no longer exposes, a Terraform
 // type the manifest does not claim (or claims under a name the provider does not

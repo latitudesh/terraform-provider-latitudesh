@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/sdkcoverage"
 	"github.com/latitudesh/terraform-provider-latitudesh/v2/latitudesh"
@@ -44,7 +45,7 @@ func run(args []string) error {
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
 	manifestPath := flags.String("manifest", defaultManifestPath(), "path to the coverage manifest")
 	sdkDir := flags.String("sdk-dir", "", "SDK source directory (defaults to the pinned module in the module cache)")
-	format := flags.String("format", "", "report format: markdown or text (report only)")
+	format := flags.String("format", "", "report format: markdown, text, or json (report only)")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -72,7 +73,7 @@ func usage() {
 flags:
   -manifest path   coverage manifest (default: sdk-coverage.yaml at the repo root)
   -sdk-dir path    SDK source directory (default: pinned module in the module cache)
-  -format fmt      markdown (default) or text, for report
+  -format fmt      markdown (default), text, or json, for report
 `)
 }
 
@@ -115,10 +116,16 @@ func runReport(manifestPath, sdkDir, format string) error {
 		fmt.Print(report.Text(version))
 	case "", "markdown":
 		fmt.Print(report.Markdown(version))
+	case "json":
+		data, err := report.JSON(version, providerTypeName)
+		if err != nil {
+			return fmt.Errorf("sdkcoverage: rendering JSON report: %w", err)
+		}
+		fmt.Println(string(data))
 	default:
 		// Falling back to markdown here would hand automation a different format
 		// than it asked for, and report success while doing it.
-		return fmt.Errorf("unsupported report format %q (want markdown or text)", format)
+		return fmt.Errorf("unsupported report format %q (want markdown, text, or json)", format)
 	}
 	return nil
 }
@@ -163,7 +170,15 @@ func reconcile(manifestPath, sdkDir string) (sdkcoverage.Report, string, error) 
 	ctx := context.Background()
 	shipped := sdkcoverage.ShippedTypeNames(ctx, latitudesh.New("dev")(), providerTypeName)
 
-	return sdkcoverage.Reconcile(surface, manifest, shipped), filepath.Base(dir), nil
+	// Module-cache directories are named module@version; keep only the version so
+	// the reports show the same string `go list -m` prints and automation can
+	// compare it directly. A hand-picked -sdk-dir basename passes through as-is.
+	version := filepath.Base(dir)
+	if at := strings.LastIndex(version, "@"); at >= 0 {
+		version = version[at+1:]
+	}
+
+	return sdkcoverage.Reconcile(surface, manifest, shipped), version, nil
 }
 
 func loadSurface(sdkDir string) (sdkcoverage.Surface, string, error) {
