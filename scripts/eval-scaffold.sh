@@ -182,10 +182,11 @@ if [ "$DRY_RUN" = "true" ]; then
 fi
 
 # The tool allowlist mirrors what the scaffold job will grant: read/edit the tree,
-# and only the go/gofmt/validation commands — no gh, no git writes, no arbitrary
-# shell. The exact flag spellings track the installed claude CLI; adjust here if
-# your version differs.
-ALLOWED_TOOLS="Read,Glob,Grep,Edit,Write,MultiEdit,Bash(go build:*),Bash(go vet:*),Bash(go test:*),Bash(go doc:*),Bash(gofmt:*),Bash(go generate:*),Bash(go run ./cmd/sdkcoverage:*),Bash(scripts/scaffold-validate.sh:*)"
+# and only the go/gofmt/jq/validation commands — no gh, no git writes, no arbitrary
+# shell. jq is needed by the prompt's step 0 (premise check pipes the JSON report
+# through it). The exact flag spellings track the installed claude CLI; adjust here
+# if your version differs.
+ALLOWED_TOOLS="Read,Glob,Grep,Edit,Write,MultiEdit,Bash(go build:*),Bash(go vet:*),Bash(go test:*),Bash(go doc:*),Bash(gofmt:*),Bash(go generate:*),Bash(go run ./cmd/sdkcoverage:*),Bash(jq:*),Bash(scripts/scaffold-validate.sh:*)"
 
 echo
 echo "== running the agent (model=$MODEL, max-turns=$MAX_TURNS) =="
