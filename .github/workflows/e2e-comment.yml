@@ -1,0 +1,111 @@
+name: "Run E2E on comment"
+
+# Comment `/run-e2e` on a pull request to run the acceptance suite on demand.
+# This is the escape hatch for the `skip-e2e` label in test.yml: removing a label
+# does not re-trigger a run, so without this a PR that opted out would have no way
+# back short of pushing an empty commit. It also covers the ordinary "run it again"
+# case — reviewers who want a fresh acceptance run without a new push.
+on:
+  issue_comment:
+    types:
+      - created
+
+# issue_comment runs the workflow from the default branch, so this file only takes
+# effect once merged to main. It grants no more than it needs: read to check out
+# the PR head, and issues:write only to leave the acknowledging reaction.
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+env:
+  # Match test.yml: run every acceptance test. The prefix picks up new TestAcc*
+  # automatically instead of relying on a hand-maintained allowlist.
+  ACCEPTANCE_TESTS: "TestAcc"
+
+jobs:
+  e2e:
+    # Four guards, all required:
+    #   - issue.pull_request: issue_comment also fires on plain issues; the suite
+    #     only makes sense on a PR, and resolving a head SHA below needs one.
+    #   - the body carries the /run-e2e command.
+    #   - the author can already push here. The suite runs arbitrary PR-head code
+    #     with LATITUDESH_AUTH_TOKEN in scope, so a drive-by comment from a fork
+    #     must not be able to start it. OWNER/MEMBER/COLLABORATOR are exactly the
+    #     associations that already have write access — the same trust boundary as
+    #     `workflow_dispatch` and marking a PR ready for review.
+    if: |
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/run-e2e') &&
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'MEMBER' ||
+       github.event.comment.author_association == 'COLLABORATOR')
+    runs-on: ubuntu-latest
+    # Share test.yml's concurrency group. Groups are repository-wide, so a
+    # comment-triggered run serializes behind any in-flight pull_request run
+    # against the one shared Latitude account/project instead of racing it and
+    # colliding on resource names. Never cancel in progress: that leaks
+    # half-created resources.
+    concurrency:
+      group: latitudesh-acceptance-tests
+      cancel-in-progress: false
+    steps:
+      -
+        # Best-effort feedback that the command was accepted. Non-fatal on
+        # purpose: a reaction that fails on permissions must not block the run.
+        name: Acknowledge the command
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket',
+            });
+      -
+        # issue_comment has no PR ref of its own and checks out the default branch
+        # by default. Resolve the PR's current head commit so the suite runs
+        # against the code under review, not main.
+        name: Resolve PR head SHA
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            core.setOutput('sha', pr.data.head.sha);
+      -
+        name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.sha }}
+          fetch-depth: 0
+      -
+        name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.23.0'
+      -
+        name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      -
+        name: Install dependencies
+        run: go get .
+      -
+        # Mirrors the e2e step in test.yml. The selector is a fixed env value, never
+        # the comment body, so there is no way to splice shell into this step — the
+        # one step that holds LATITUDESH_AUTH_TOKEN. The 180m timeout is far above
+        # how long the suite takes: go test enforces -timeout by killing the binary,
+        # so a tight cap would skip destroy/teardown and leak billable servers.
+        name: Run E2E Tests
+        run: go test ./latitudesh -v -timeout 180m -run "$ACCEPTANCE_TESTS"
+        env:
+          TF_ACC: '1'
+          LATITUDESH_AUTH_TOKEN: ${{ secrets.LATITUDESH_AUTH_TOKEN }}
