@@ -75,6 +75,7 @@ scripts/scaffold-validate.sh --group {{GROUP}} --type-name {{TF_NAME}} --kinds "
 
 It runs gofmt, `go vet`, `go build`, the offline tests (including the coverage
 reconcile), regenerates the docs, and then holds you to the full deliverable list:
-every requested kind must ship its Go file and doc template, the example must
-exist, and your test file must contain both a `TestAcc` function and an offline
-test. Treat each failure as a task to fix, not to work around.
+every requested kind must be registered in `provider.go` AND ship its Go file and
+doc template, the example must exist, and a test file named after the new type
+must contain both a `TestAcc` function and an offline test. Treat each failure as
+a task to fix, not to work around.

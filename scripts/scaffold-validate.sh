@@ -226,11 +226,27 @@ echo "ok: docs regenerate with no drift"
 
 # -------------------------------------------------- 9. deliverables per kind --
 # Coverage (step 7) only proves SOME implementation claimed the group. This step
-# holds the scaffold to what was actually requested: every asked-for kind ships
-# its Go file and doc template, an example exists, and the change carries both
-# test categories the prompt demands — a passing package-wide `go test` says
-# nothing about whether the NEW type has any test at all.
+# holds the scaffold to what was actually requested: every asked-for kind is
+# actually registered and ships its Go file and doc template, an example exists,
+# and the change carries the new type's own tests in both categories — a passing
+# package-wide `go test` says nothing about whether the NEW type has any test.
 step "9/9 deliverables per kind"
+
+# Registration first, from the provider's own runtime metadata. A file that
+# exists but was never added to provider.go passes every other check: the build
+# compiles it, and coverage (step 7) cannot see the gap because the shared type
+# name is already claimed by a sibling kind (ssh_key ships as both kinds).
+shipped=$(go run ./cmd/sdkcoverage shipped) || fail "could not introspect the provider's registered types"
+for kind in "${kinds[@]}"; do
+	case "$kind" in
+	resource) field="resources" registered_in="Resources()" ;;
+	datasource) field="datasources" registered_in="DataSources()" ;;
+	action) field="actions" registered_in="Actions()" ;;
+	esac
+	echo "$shipped" | jq -e --arg k "$field" --arg t "$TYPE_NAME" '.[$k] | index($t) != null' >/dev/null ||
+		fail "requested kind $kind: $TYPE_NAME is not registered in provider.go ($registered_in)"
+done
+
 for kind in "${kinds[@]}"; do
 	case "$kind" in
 	resource)
@@ -261,17 +277,21 @@ case " ${kinds[*]} " in
 	;;
 esac
 
-# Test deliverables: the change must bring its own tests — at least one changed
-# test file in the provider package, with at least one TestAcc (compiles now,
+# Test deliverables: the change must bring the NEW TYPE's own tests — at least
+# one changed test file whose name carries the type (house convention:
+# <kind>_<short>[_suffix]_test.go), with at least one TestAcc (compiles now,
 # recorded by a human later) and at least one offline test (runs on every PR).
+# Scoping to the target matters: counting categories across every changed test
+# file would let an edit to some unrelated, already-tested file satisfy the
+# check while the new type ships with no tests at all.
 test_files=()
 for p in "${paths[@]}"; do
 	case "$p" in
-	latitudesh/*_test.go) [ -f "$p" ] && test_files+=("$p") ;;
+	latitudesh/*"${short}"*_test.go) [ -f "$p" ] && test_files+=("$p") ;;
 	esac
 done
 if [ "${#test_files[@]}" -eq 0 ]; then
-	fail "the change adds or modifies no latitudesh/*_test.go — a scaffold without tests is not reviewable"
+	fail "no changed test file targets ${short} — the new type must bring its own tests (latitudesh/<kind>_${short}*_test.go), not lean on unrelated ones"
 fi
 has_acc=false
 has_offline=false
@@ -287,10 +307,10 @@ for f in "${test_files[@]}"; do
 		has_offline=true
 	fi
 done
-[ "$has_acc" = "true" ] || fail "no TestAcc function in the changed test files — the acceptance path would be unrecordable"
-[ "$has_offline" = "true" ] || fail "no offline (non-TestAcc) test in the changed test files — nothing about the new type runs on ordinary PRs"
+[ "$has_acc" = "true" ] || fail "no TestAcc function in the target's changed test files — the acceptance path would be unrecordable"
+[ "$has_offline" = "true" ] || fail "no offline (non-TestAcc) test in the target's changed test files — nothing about the new type runs on ordinary PRs"
 
-echo "ok: every requested kind (${kinds[*]}) shipped with example, templates, and both test categories"
+echo "ok: every requested kind (${kinds[*]}) registered and shipped with example, templates, and the target's own tests in both categories"
 
 echo
 echo "PASS: $TYPE_NAME ($GROUP) — scaffolding validates"

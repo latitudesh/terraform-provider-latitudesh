@@ -104,11 +104,15 @@ echo "== preparing an ablated worktree at HEAD =="
 git worktree add -q "$WORKTREE" HEAD
 cd "$WORKTREE"
 
-# The worktree must carry the JSON report support this harness depends on. If it
-# predates that, the checkout is too old — bail with a clear message rather than
-# failing obscurely later.
+# The eval scores HEAD, so everything it needs must be COMMITTED: the worktree
+# carries no uncommitted files. Check the two load-bearing pieces up front and
+# say exactly what is missing rather than failing obscurely later.
 if ! go run ./cmd/sdkcoverage report -format json >/dev/null 2>&1; then
-	echo "this checkout's sdkcoverage has no -format json; run the eval from a branch that includes the detector JSON work" >&2
+	echo "HEAD's sdkcoverage has no -format json — the eval runs against HEAD, so run it from a checkout whose HEAD includes the detector JSON work (main after PR #214) with the scaffolding files committed" >&2
+	exit 2
+fi
+if [ ! -f "$PROMPT_TEMPLATE" ]; then
+	echo "HEAD does not contain $PROMPT_TEMPLATE — the eval runs against HEAD, so uncommitted scaffolding files are invisible here; commit or merge them first" >&2
 	exit 2
 fi
 
