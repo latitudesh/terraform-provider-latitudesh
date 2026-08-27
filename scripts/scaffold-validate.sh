@@ -188,9 +188,13 @@ echo "ok: builds"
 
 # ------------------------------------------------------------------ 6. tests --
 # The offline unit tests, which include TestProviderSDKCoverage. TF_ACC is
-# explicitly unset so no acceptance test tries to reach the live API.
+# explicitly unset so no acceptance test tries to reach the live API, and so is
+# LATITUDESH_AUTH_TOKEN: a stray token in the caller's shell would let a test
+# that eagerly touches the shared fixture reach the real API from what is
+# supposed to be the offline tier — the gate must behave identically on a dev
+# machine and in CI.
 step "6/9 unit tests"
-env -u TF_ACC go test ./latitudesh ./internal/... || fail "unit tests failed"
+env -u TF_ACC -u LATITUDESH_AUTH_TOKEN go test ./latitudesh ./internal/... || fail "unit tests failed"
 echo "ok: unit tests pass"
 
 # ------------------------------------------------------- 7. coverage reconciles --
