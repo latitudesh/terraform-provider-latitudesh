@@ -72,13 +72,23 @@ jobs:
         name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '^1.23.0'
+          # Read the toolchain from go.mod, the same way release.yml does. The old
+          # '^1.23.0' floated to whatever Go was newest at run time, so CI compiled
+          # with a different toolchain than the one releases ship with — and the
+          # stdlib vulnerabilities a Go upgrade fixes were invisible here.
+          go-version-file: 'go.mod'
       -
+        # Not `go get .`: that resolves and upgrades the whole dependency graph,
+        # rewriting go.mod and go.sum inside the runner. CI then built something
+        # other than what the repository pins, and went green on states that fail a
+        # plain `go build` — a bumped go.mod with a stale go.sum passed here twice.
+        # `go mod download` fetches exactly what is committed, and -mod=readonly
+        # below turns any remaining drift into a failure instead of a silent rewrite.
         name: Install dependencies
-        run: go get .
+        run: go mod download
       -
         name: Build
-        run: go build -v ./...
+        run: go build -v -mod=readonly ./...
       -
         # No -run filter on purpose. It used to be -run "TestProvider|TestFrameworkProvider",
         # which silently excluded every unit test whose name did not start with those two
@@ -161,15 +171,17 @@ jobs:
         name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '^1.23.0'
+          go-version-file: 'go.mod'
       -
         name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
       -
+        # See the build job: `go get .` would upgrade the dependency graph rather
+        # than install what go.mod and go.sum pin.
         name: Install dependencies
-        run: go get .
+        run: go mod download
       -
         name: Run E2E Tests
         # The test selector goes through the environment rather than being
