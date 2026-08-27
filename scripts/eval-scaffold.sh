@@ -27,7 +27,12 @@ set -euo pipefail
 
 CASE=""
 MODEL="claude-sonnet-5"
-MAX_TURNS="50"
+# The cap is runaway protection, not a target: measured runs gate-greened by
+# ~50-80 turns and the agent then polishes until killed (it cannot see a turn
+# counter), so 200 makes truncation rare while the handoff file (prompt v5)
+# makes it harmless. Cost scales with turns — the workflow warns above $6.
+# Keep in sync with SCAFFOLD_MAX_TURNS in .github/workflows/sdk-watch.yml.
+MAX_TURNS="200"
 DRY_RUN="false"
 KEEP="false"
 
@@ -142,34 +147,12 @@ SDK_VERSION=$(echo "$report" | jq -r '.sdk_version')
 
 echo "  group=$GROUP  type=$TF_NAME  kinds=[$KINDS]"
 
-# Render the prompt by substituting placeholders. Values go through the
-# environment, and the splice uses index/substr rather than gsub: a gsub
-# replacement string treats '&' and '\' specially, so a note containing either
-# would silently corrupt the rendered prompt.
-render_prompt() {
-	GROUP="$GROUP" KINDS="$KINDS" TF_NAME="$TF_NAME" METHODS="$METHODS" \
-		NOTES="$NOTES" SDK_VERSION="$SDK_VERSION" \
-		awk '
-		function subst(line, token, value,    out, i) {
-			out = ""
-			while ((i = index(line, token)) > 0) {
-				out = out substr(line, 1, i - 1) value
-				line = substr(line, i + length(token))
-			}
-			return out line
-		}
-		{
-			line = $0
-			line = subst(line, "{{GROUP}}", ENVIRON["GROUP"])
-			line = subst(line, "{{KINDS}}", ENVIRON["KINDS"])
-			line = subst(line, "{{TF_NAME}}", ENVIRON["TF_NAME"])
-			line = subst(line, "{{METHODS}}", ENVIRON["METHODS"])
-			line = subst(line, "{{NOTES}}", ENVIRON["NOTES"])
-			line = subst(line, "{{SDK_VERSION}}", ENVIRON["SDK_VERSION"])
-			print line
-		}' "$PROMPT_TEMPLATE"
-}
-render_prompt > "$ART_DIR/prompt.txt"
+# Render through the shared script — the same one the scaffold job uses in CI —
+# via $ROOT so a renderer fix under review is what actually gets exercised (the
+# worktree only carries HEAD). The template itself is read from the worktree.
+GROUP="$GROUP" KINDS="$KINDS" TF_NAME="$TF_NAME" METHODS="$METHODS" \
+	NOTES="$NOTES" SDK_VERSION="$SDK_VERSION" MAX_TURNS="$MAX_TURNS" \
+	"$ROOT/scripts/render-scaffold-prompt.sh" "$PROMPT_TEMPLATE" > "$ART_DIR/prompt.txt"
 
 if [ "$DRY_RUN" = "true" ]; then
 	echo
@@ -190,12 +173,19 @@ ALLOWED_TOOLS="Read,Glob,Grep,Edit,Write,MultiEdit,Bash(go build:*),Bash(go vet:
 
 echo
 echo "== running the agent (model=$MODEL, max-turns=$MAX_TURNS) =="
+# A stale handoff from a previous run must never score as this run's — the
+# prompt has the agent maintain this exact path from its first draft onwards.
+rm -f /tmp/scaffold-handoff.md
 set +e
-claude -p "$(cat "$ART_DIR/prompt.txt")" \
+# The prompt goes through stdin, never as an argument: it starts with the
+# template's `---` frontmatter, and the CLI's option parser rejects a leading
+# dash as an unknown flag before print mode ever sees it.
+claude -p \
 	--model "$MODEL" \
 	--max-turns "$MAX_TURNS" \
 	--allowedTools "$ALLOWED_TOOLS" \
-	--output-format json >"$ART_DIR/claude-out.json" 2>"$ART_DIR/claude-err.txt"
+	--output-format json \
+	<"$ART_DIR/prompt.txt" >"$ART_DIR/claude-out.json" 2>"$ART_DIR/claude-err.txt"
 agent_status=$?
 set -e
 
@@ -213,6 +203,13 @@ bash scripts/scaffold-validate.sh --group "$GROUP" --type-name "$TF_NAME" --kind
 score=$?
 set -e
 
+if [ -f /tmp/scaffold-handoff.md ]; then
+	handoff_state="file present ($(wc -c < /tmp/scaffold-handoff.md | tr -d ' ') bytes)"
+	cp /tmp/scaffold-handoff.md "$ART_DIR/scaffold-handoff.md"
+else
+	handoff_state="MISSING — a turn-capped session then ships no handoff at all"
+fi
+
 echo
 echo "======================= eval result ======================="
 echo "  case:      $CASE ($GROUP -> $TF_NAME)"
@@ -220,6 +217,7 @@ echo "  model:     $MODEL"
 echo "  cost:      \$$cost"
 echo "  turns:     $turns"
 echo "  agent:     exit $agent_status"
+echo "  handoff:   $handoff_state"
 if [ "$score" -eq 0 ]; then
 	echo "  gate:      PASS"
 else
@@ -228,11 +226,14 @@ fi
 echo "  artifacts: $ART_DIR"
 echo "==========================================================="
 
-# A crashed agent is a failed eval even when the tree it left behind happens to
-# validate — otherwise a prompt change that makes the agent die at the finish
-# line would still score green.
-if [ "$agent_status" -ne 0 ]; then
-	echo "RESULT: FAIL — the agent process exited $agent_status (gate outcome above is informational)"
-	exit 1
+# The gate is the arbiter here exactly as in the scaffold job: production opens
+# the PR whenever the gate passes, whatever the agent's exit status, so scoring
+# a stricter bar would block prompt iterations production happily ships. A
+# non-zero agent exit still prints loudly — it usually means the turn cap fired,
+# which costs the reviewer handoff and flags prompt inefficiency — but it does
+# not flip a green gate red. An agent that died early leaves a tree the gate
+# fails on its own.
+if [ "$agent_status" -ne 0 ] && [ "$score" -eq 0 ]; then
+	echo "RESULT: PASS with a caveat — the agent exited $agent_status (turn cap?), so no handoff was emitted; review prompt efficiency before shipping this prompt version"
 fi
 exit "$score"

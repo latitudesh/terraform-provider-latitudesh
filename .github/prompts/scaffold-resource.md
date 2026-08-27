@@ -1,5 +1,5 @@
 ---
-prompt-version: 2
+prompt-version: 5
 ---
 
 # Scaffold Terraform support for a latitudesh-go-sdk service group
@@ -34,6 +34,21 @@ different task with a different review.
 
 Notes of `none` mean nobody has looked at this group yet — not that it is clean.
 Derive the shape from the SDK and record what you find.
+
+## Turn budget
+
+You have a hard cap of {{MAX_TURNS}} turns; a clean pass fits well under it.
+Spend them like money:
+
+- Read only the exemplar files the conventions table points at for obligations
+  you actually have.
+- Batch independent `go doc` lookups instead of one call per symbol.
+- Run the full gate at most twice: once after your first complete draft, once
+  after fixing what it reported.
+- You cannot see a turn counter, so do not try to pace yourself — instead, keep
+  `/tmp/scaffold-handoff.md` current from your first draft onwards (see the
+  Finish section). A turn-capped session emits no final message; that file is
+  the only handoff that survives, and the gate decides whether the PR opens.
 
 ## Confirm every SDK symbol — never guess
 
@@ -129,6 +144,13 @@ only has to compile; a human runs it. Use the existing helpers:
 `testAccCheck<Name>Destroy` built on `newSDKClientFromEnv()`, and
 `testAccSharedServers(t, n)` if you need a server.
 
+**Plain `go test ./latitudesh` — no `TF_ACC`, no token — must stay green with
+your tests included; the gate runs exactly that.** Anything that could reach the
+API (`testAccSharedServers`, raw SDK clients, anything that provisions) belongs
+inside `resource.Test`'s callbacks — `PreCheck`, `Steps`, config funcs — which
+self-skip without `TF_ACC`. Never call it eagerly in the test function body: an
+eager call runs on every contributor's `go test` and fails the gate.
+
 Do not run acceptance tests and do not record cassettes. Cassettes live in
 `latitudesh/fixtures/<TestName>.yaml` and a human records them with
 `LATITUDE_TEST_RECORDER=record`; most newer resources have none and run live.
@@ -149,16 +171,24 @@ Do not run acceptance tests and do not record cassettes. Cassettes live in
 ## Hard rules
 
 - Touch only: `latitudesh/{resource,datasource,action}_*.go`, `latitudesh/*_test.go`,
-  `latitudesh/provider.go`, `sdk-coverage.yaml`, `templates/**`, `examples/**`, `docs/**`.
-  Not `go.mod`, not `cmd/`, not `internal/`, not `.github/`.
+  `latitudesh/provider.go`, `sdk-coverage.yaml`, `templates/**`, `examples/**`, `docs/**` —
+  plus the handoff file `/tmp/scaffold-handoff.md`, which is the one write allowed
+  outside the repository. Not `go.mod`, not `cmd/`, not `internal/`, not `.github/`.
 - Never add a `go:generate` directive.
 - Never reach the network, provision infrastructure, run acceptance tests, or record cassettes.
 - Never write a token, key, or secret anywhere.
 - Never hand-edit `docs/` — edit the template and regenerate.
 
-## Finish: gate, then handoff
+## Finish: handoff file, then gate
 
-Run the gate and fix what it reports:
+**As soon as your first complete draft builds, write the full handoff block
+(below) to `/tmp/scaffold-handoff.md` with the Write tool, and update the file
+whenever you learn something new.** This file is your insurance: a session that
+hits the turn cap emits no final message at all, and the pipeline then reads the
+handoff from this file. It lives outside the repo tree on purpose — never write
+it inside the repository.
+
+Then run the gate and fix what it reports:
 
 ```
 scripts/scaffold-validate.sh --group {{GROUP}} --type-name {{TF_NAME}} --kinds "{{KINDS}}"
@@ -169,9 +199,9 @@ is well-formed: gofmt, vet, build, offline tests, coverage reconcile, docs
 regenerate clean, and every requested kind registered with its file, template,
 example and tests.
 
-`PASS` does **not** mean correct. End your run with this block, filled in. Write
-"none" only where genuinely nothing applies — the reviewer reads this before the
-diff.
+`PASS` does **not** mean correct. End your final message with the same block,
+filled in. Write "none" only where genuinely nothing applies — the reviewer
+reads this before the diff.
 
 ```markdown
 ## Handoff — not verified offline

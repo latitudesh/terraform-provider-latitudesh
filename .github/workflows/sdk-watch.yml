@@ -1,12 +1,12 @@
 name: "SDK coverage watch"
 
-# Phase 1 of the auto-scaffolding pipeline: on a weekly cadence (or on demand),
-# reconcile the *latest* published latitudesh-go-sdk against what this provider
-# ships and keep a single tracking issue up to date with the groups that have no
-# coverage yet. This job never spends money and never writes code — detection is
-# the $0 path, and it stays that way by construction (no Anthropic key is present
-# in any job here). The scaffolding agent that turns a pending group into a draft
-# PR is added to this same file in a later PR.
+# The auto-scaffolding pipeline: on a weekly cadence (or on demand), reconcile
+# the *latest* published latitudesh-go-sdk against what this provider ships,
+# keep a single tracking issue up to date with the groups that have no coverage
+# yet, and turn the top pending group into a draft PR through the scaffolding
+# agent. Detection is the $0 path and stays that way by construction: the
+# Anthropic key exists only in the scaffold job, which is skipped entirely when
+# there is nothing to scaffold.
 on:
   # Weekly is enough: a new SDK service group is rare (2 in 29 releases), and the
   # acceptance criterion is a delta surfaced within 7 days.
@@ -15,11 +15,11 @@ on:
   workflow_dispatch:
     inputs:
       group:
-        description: "Single SDK group to scaffold (consumed by the scaffold job added later; ignored by detection)."
+        description: "Single SDK group to scaffold, overriding top-of-queue selection (ignored by detection). Also the retry channel for a parked group."
         required: false
         default: ""
       dry_run:
-        description: "Render the tracking issue to the run summary without creating or editing anything."
+        description: "Render the tracking issue to the run summary without creating or editing anything, and skip the scaffold job."
         required: false
         type: boolean
         default: false
@@ -306,3 +306,467 @@ jobs:
             gh issue create --title "$title" --label "$TRACKING_LABEL" --body-file body.md
             echo "Created a new tracking issue"
           fi
+
+  # Turn ONE pending group into a draft PR. One group per run keeps prompts
+  # small, failures attributable, and manifest/provider.go conflicts between
+  # sibling scaffold PRs structurally rare; the open-PR cap keeps the reviewer's
+  # plate full without flooding. This is the only job that can see the Anthropic
+  # key, and it never runs on an empty queue — the $0-on-no-delta guarantee is
+  # structural, not behavioral.
+  scaffold:
+    needs: detect
+    # Real work only, on a sane pinned manifest, never on a dry run. A
+    # contradicted manifest means the coverage ledger is lying, and scaffolding
+    # on top of it risks double-implementing a group.
+    if: >-
+      github.event.inputs.dry_run != 'true' &&
+      needs.detect.outputs.pending != '0' &&
+      needs.detect.outputs.pinned_check_ok == 'true'
+    runs-on: ubuntu-latest
+    # 60, not 45: the agent step alone may take its full 30 and the Go
+    # builds/gate around it are not free. A job-level timeout is a cancellation,
+    # which skips every failure() handler — it must stay slack, the step
+    # timeouts are the real budget.
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      # Dedupe reads PR labels with the default token. Pushing, opening the PR,
+      # and labeling it use the GitHub App token instead — a PR created with the
+      # default GITHUB_TOKEN would never trigger test.yml (so the draft would sit
+      # with no checks), and `gh pr edit --add-label` is a PR mutation the
+      # read-scoped default token cannot perform.
+      pull-requests: read
+      issues: write
+    env:
+      # Deliberately NOT job-level GH_TOKEN: the agent step inherits job env, and
+      # the allowlisted go commands compile and run code the agent just wrote —
+      # handing that step a GitHub token would gift-wrap it for exfiltration.
+      # Steps that call gh set GH_TOKEN in their own env instead.
+      GH_REPO: ${{ github.repository }}
+      SDK_MODULE: github.com/latitudesh/latitudesh-go-sdk
+      LATEST: ${{ needs.detect.outputs.latest }}
+      MAX_OPEN_SCAFFOLD_PRS: "2"
+      # Model policy (DX-23): claude-sonnet-5 default; escalate to opus manually
+      # (workflow_dispatch after a failed run) when a delta is structurally
+      # ambiguous.
+      SCAFFOLD_MODEL: claude-sonnet-5
+      # Keep in sync with MAX_TURNS in scripts/eval-scaffold.sh — the eval only
+      # predicts production while both grant the same budget. The cap is runaway
+      # protection, not a target: measured runs gate-greened by ~50-80 turns and
+      # the agent polishes until killed, so 200 makes truncation rare while the
+      # handoff file makes it harmless. The cost step warns above $6.
+      SCAFFOLD_MAX_TURNS: "200"
+      GIT_BOT_NAME: "latitudesh-sdk-watch[bot]"
+      GIT_BOT_EMAIL: "latitudesh-sdk-watch[bot]@users.noreply.github.com"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Without this, checkout persists the default token as an
+          # http.extraheader in .git/config, which silently OVERRIDES the app
+          # token embedded in the push URL below — the push would run with the
+          # read-only default token and fail. It would also sit readable in the
+          # workspace during the agent step.
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: "go.mod"
+
+      - name: Download coverage report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: sdk-coverage-report
+          # NEVER into the workspace: report.json/pinned_check.txt would sit
+          # there as untracked files, and the gate's diff-scope check (which
+          # scans untracked files too) would fail every single run — after the
+          # agent spend, and unfixably, since the agent cannot delete files.
+          path: ${{ runner.temp }}/sdk-coverage
+
+      - name: Select the group to scaffold
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OVERRIDE: ${{ github.event.inputs.group }}
+        run: |
+          set -euo pipefail
+          # Groups already claimed by an open scaffold PR are never re-picked;
+          # groups whose scaffold PR closed without merging are parked until
+          # sdk-coverage.yaml records a ceiling+rationale for them (or a human
+          # retries explicitly via the `group` input, which is the whole point
+          # of letting the override bypass the parked list — but never an open
+          # claim, which would double-scaffold).
+          claimed=$(gh pr list --label scaffold --state open --json labels \
+            --jq '[.[].labels[].name | select(startswith("scaffold:")) | ltrimstr("scaffold:")] | unique | .[]')
+          parked=$(gh pr list --label scaffold --state closed --limit 100 --json labels,mergedAt \
+            --jq '[.[] | select(.mergedAt == null) | .labels[].name | select(startswith("scaffold:")) | ltrimstr("scaffold:")] | unique | .[]')
+
+          report="$RUNNER_TEMP/sdk-coverage/report.json"
+          pick=""
+          if [ -n "$OVERRIDE" ]; then
+            if ! jq -e --arg g "$OVERRIDE" '.pending[] | select(.group==$g)' "$report" >/dev/null; then
+              echo "::error::requested group '$OVERRIDE' is not in the pending queue against $LATEST"
+              exit 1
+            fi
+            if printf '%s\n' "$claimed" | grep -Fxq "$OVERRIDE"; then
+              echo "::error::an open scaffold PR already claims '$OVERRIDE' — close it before re-running"
+              exit 1
+            fi
+            pick="$OVERRIDE"
+          else
+            open_count=$(gh pr list --label scaffold --state open --json number --jq 'length')
+            if [ "$open_count" -ge "$MAX_OPEN_SCAFFOLD_PRS" ]; then
+              echo "has_work=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::$open_count scaffold PR(s) already open (cap $MAX_OPEN_SCAFFOLD_PRS) — not scaffolding this run"
+              exit 0
+            fi
+            while read -r g; do
+              printf '%s\n' "$claimed" | grep -Fxq "$g" && continue
+              printf '%s\n' "$parked" | grep -Fxq "$g" && continue
+              pick="$g"
+              break
+            done < <(jq -r '.pending[].group' "$report")
+          fi
+
+          if [ -z "$pick" ]; then
+            echo "has_work=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::every pending group is claimed or parked — nothing to scaffold"
+            exit 0
+          fi
+          echo "has_work=true" >> "$GITHUB_OUTPUT"
+          echo "group=$pick" >> "$GITHUB_OUTPUT"
+          echo "Selected: $pick"
+
+      - name: Bump the SDK when the pinned surface lacks the group
+        if: steps.select.outputs.has_work == 'true'
+        env:
+          GROUP: ${{ steps.select.outputs.group }}
+        run: |
+          set -euo pipefail
+          # Capture first, test second: piping `go run` straight into `jq -e`
+          # would read a crashed report as "group not pending" and bump on top
+          # of a broken tool.
+          pinned_report=$(go run ./cmd/sdkcoverage report -format json)
+          if echo "$pinned_report" | jq -e --arg g "$GROUP" '.pending[] | select(.group==$g)' >/dev/null; then
+            echo "pinned SDK already exposes $GROUP — no bump needed"
+            exit 0
+          fi
+          # The group only exists in the newer SDK. The bump belongs in the
+          # scaffold branch, reviewed together with the code that needs it; the
+          # agent itself is forbidden from touching go.mod, so the workflow
+          # commits the bump first and the gate diffs the agent's work against
+          # that commit.
+          echo "pinned SDK lacks $GROUP — bumping to $LATEST"
+          go get "$SDK_MODULE@$LATEST"
+          go mod tidy
+          # A bump that breaks the build is human work, not agent work: stop
+          # before spending a single token.
+          go build ./...
+          git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
+            commit -m "chore(deps): bump latitudesh-go-sdk to $LATEST" -- go.mod go.sum
+
+      - name: Render the scaffold prompt
+        id: render
+        if: steps.select.outputs.has_work == 'true'
+        env:
+          GROUP: ${{ steps.select.outputs.group }}
+        run: |
+          set -euo pipefail
+          report=$(go run ./cmd/sdkcoverage report -format json)
+          group_json=$(echo "$report" | jq -c --arg g "$GROUP" '.pending[] | select(.group==$g)')
+          if [ -z "$group_json" ]; then
+            echo "::error::$GROUP is still not pending against the pinned SDK after the bump step"
+            exit 1
+          fi
+          TF_NAME=$(echo "$group_json" | jq -r '.suggested_type_name')
+          KINDS=$(echo "$group_json" | jq -r '.generates | join(", ")')
+          METHODS=$(echo "$group_json" | jq -r '.methods | join(", ")')
+          NOTES=$(echo "$group_json" | jq -r 'if (.notes // "") == "" then "none" else (.notes | gsub("\\s+";" ")) end')
+          SDK_VERSION=$(echo "$report" | jq -r '.sdk_version')
+
+          # A stale handoff from a previous process must never masquerade as this
+          # run's — the PR-body fallback reads this exact path.
+          rm -f /tmp/scaffold-handoff.md
+
+          GROUP="$GROUP" KINDS="$KINDS" TF_NAME="$TF_NAME" METHODS="$METHODS" \
+            NOTES="$NOTES" SDK_VERSION="$SDK_VERSION" MAX_TURNS="$SCAFFOLD_MAX_TURNS" \
+            scripts/render-scaffold-prompt.sh > /tmp/scaffold-prompt.md
+
+          {
+            echo "prompt<<SCAFFOLD_PROMPT_EOF"
+            cat /tmp/scaffold-prompt.md
+            echo "SCAFFOLD_PROMPT_EOF"
+            echo "tf_name=$TF_NAME"
+            echo "kinds=$KINDS"
+            echo "methods=$METHODS"
+            echo "crud=$(echo "$group_json" | jq -r '.crud')"
+            echo "sdk_version=$SDK_VERSION"
+            echo "covered_before=$(echo "$report" | jq -r '.counts.covered')"
+            echo "pending_before=$(echo "$report" | jq -r '.counts.pending')"
+            echo "total_groups=$(echo "$report" | jq -r '.counts.total')"
+            echo "notes<<SCAFFOLD_NOTES_EOF"
+            echo "$NOTES"
+            echo "SCAFFOLD_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run the scaffolding agent
+        id: agent
+        if: steps.select.outputs.has_work == 'true'
+        timeout-minutes: 30
+        # The gate below is the arbiter, not the agent's exit code: an agent
+        # that hits the turn cap after finishing the tree (measured: it happens)
+        # should still ship its draft, and an agent that died early leaves a
+        # tree the gate fails on its own.
+        continue-on-error: true
+        uses: anthropics/claude-code-action@70fec183852c4f82f3f1969faed7dd60c5149ca7 # v1.0.207
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Without an explicit token the action's prepare phase falls back to a
+          # GitHub OIDC exchange that needs `id-token: write` plus the Claude
+          # GitHub App, and fails at startup before a single Claude turn. The
+          # deliberately read-scoped default token is enough: agent mode on
+          # schedule/workflow_dispatch performs no comment or branch writes.
+          github_token: ${{ github.token }}
+          prompt: ${{ steps.render.outputs.prompt }}
+          # The allowlist mirrors scripts/eval-scaffold.sh exactly — the eval is
+          # only evidence about production if both grant the same tools. No gh,
+          # no git writes, no network, no free shell: commits and the PR are made
+          # by the deterministic steps below, never by the agent.
+          claude_args: >-
+            --model ${{ env.SCAFFOLD_MODEL }}
+            --max-turns ${{ env.SCAFFOLD_MAX_TURNS }}
+            --allowedTools "Read,Glob,Grep,Edit,Write,MultiEdit,Bash(go build:*),Bash(go vet:*),Bash(go test:*),Bash(go doc:*),Bash(gofmt:*),Bash(go generate:*),Bash(go run ./cmd/sdkcoverage:*),Bash(jq:*),Bash(scripts/scaffold-validate.sh:*)"
+
+      - name: Report agent cost
+        id: cost
+        if: always() && steps.agent.outcome != 'skipped' && steps.agent.outputs.execution_file != ''
+        env:
+          EXEC_FILE: ${{ steps.agent.outputs.execution_file }}
+        run: |
+          set -uo pipefail
+          # The execution file is either a single result object or an array of
+          # transcript records whose last "result" entry carries the totals.
+          cost=$(jq -r 'if type=="array" then (map(select(.type? == "result")) | last | .total_cost_usd // empty) else (.total_cost_usd // empty) end' "$EXEC_FILE" 2>/dev/null || true)
+          turns=$(jq -r 'if type=="array" then (map(select(.type? == "result")) | last | .num_turns // empty) else (.num_turns // empty) end' "$EXEC_FILE" 2>/dev/null || true)
+          cost=${cost:-unknown}
+          turns=${turns:-unknown}
+          echo "cost=$cost" >> "$GITHUB_OUTPUT"
+          echo "turns=$turns" >> "$GITHUB_OUTPUT"
+          echo "## Scaffold agent: \$${cost}, ${turns} turn(s)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$cost" != "unknown" ] && awk "BEGIN { exit !($cost > 6) }"; then
+            echo "::warning::agent run cost \$${cost} — above the \$6 watermark, review the transcript for thrash"
+          fi
+
+      - name: Validate the scaffold
+        if: steps.select.outputs.has_work == 'true'
+        env:
+          GROUP: ${{ steps.select.outputs.group }}
+          TF_NAME: ${{ steps.render.outputs.tf_name }}
+          KINDS: ${{ steps.render.outputs.kinds }}
+        run: |
+          set -euo pipefail
+          bash scripts/scaffold-validate.sh --group "$GROUP" --type-name "$TF_NAME" --kinds "$KINDS" --base HEAD
+
+      - name: Mint the installation token
+        id: app
+        if: steps.select.outputs.has_work == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.SDK_WATCH_CLIENT_ID }}
+          private-key: ${{ secrets.SDK_WATCH_APP_PRIVATE_KEY }}
+
+      - name: Push the branch and open the draft PR
+        if: steps.select.outputs.has_work == 'true'
+        env:
+          GROUP: ${{ steps.select.outputs.group }}
+          TF_NAME: ${{ steps.render.outputs.tf_name }}
+          KINDS: ${{ steps.render.outputs.kinds }}
+          METHODS: ${{ steps.render.outputs.methods }}
+          CRUD: ${{ steps.render.outputs.crud }}
+          SDK_VERSION: ${{ steps.render.outputs.sdk_version }}
+          COVERED_BEFORE: ${{ steps.render.outputs.covered_before }}
+          PENDING_BEFORE: ${{ steps.render.outputs.pending_before }}
+          TOTAL_GROUPS: ${{ steps.render.outputs.total_groups }}
+          NOTES: ${{ steps.render.outputs.notes }}
+          COST: ${{ steps.cost.outputs.cost }}
+          TURNS: ${{ steps.cost.outputs.turns }}
+          EXEC_FILE: ${{ steps.agent.outputs.execution_file }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          short="${TF_NAME#latitudesh_}"
+          branch="scaffold/${short}-${{ github.run_id }}"
+
+          # Commit by explicit pathspec — the gate already proved the diff is in
+          # scope, and adding by name means a stray file could not ride along
+          # even if it were not.
+          git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
+            add -- latitudesh sdk-coverage.yaml templates examples docs
+          git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
+            commit -m "feat(${short}): scaffold ${TF_NAME} from SDK group ${GROUP}"
+          git push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/${branch}"
+
+          prompt_version=$(sed -n 's/^prompt-version: *//p' .github/prompts/scaffold-resource.md | head -1)
+          # The handoff is agent-authored free text going into a PR body — cap it
+          # so a runaway or adversarial block cannot balloon the PR description.
+          # It is written via --body-file, never through a shell eval. A
+          # turn-capped session emits no final message, so fall back to the
+          # handoff FILE the prompt has the agent maintain from its first draft.
+          handoff=$(jq -r 'if type=="array" then (map(select(.type? == "result")) | last | .result // "") else (.result // "") end' "$EXEC_FILE" 2>/dev/null | awk '/^## Handoff/{found=1} found' | head -c 8000 || true)
+          if [ -z "$handoff" ] && [ -f /tmp/scaffold-handoff.md ]; then
+            handoff=$(head -c 8000 /tmp/scaffold-handoff.md)
+          fi
+          if [ -z "$handoff" ]; then
+            handoff="_The agent did not emit a handoff block — read the transcript in the run artifacts before reviewing._"
+          fi
+
+          # The tree now carries the scaffold, so a fresh report gives the
+          # after-merge coverage numbers for the summary.
+          after=$(go run ./cmd/sdkcoverage report -format json)
+          covered_after=$(echo "$after" | jq -r '.counts.covered')
+          pending_after=$(echo "$after" | jq -r '.counts.pending')
+
+          methods_md=$(printf '%s' "$METHODS" | sed 's/, /`, `/g; s/^/`/; s/$/`/')
+
+          # Body structure mirrors the Speakeasy generation PRs on
+          # latitudesh-go-sdk (e.g. #130): summary + coverage bump up top, a
+          # keep-or-drop callout, surface changes as bullets, a facts table,
+          # verbose material folded into <details>, attribution footer.
+          {
+            echo "# Provider scaffold"
+            echo
+            echo "## Coverage"
+            echo
+            echo "Coverage Bump: [${COVERED_BEFORE} → ${covered_after} of ${TOTAL_GROUPS} SDK service groups] - 🤖 (automated)"
+            echo
+            echo "> [!TIP]"
+            echo "> Reviewing this draft is where the keep-or-drop decision is made. **Keep it** — merge, and \`$GROUP\` is covered. **Drop it** — close this PR **and** record a \`ceiling\` + \`rationale\` under \`$GROUP\` in \`sdk-coverage.yaml\`, so it stops being regenerated."
+            echo
+            echo "## Provider Changes:"
+            echo
+            echo "* \`$TF_NAME\` — **New** ($KINDS) for SDK group \`$GROUP\`, CRUD shape \`$CRUD\`"
+            echo "* SDK methods on the group: $methods_md"
+            echo "* Registered in \`latitudesh/provider.go\`, with docs template, example, and tests"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| SDK version | \`$SDK_VERSION\` |"
+            echo "| Pending groups | ${PENDING_BEFORE} → ${pending_after} |"
+            echo "| Prompt | \`.github/prompts/scaffold-resource.md\` v${prompt_version:-?} |"
+            echo "| Agent | \`$SCAFFOLD_MODEL\`, ${TURNS:-?} turn(s), \$${COST:-?} |"
+            echo
+            echo "<details>"
+            echo "<summary>Manifest notes</summary>"
+            echo
+            echo "> $NOTES"
+            echo
+            echo "</details>"
+            echo
+            echo "<details>"
+            echo "<summary>Agent handoff — not verified offline</summary>"
+            echo
+            echo "$handoff"
+            echo
+            echo "</details>"
+            echo
+            echo "<details>"
+            echo "<summary>Validation report</summary>"
+            echo
+            echo "Every gate step passed before this PR was opened: diff scope, forbidden-content grep, gofmt, go vet, go build, unit tests (incl. \`TestProviderSDKCoverage\`), coverage reconcile, docs regeneration, per-kind registration and deliverables."
+            echo
+            echo "The gate proves the scaffold is well-formed, **not that it is correct** — that is what the checklist below is for."
+            echo
+            echo "</details>"
+            echo
+            echo "## Reviewer checklist"
+            echo
+            echo "- [ ] Endpoints verified against production (mandatory when the manifest notes flag spec gaps)"
+            echo "- [ ] Schema reviewed: types, required vs optional, sensitive fields that would land in state"
+            echo "- [ ] Acceptance test exercised — record a cassette (\`LATITUDE_TEST_RECORDER=record\`) or note why it runs live-only"
+            echo "- [ ] Docs and example read sensibly, not just generated-correct"
+            echo "- [ ] Mark ready for review so e2e runs (drafts never run acceptance)"
+            echo
+            echo "---"
+            echo
+            echo "Generated from [\`latitudesh-go-sdk\`](https://github.com/latitudesh/latitudesh-go-sdk) \`$SDK_VERSION\` by the [sdk-watch workflow]($RUN_URL)."
+            echo
+            echo "<!-- scaffold:$GROUP -->"
+          } > pr-body.md
+
+          # Label creation is an issues-API write (default token, issues: write);
+          # attaching labels to the PR is a PR mutation, which the read-scoped
+          # default token cannot do — that goes through the app token. The labels
+          # MUST land: dedupe, the open-PR cap, and parking all key off them.
+          GH_TOKEN="${{ github.token }}" gh label create scaffold --color 5319e7 \
+            --description "Agent-scaffolded SDK coverage PR" 2>/dev/null || true
+          GH_TOKEN="${{ github.token }}" gh label create "scaffold:${GROUP}" --color 5319e7 \
+            --description "Scaffold PR for SDK group ${GROUP}" 2>/dev/null || true
+
+          url=$(GH_TOKEN="$APP_TOKEN" gh pr create --draft \
+            --head "$branch" \
+            --title "feat(${short}): 🤖 scaffold ${TF_NAME} from SDK group ${GROUP}" \
+            --body-file pr-body.md)
+          GH_TOKEN="$APP_TOKEN" gh pr edit "$url" --add-label scaffold --add-label "scaffold:${GROUP}"
+          echo "Draft PR: $url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the transcript
+        if: steps.select.outputs.has_work == 'true' && steps.agent.outputs.execution_file != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: scaffold-transcript
+          path: ${{ steps.agent.outputs.execution_file }}
+          retention-days: 14
+          overwrite: true
+          if-no-files-found: ignore
+
+      # A failed run must stay loud and inspectable: the tree the agent left
+      # behind and its transcript go up as artifacts, the tracking issue gets a
+      # note, and the job exits red — a silent green failure is the one outcome
+      # this pipeline is not allowed to produce. These live at the END of the job
+      # so they also cover mint/push/PR failures: a failure() step earlier in the
+      # list would already have been skipped-as-success by the time those run.
+      - name: Capture the failed tree
+        if: failure() && steps.select.outputs.has_work == 'true'
+        run: |
+          set -uo pipefail
+          git add -A
+          git diff --cached HEAD > scaffold-failure.patch || true
+          git status --porcelain > scaffold-failure-status.txt || true
+          # Artifacts on a public repo are publicly downloadable. The gate greps
+          # the diff for key material and FAILS on a hit — which is exactly when
+          # this path runs — so the same patterns must gate what gets uploaded,
+          # or the failure artifact would publish the very secret the gate caught.
+          if grep -Eq 'sk-ant-|ANTHROPIC_API_KEY|BEGIN[ A-Z]*PRIVATE KEY' scaffold-failure.patch; then
+            echo "patch withheld: it matches a key-material pattern; inspect the run log instead" > scaffold-failure.patch
+            echo "::warning::failure patch withheld — key-material pattern detected in the agent's tree"
+          fi
+
+      - name: Upload failure artifacts
+        if: failure() && steps.select.outputs.has_work == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: scaffold-failure
+          path: |
+            /tmp/scaffold-prompt.md
+            ${{ steps.agent.outputs.execution_file }}
+            scaffold-failure.patch
+            scaffold-failure-status.txt
+          retention-days: 14
+          overwrite: true
+          if-no-files-found: ignore
+
+      - name: Note the failure on the tracking issue
+        if: failure() && steps.select.outputs.has_work == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GROUP: ${{ steps.select.outputs.group }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          existing=$(gh issue list --label sdk-coverage --state open --limit 100 \
+            --json number,body --jq \
+            'map(select(.body | contains("<!-- sdk-coverage-tracking -->"))) | sort_by(.number) | .[0].number // empty')
+          [ -n "$existing" ] || exit 0
+          gh issue comment "$existing" --body "Scaffold run for \`$GROUP\` failed — no PR was opened. Transcript and diff: $RUN_URL"
