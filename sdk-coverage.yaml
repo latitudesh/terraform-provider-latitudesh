@@ -69,6 +69,18 @@ sdk_module: github.com/latitudesh/latitudesh-go-sdk
 groups:
   # ---------------------------------------------------------------- covered ---
 
+  APIKeys:
+    implemented_by: [latitudesh_api_key]
+    notes: >-
+      Full CRUD, but managing API keys through Terraform means the key material
+      lands in state — weigh that when reviewing. Update is not wired up: it
+      calls the rotate-token endpoint (returns a new token/secret), a distinct
+      lifecycle from renaming/adjusting a key, and is out of scope for a plain
+      resource+datasource scaffold. The resource's Update lifecycle instead
+      calls UpdateAPIKey, which only changes name/read_only/allowed_ips without
+      rotating the token. There is also no single-item Get; reads go through
+      List and filter by ID.
+
   ElasticIps:
     implemented_by: [latitudesh_elastic_ip]
 
@@ -202,11 +214,6 @@ groups:
       VERIFY FIRST: the API checkout reviewed (2026-06-22) has backup domain code
       but no HTTP routes at all. The SDK exposing this group implies production does
       have the endpoints, but confirm before merging generated code against them.
-
-  APIKeys:
-    notes: >-
-      Full CRUD, but managing API keys through Terraform means the key material
-      lands in state — weigh that when reviewing.
 
   Traffic:
     notes: >-

@@ -1,0 +1,51 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+The API key resource allows you to create and manage API keys within your [Latitude.sh](https://latitude.sh/) account.
+
+> **Note:** The full token is only returned by the API when the key is created. That value is written to `token` in Terraform state, so **the state file itself becomes sensitive** for as long as this resource exists — protect it accordingly (remote state encryption, restricted access, etc.).
+
+## Example usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+You can import an API key resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_api_key` resource can be imported by specifying the API key ID:
+
+```sh
+terraform import latitudesh_api_key.ci <API_KEY_ID>
+```
+
+> **Note:** The API has no single-item read for API keys; import (and every subsequent refresh) lists all keys and matches by ID. Because the full token is only ever returned on create, `token` is **not** populated by import and remains empty in state until the next `terraform apply` that recreates the key.
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration.
+
+```hcl
+import {
+  to = latitudesh_api_key.ci
+  id = "<API_KEY_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_api_key.tf
+```
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.
