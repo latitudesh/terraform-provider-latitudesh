@@ -396,46 +396,66 @@ jobs:
       # orphan: runs are serialized by the concurrency group, and a live
       # finalize only holds a draft for the seconds between create and ready.
       # Its tree passed the gate and its body was written by the attempt that
-      # pushed it — finishing its lifecycle is just marking it ready. Without
-      # this, a run that died between labeling and `gh pr ready` would strand
-      # the PR in draft forever: the select step below sees the group as
-      # claimed and never routes back to it.
+      # pushed it — finishing its lifecycle means healing its labels and
+      # marking it ready. Discovery keys on the body marker, NOT on labels: the
+      # marker is written atomically with `gh pr create --body-file`, while
+      # labels only exist once a later call succeeds — an attempt that died in
+      # between leaves an unlabeled draft that a label-keyed query (and the
+      # label-keyed dedupe in the select step) would never see, letting a later
+      # run open a second PR for the same group.
       - name: Find orphaned scaffold drafts
         id: orphans
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          numbers=$(gh pr list --label scaffold --state open --json number,isDraft \
-            --jq '[.[] | select(.isDraft) | .number] | map(tostring) | join(" ")')
-          echo "numbers=$numbers" >> "$GITHUB_OUTPUT"
-          if [ -n "$numbers" ]; then
-            echo "::notice::orphaned draft scaffold PR(s) to adopt: $numbers"
+          adoptions=$(gh pr list --state open --json number,isDraft,body \
+            --jq '[.[] | select(.isDraft) | select((.body // "") | contains("<!-- scaffold:"))
+                   | "\(.number)=\((.body | capture("<!-- scaffold:(?<g>[^ ]+) -->").g))"] | join(" ")')
+          echo "adoptions=$adoptions" >> "$GITHUB_OUTPUT"
+          if [ -n "$adoptions" ]; then
+            echo "::notice::orphaned draft scaffold PR(s) to adopt: $adoptions"
           else
             echo "no orphaned drafts"
           fi
 
       - name: Mint a token to adopt orphans
         id: adopt_app
-        if: steps.orphans.outputs.numbers != ''
+        if: steps.orphans.outputs.adoptions != ''
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ vars.SDK_WATCH_CLIENT_ID }}
           private-key: ${{ secrets.SDK_WATCH_APP_PRIVATE_KEY }}
 
       - name: Adopt orphaned scaffold drafts
-        if: steps.orphans.outputs.numbers != ''
+        if: steps.orphans.outputs.adoptions != ''
         env:
-          # The app token, not the default one: a ready_for_review event fired
-          # by the default GITHUB_TOKEN would not trigger test.yml, and the
-          # adopted PR would sit ready with no checks.
-          GH_TOKEN: ${{ steps.adopt_app.outputs.token }}
-          NUMBERS: ${{ steps.orphans.outputs.numbers }}
+          # Label CREATION is a repo write on the issues API — the default
+          # token's issues:write covers it. Labeling the PR and marking it
+          # ready are PR mutations, and those need the app token anyway: a
+          # ready_for_review event fired by the default GITHUB_TOKEN would not
+          # trigger test.yml, and the adopted PR would sit ready with no checks.
+          DEFAULT_TOKEN: ${{ github.token }}
+          APP_TOKEN: ${{ steps.adopt_app.outputs.token }}
+          ADOPTIONS: ${{ steps.orphans.outputs.adoptions }}
         run: |
           set -euo pipefail
-          for n in $NUMBERS; do
-            gh pr ready "$n"
-            echo "adopted scaffold PR #$n — marked ready for review"
+          for adoption in $ADOPTIONS; do
+            n="${adoption%%=*}"
+            g="${adoption#*=}"
+            GH_TOKEN="$DEFAULT_TOKEN" gh label create scaffold --color 5319e7 \
+              --description "Agent-scaffolded SDK coverage PR" 2>/dev/null || true
+            GH_TOKEN="$DEFAULT_TOKEN" gh label create "scaffold:${g}" --color 5319e7 \
+              --description "Scaffold PR for SDK group ${g}" 2>/dev/null || true
+            GH_TOKEN="$DEFAULT_TOKEN" gh label create "type: feature" --color 0e8a16 \
+              --description "New user-facing functionality" 2>/dev/null || true
+            GH_TOKEN="$DEFAULT_TOKEN" gh label create skip-e2e --color ededed \
+              --description "Skip the acceptance suite on this PR" 2>/dev/null || true
+            GH_TOKEN="$APP_TOKEN" gh pr edit "$n" \
+              --add-label scaffold --add-label "scaffold:${g}" \
+              --add-label "type: feature" --add-label skip-e2e
+            GH_TOKEN="$APP_TOKEN" gh pr ready "$n"
+            echo "adopted scaffold PR #$n (group ${g}) — labels healed, marked ready"
           done
 
       - name: Select the group to scaffold
