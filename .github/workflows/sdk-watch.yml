@@ -489,8 +489,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          adoptions=$(gh pr list --state open --limit 100 --json number,isDraft,body \
-            --jq '[.[] | select(.isDraft) | select((.body // "") | contains("<!-- drift:"))
+          # Ownership is verified structurally, never by the body marker alone:
+          # the draft must have been AUTHORED by this workflow's GitHub App, sit
+          # on a same-repo drift/* branch, and carry the marker. Anything else —
+          # a fork, an off-namespace branch, or a human-authored draft that
+          # imitates all of it — must never be granted skip-e2e and promoted to
+          # ready by the app token. If the app is ever renamed, adoption fails
+          # CLOSED: orphans stay visibly draft until this login is updated.
+          adoptions=$(gh pr list --state open --limit 100 --json number,isDraft,body,author,headRefName,isCrossRepository \
+            --jq '[.[] | select(.isDraft)
+                   | select(.author.login == "app/latitudesh-sdk-watch")
+                   | select(.isCrossRepository | not)
+                   | select(.headRefName | startswith("drift/"))
+                   | select((.body // "") | contains("<!-- drift:"))
                    | "\(.number)=\((.body | capture("<!-- drift:(?<g>[^ ]+) -->").g))"] | join(" ")')
           echo "adoptions=$adoptions" >> "$GITHUB_OUTPUT"
           if [ -n "$adoptions" ]; then
@@ -672,14 +683,6 @@ jobs:
             echo "DRIFT_JSON_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # The agent's Write tool can reach .git and the runner home, and git
-      # config is a code-execution surface (hooks, core.fsmonitor,
-      # credential.helper, insteadOf URL rewrites). Snapshot the repo-local
-      # config now, restore it wholesale before any write token exists.
-      - name: Snapshot clean git metadata
-        if: steps.select.outputs.has_work == 'true'
-        run: cp .git/config "$RUNNER_TEMP/clean-git-config"
-
       - name: Run the drift-fix agent
         id: agent
         if: steps.select.outputs.has_work == 'true'
@@ -747,17 +750,31 @@ jobs:
           bash scripts/scaffold-validate.sh --mode drift --group "$GROUP" --base HEAD
 
       # Undo any agent tampering with git's code-execution surfaces before the
-      # write token exists: hooks emptied, repo-local config restored from the
-      # pre-agent snapshot. The finalize step additionally ignores global and
-      # system git config, which the agent's unrestricted Write could also
-      # have planted.
-      - name: Restore clean git metadata
+      # write token exists: hooks emptied, and the repo-local config REGENERATED
+      # from scratch — never restored from a snapshot, because every snapshot
+      # location (including RUNNER_TEMP) is reachable by the agent's Write tool,
+      # and restoring an agent-writable file would just launder the tampering
+      # back in. Everything below is deterministic; filters, fsmonitor,
+      # credential helpers, and insteadOf rewrites cannot survive it. The
+      # finalize step additionally ignores global and system git config.
+      - name: Reset git metadata to known-good
         if: steps.select.outputs.has_work == 'true'
         run: |
           set -euo pipefail
           rm -rf .git/hooks
           mkdir .git/hooks
-          cp "$RUNNER_TEMP/clean-git-config" .git/config
+          cat > .git/config <<EOF
+          [core]
+          	repositoryformatversion = 0
+          	filemode = true
+          	bare = false
+          	logallrefupdates = true
+          [remote "origin"]
+          	url = https://github.com/${GH_REPO}.git
+          	fetch = +refs/heads/*:refs/remotes/origin/*
+          [gc]
+          	auto = 0
+          EOF
 
       - name: Mint the installation token
         id: app
@@ -782,7 +799,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           # Global/system git config are agent-reachable files too — ignore
           # them entirely in this token-bearing step. Repo-local config was
-          # restored from the pre-agent snapshot a few steps up.
+          # regenerated from scratch a few steps up.
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_SYSTEM: /dev/null
         run: |
@@ -1091,8 +1108,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          adoptions=$(gh pr list --state open --limit 100 --json number,isDraft,body \
-            --jq '[.[] | select(.isDraft) | select((.body // "") | contains("<!-- scaffold:"))
+          # Ownership is verified structurally, never by the body marker alone:
+          # the draft must have been AUTHORED by this workflow's GitHub App, sit
+          # on a same-repo scaffold/* branch, and carry the marker. Anything
+          # else — a fork, an off-namespace branch, or a human-authored draft
+          # that imitates all of it — must never be granted skip-e2e and
+          # promoted to ready by the app token. If the app is ever renamed,
+          # adoption fails CLOSED: orphans stay visibly draft until this login
+          # is updated.
+          adoptions=$(gh pr list --state open --limit 100 --json number,isDraft,body,author,headRefName,isCrossRepository \
+            --jq '[.[] | select(.isDraft)
+                   | select(.author.login == "app/latitudesh-sdk-watch")
+                   | select(.isCrossRepository | not)
+                   | select(.headRefName | startswith("scaffold/"))
+                   | select((.body // "") | contains("<!-- scaffold:"))
                    | "\(.number)=\((.body | capture("<!-- scaffold:(?<g>[^ ]+) -->").g))"] | join(" ")')
           echo "adoptions=$adoptions" >> "$GITHUB_OUTPUT"
           if [ -n "$adoptions" ]; then
@@ -1277,14 +1306,6 @@ jobs:
             echo "SCAFFOLD_NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # The agent's Write tool can reach .git and the runner home, and git
-      # config is a code-execution surface (hooks, core.fsmonitor,
-      # credential.helper, insteadOf URL rewrites). Snapshot the repo-local
-      # config now, restore it wholesale before any write token exists.
-      - name: Snapshot clean git metadata
-        if: steps.select.outputs.has_work == 'true'
-        run: cp .git/config "$RUNNER_TEMP/clean-git-config"
-
       - name: Run the scaffolding agent
         id: agent
         if: steps.select.outputs.has_work == 'true'
@@ -1394,17 +1415,31 @@ jobs:
           echo "pending_after=$(echo "$after" | jq -r '.counts.pending')" >> "$GITHUB_OUTPUT"
 
       # Undo any agent tampering with git's code-execution surfaces before the
-      # write token exists: hooks emptied, repo-local config restored from the
-      # pre-agent snapshot. The finalize step additionally ignores global and
-      # system git config, which the agent's unrestricted Write could also
-      # have planted.
-      - name: Restore clean git metadata
+      # write token exists: hooks emptied, and the repo-local config REGENERATED
+      # from scratch — never restored from a snapshot, because every snapshot
+      # location (including RUNNER_TEMP) is reachable by the agent's Write tool,
+      # and restoring an agent-writable file would just launder the tampering
+      # back in. Everything below is deterministic; filters, fsmonitor,
+      # credential helpers, and insteadOf rewrites cannot survive it. The
+      # finalize step additionally ignores global and system git config.
+      - name: Reset git metadata to known-good
         if: steps.select.outputs.has_work == 'true'
         run: |
           set -euo pipefail
           rm -rf .git/hooks
           mkdir .git/hooks
-          cp "$RUNNER_TEMP/clean-git-config" .git/config
+          cat > .git/config <<EOF
+          [core]
+          	repositoryformatversion = 0
+          	filemode = true
+          	bare = false
+          	logallrefupdates = true
+          [remote "origin"]
+          	url = https://github.com/${GH_REPO}.git
+          	fetch = +refs/heads/*:refs/remotes/origin/*
+          [gc]
+          	auto = 0
+          EOF
 
       - name: Mint the installation token
         id: app
@@ -1434,7 +1469,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           # Global/system git config are agent-reachable files too — ignore
           # them entirely in this token-bearing step. Repo-local config was
-          # restored from the pre-agent snapshot a few steps up.
+          # regenerated from scratch a few steps up.
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_SYSTEM: /dev/null
         run: |
