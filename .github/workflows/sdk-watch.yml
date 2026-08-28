@@ -760,6 +760,10 @@ jobs:
           APP_TOKEN: ${{ steps.app.outputs.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          # This step holds the WRITE token, so it runs nothing the tree can
+          # extend: no go (a package initializer in agent-written code would
+          # execute with the token in reach), and git only with hooks disabled
+          # on the token-bearing pushes. jq/sed/gh/awk only read data.
           set -euo pipefail
           slug=$(printf '%s' "$GROUP" | tr '[:upper:]' '[:lower:]' | tr '.,' '--')
           branch="drift/${slug}-${{ github.run_id }}"
@@ -787,7 +791,7 @@ jobs:
               echo "branch ${branch} and its PR survive from a previous attempt — finishing their lifecycle"
             else
               echo "branch ${branch} is an orphan with no PR — replacing it with this attempt's tree"
-              git push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" --delete "refs/heads/${branch}"
+              git -c core.hooksPath=/dev/null push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" --delete "refs/heads/${branch}"
             fi
           fi
           if [ -z "$reuse_pr" ]; then
@@ -795,7 +799,7 @@ jobs:
               add -- latitudesh sdk-coverage.yaml sdk-fields.lock.yaml templates examples docs
             git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
               commit -m "${prefix}(coverage): reconcile field drift on SDK group ${GROUP}"
-            git push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/${branch}"
+            git -c core.hooksPath=/dev/null push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/${branch}"
           fi
 
           prompt_version=$(sed -n 's/^prompt-version: *//p' .github/prompts/fix-field-drift.md | head -1)
@@ -1328,6 +1332,31 @@ jobs:
           set -euo pipefail
           bash scripts/scaffold-validate.sh --group "$GROUP" --type-name "$TF_NAME" --kinds "$KINDS" --base HEAD
 
+      # Everything that COMPILES OR RUNS code from the tree happens here, before
+      # any write token exists in the job. `go run ./cmd/sdkcoverage` imports the
+      # agent-modifiable latitudesh package, so a package-level initializer the
+      # agent planted would execute inside this step — which is exactly why this
+      # step carries no token, and why the finalize step below must never invoke
+      # go (or anything else the tree can extend).
+      - name: Seed the lock and take the after-merge numbers
+        id: after
+        if: steps.select.outputs.has_work == 'true'
+        env:
+          GROUP: ${{ steps.select.outputs.group }}
+        run: |
+          set -euo pipefail
+          # The group is covered as of this tree, so seed its lock entry
+          # surgically (one group, nothing else) — otherwise every scaffold
+          # merge immediately spawns a group_unlocked drift PR whose whole
+          # content would be this line. Deterministic, so it happens here and
+          # not in the agent.
+          go run ./cmd/sdkcoverage fields -write -group "$GROUP"
+          # The tree now carries the scaffold, so a fresh report gives the
+          # after-merge coverage numbers for the PR body.
+          after=$(go run ./cmd/sdkcoverage report -format json)
+          echo "covered_after=$(echo "$after" | jq -r '.counts.covered')" >> "$GITHUB_OUTPUT"
+          echo "pending_after=$(echo "$after" | jq -r '.counts.pending')" >> "$GITHUB_OUTPUT"
+
       - name: Mint the installation token
         id: app
         if: steps.select.outputs.has_work == 'true'
@@ -1349,10 +1378,17 @@ jobs:
           PENDING_BEFORE: ${{ steps.render.outputs.pending_before }}
           TOTAL_GROUPS: ${{ steps.render.outputs.total_groups }}
           NOTES: ${{ steps.render.outputs.notes }}
+          COVERED_AFTER: ${{ steps.after.outputs.covered_after }}
+          PENDING_AFTER: ${{ steps.after.outputs.pending_after }}
           EXEC_FILE: ${{ steps.agent.outputs.execution_file }}
           APP_TOKEN: ${{ steps.app.outputs.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          # This step holds the WRITE token, so it runs nothing the tree can
+          # extend: no go (a package initializer in agent-written code would
+          # execute with the token in reach), and git only with hooks disabled
+          # (an agent-planted .git/hooks/pre-push would otherwise run here and
+          # see the token in the push URL). jq/sed/gh/awk only read data.
           set -euo pipefail
           short="${TF_NAME#latitudesh_}"
           branch="scaffold/${short}-${{ github.run_id }}"
@@ -1378,24 +1414,19 @@ jobs:
               echo "branch ${branch} and its PR survive from a previous attempt — finishing their lifecycle"
             else
               echo "branch ${branch} is an orphan with no PR — replacing it with this attempt's tree"
-              git push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" --delete "refs/heads/${branch}"
+              git -c core.hooksPath=/dev/null push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" --delete "refs/heads/${branch}"
             fi
           fi
           if [ -z "$reuse_pr" ]; then
-            # The group is covered as of this tree, so seed its lock entry
-            # surgically (one group, nothing else) — otherwise every scaffold
-            # merge immediately spawns a group_unlocked drift PR whose whole
-            # content would be this line. Deterministic, so it happens here and
-            # not in the agent.
-            go run ./cmd/sdkcoverage fields -write -group "$GROUP"
             # Commit by explicit pathspec — the gate already proved the diff is
             # in scope, and adding by name means a stray file could not ride
-            # along even if it were not.
+            # along even if it were not. (The lock entry for the new group was
+            # seeded by the tokenless step above.)
             git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
               add -- latitudesh sdk-coverage.yaml sdk-fields.lock.yaml templates examples docs
             git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
               commit -m "feat(${short}): scaffold ${TF_NAME} from SDK group ${GROUP}"
-            git push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/${branch}"
+            git -c core.hooksPath=/dev/null push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/${branch}"
           fi
 
           prompt_version=$(sed -n 's/^prompt-version: *//p' .github/prompts/scaffold-resource.md | head -1)
@@ -1412,11 +1443,10 @@ jobs:
             handoff="_The agent did not emit a handoff block — read the transcript in the run artifacts before reviewing._"
           fi
 
-          # The tree now carries the scaffold, so a fresh report gives the
-          # after-merge coverage numbers for the summary.
-          after=$(go run ./cmd/sdkcoverage report -format json)
-          covered_after=$(echo "$after" | jq -r '.counts.covered')
-          pending_after=$(echo "$after" | jq -r '.counts.pending')
+          # After-merge coverage numbers come from the tokenless step above —
+          # never recomputed here, where computing them would execute tree code.
+          covered_after="$COVERED_AFTER"
+          pending_after="$PENDING_AFTER"
 
           # Speakeasy-style version suggestion. A new resource/data source is a
           # backwards-compatible addition, so the bump is always minor; the
