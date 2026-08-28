@@ -268,9 +268,18 @@ fi
 
 # ------------------------------------------------------------ 8. docs reproduce --
 # docs/ is generated from templates/ plus the schema. A hand-edit to docs/ is
-# silently lost on the next generate, so the committed docs must be exactly what
-# generation produces.
+# silently lost on the next generate, so the docs in the change must be exactly
+# what generation produces.
 step "8/9 docs reproduce"
+
+# docsState fingerprints the full content of docs/, tracked or not — git diff
+# alone cannot express "generation changed nothing", because it compares
+# against the index, not against the tree generation just ran on.
+docsState() {
+	find docs -type f | LC_ALL=C sort | xargs git hash-object | git hash-object --stdin
+}
+
+docs_before=$(docsState)
 # Capture output and replay it on failure: tfplugindocs fails loudly for real
 # reasons (a missing example file, a bad template) and swallowing that turns an
 # actionable error into a bare "go generate failed".
@@ -278,9 +287,23 @@ if ! generate_out=$(go generate ./... 2>&1); then
 	printf '%s\n' "$generate_out" >&2
 	fail "go generate failed"
 fi
-if ! git diff --quiet -- docs/; then
-	git --no-pager diff --stat -- docs/ >&2
-	fail "docs/ is out of sync with templates/ — edit the template, not the rendered doc, then regenerate"
+if [ "$MODE" = "drift" ]; then
+	# A drift change edits an EXISTING resource's schema, which legitimately
+	# rewrites tracked docs — so comparing docs/ against the committed state
+	# (the scaffold branch below) could never pass here, no matter how correct
+	# the change. What must hold instead is IDEMPOTENCE: the gate's own
+	# generate run changes nothing further. Stale docs (schema changed, docs
+	# never regenerated) and hand-edited docs both fail — and both are fixed by
+	# running `go generate ./...` and re-running this gate.
+	if [ "$docs_before" != "$(docsState)" ]; then
+		git --no-pager diff --stat -- docs/ >&2
+		fail "docs/ was not regenerated after the mapping change — run 'go generate ./...' and keep the updated docs in the change"
+	fi
+else
+	if ! git diff --quiet -- docs/; then
+		git --no-pager diff --stat -- docs/ >&2
+		fail "docs/ is out of sync with templates/ — edit the template, not the rendered doc, then regenerate"
+	fi
 fi
 echo "ok: docs regenerate with no drift"
 
