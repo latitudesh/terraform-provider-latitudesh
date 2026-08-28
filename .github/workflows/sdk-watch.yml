@@ -374,6 +374,14 @@ jobs:
         with:
           go-version-file: "go.mod"
 
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          # The gate validates the scaffolded example standalone with a plain
+          # `terraform validate`; the wrapper shim would capture its stdout into
+          # step outputs and get in the way of that direct CLI usage.
+          terraform_wrapper: false
+
       - name: Download coverage report
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -384,6 +392,72 @@ jobs:
           # agent spend, and unfixably, since the agent cannot delete files.
           path: ${{ runner.temp }}/sdk-coverage
 
+      # A scaffold PR that is OPEN but still DRAFT at the start of a run is an
+      # orphan: runs are serialized by the concurrency group, and a live
+      # finalize only holds a draft for the seconds between create and ready.
+      # Its tree passed the gate and its body was written by the attempt that
+      # pushed it — finishing its lifecycle means healing its labels and
+      # marking it ready. Discovery keys on the body marker, NOT on labels: the
+      # marker is written atomically with `gh pr create --body-file`, while
+      # labels only exist once a later call succeeds — an attempt that died in
+      # between leaves an unlabeled draft that a label-keyed query (and the
+      # label-keyed dedupe in the select step) would never see, letting a later
+      # run open a second PR for the same group.
+      - name: Find orphaned scaffold drafts
+        id: orphans
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          adoptions=$(gh pr list --state open --json number,isDraft,body \
+            --jq '[.[] | select(.isDraft) | select((.body // "") | contains("<!-- scaffold:"))
+                   | "\(.number)=\((.body | capture("<!-- scaffold:(?<g>[^ ]+) -->").g))"] | join(" ")')
+          echo "adoptions=$adoptions" >> "$GITHUB_OUTPUT"
+          if [ -n "$adoptions" ]; then
+            echo "::notice::orphaned draft scaffold PR(s) to adopt: $adoptions"
+          else
+            echo "no orphaned drafts"
+          fi
+
+      - name: Mint a token to adopt orphans
+        id: adopt_app
+        if: steps.orphans.outputs.adoptions != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.SDK_WATCH_CLIENT_ID }}
+          private-key: ${{ secrets.SDK_WATCH_APP_PRIVATE_KEY }}
+
+      - name: Adopt orphaned scaffold drafts
+        if: steps.orphans.outputs.adoptions != ''
+        env:
+          # Label CREATION is a repo write on the issues API — the default
+          # token's issues:write covers it. Labeling the PR and marking it
+          # ready are PR mutations, and those need the app token anyway: a
+          # ready_for_review event fired by the default GITHUB_TOKEN would not
+          # trigger test.yml, and the adopted PR would sit ready with no checks.
+          DEFAULT_TOKEN: ${{ github.token }}
+          APP_TOKEN: ${{ steps.adopt_app.outputs.token }}
+          ADOPTIONS: ${{ steps.orphans.outputs.adoptions }}
+        run: |
+          set -euo pipefail
+          for adoption in $ADOPTIONS; do
+            n="${adoption%%=*}"
+            g="${adoption#*=}"
+            GH_TOKEN="$DEFAULT_TOKEN" gh label create scaffold --color 5319e7 \
+              --description "Agent-scaffolded SDK coverage PR" 2>/dev/null || true
+            GH_TOKEN="$DEFAULT_TOKEN" gh label create "scaffold:${g}" --color 5319e7 \
+              --description "Scaffold PR for SDK group ${g}" 2>/dev/null || true
+            GH_TOKEN="$DEFAULT_TOKEN" gh label create "type: feature" --color 0e8a16 \
+              --description "New user-facing functionality" 2>/dev/null || true
+            GH_TOKEN="$DEFAULT_TOKEN" gh label create skip-e2e --color ededed \
+              --description "Skip the acceptance suite on this PR" 2>/dev/null || true
+            GH_TOKEN="$APP_TOKEN" gh pr edit "$n" \
+              --add-label scaffold --add-label "scaffold:${g}" \
+              --add-label "type: feature" --add-label skip-e2e
+            GH_TOKEN="$APP_TOKEN" gh pr ready "$n"
+            echo "adopted scaffold PR #$n (group ${g}) — labels healed, marked ready"
+          done
+
       - name: Select the group to scaffold
         id: select
         env:
@@ -391,12 +465,14 @@ jobs:
           OVERRIDE: ${{ github.event.inputs.group }}
         run: |
           set -euo pipefail
-          # Groups already claimed by an open scaffold PR are never re-picked;
-          # groups whose scaffold PR closed without merging are parked until
-          # sdk-coverage.yaml records a ceiling+rationale for them (or a human
-          # retries explicitly via the `group` input, which is the whole point
-          # of letting the override bypass the parked list — but never an open
-          # claim, which would double-scaffold).
+          # Groups already claimed by an open scaffold PR are never re-picked
+          # (any claimed PR still in draft was adopted — marked ready — by the
+          # step above before this list is taken); groups whose scaffold PR
+          # closed without merging are parked until sdk-coverage.yaml records a
+          # ceiling+rationale for them (or a human retries explicitly via the
+          # `group` input, which is the whole point of letting the override
+          # bypass the parked list — but never an open claim, which would
+          # double-scaffold).
           claimed=$(gh pr list --label scaffold --state open --json labels \
             --jq '[.[].labels[].name | select(startswith("scaffold:")) | ltrimstr("scaffold:")] | unique | .[]')
           parked=$(gh pr list --label scaffold --state closed --limit 100 --json labels,mergedAt \
@@ -538,11 +614,14 @@ jobs:
             --max-turns ${{ env.SCAFFOLD_MAX_TURNS }}
             --allowedTools "Read,Glob,Grep,Edit,Write,MultiEdit,Bash(go build:*),Bash(go vet:*),Bash(go test:*),Bash(go doc:*),Bash(gofmt:*),Bash(go generate:*),Bash(go run ./cmd/sdkcoverage:*),Bash(jq:*),Bash(scripts/scaffold-validate.sh:*)"
 
-      - name: Report agent cost
+      # Cost and agent stats live HERE, in the run summary — deliberately not in
+      # the PR body, which is the reviewer's surface, not the operator's.
+      - name: Report agent cost and stats
         id: cost
         if: always() && steps.agent.outcome != 'skipped' && steps.agent.outputs.execution_file != ''
         env:
           EXEC_FILE: ${{ steps.agent.outputs.execution_file }}
+          GROUP: ${{ steps.select.outputs.group }}
         run: |
           set -uo pipefail
           # The execution file is either a single result object or an array of
@@ -553,9 +632,31 @@ jobs:
           turns=${turns:-unknown}
           echo "cost=$cost" >> "$GITHUB_OUTPUT"
           echo "turns=$turns" >> "$GITHUB_OUTPUT"
-          echo "## Scaffold agent: \$${cost}, ${turns} turn(s)" >> "$GITHUB_STEP_SUMMARY"
+
+          cost_fmt="$cost"
+          if [ "$cost" != "unknown" ]; then
+            cost_fmt=$(printf '%.2f' "$cost")
+          fi
+          prompt_version=$(sed -n 's/^prompt-version: *//p' .github/prompts/scaffold-resource.md | head -1)
+          if [ -f /tmp/scaffold-handoff.md ]; then
+            handoff="present ($(wc -c < /tmp/scaffold-handoff.md | tr -d ' ') bytes)"
+          else
+            handoff="MISSING"
+          fi
+          {
+            echo "## Scaffold agent"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Group | \`$GROUP\` |"
+            echo "| Model | \`$SCAFFOLD_MODEL\` |"
+            echo "| Prompt | v${prompt_version:-?} |"
+            echo "| Turns | ${turns} (cap $SCAFFOLD_MAX_TURNS) |"
+            echo "| Cost | \$${cost_fmt} |"
+            echo "| Handoff file | $handoff |"
+          } >> "$GITHUB_STEP_SUMMARY"
           if [ "$cost" != "unknown" ] && awk "BEGIN { exit !($cost > 6) }"; then
-            echo "::warning::agent run cost \$${cost} — above the \$6 watermark, review the transcript for thrash"
+            echo "::warning::agent run cost \$${cost_fmt} — above the \$6 watermark, review the transcript for thrash"
           fi
 
       - name: Validate the scaffold
@@ -576,7 +677,7 @@ jobs:
           client-id: ${{ vars.SDK_WATCH_CLIENT_ID }}
           private-key: ${{ secrets.SDK_WATCH_APP_PRIVATE_KEY }}
 
-      - name: Push the branch and open the draft PR
+      - name: Push the branch and open the PR
         if: steps.select.outputs.has_work == 'true'
         env:
           GROUP: ${{ steps.select.outputs.group }}
@@ -589,8 +690,6 @@ jobs:
           PENDING_BEFORE: ${{ steps.render.outputs.pending_before }}
           TOTAL_GROUPS: ${{ steps.render.outputs.total_groups }}
           NOTES: ${{ steps.render.outputs.notes }}
-          COST: ${{ steps.cost.outputs.cost }}
-          TURNS: ${{ steps.cost.outputs.turns }}
           EXEC_FILE: ${{ steps.agent.outputs.execution_file }}
           APP_TOKEN: ${{ steps.app.outputs.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -599,14 +698,40 @@ jobs:
           short="${TF_NAME#latitudesh_}"
           branch="scaffold/${short}-${{ github.run_id }}"
 
-          # Commit by explicit pathspec — the gate already proved the diff is in
-          # scope, and adding by name means a stray file could not ride along
-          # even if it were not.
-          git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
-            add -- latitudesh sdk-coverage.yaml templates examples docs
-          git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
-            commit -m "feat(${short}): scaffold ${TF_NAME} from SDK group ${GROUP}"
-          git push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/${branch}"
+          # The finalize sequence (push → create → label → ready) must be
+          # RERUNNABLE: an attempt can die between any two of these calls, a
+          # rerun keeps the same run_id (same branch name) but regenerates a
+          # different tree, and this repo never force-pushes. Whatever happens,
+          # the PR body must describe the commit under review:
+          #   - branch AND its PR exist → reuse both, body untouched — the body
+          #     written by the attempt that pushed the branch describes that
+          #     tree; overwriting it with this attempt's metadata (handoff, SDK
+          #     version) would describe a tree nobody is reviewing;
+          #   - branch exists with NO PR → nobody references it; delete the
+          #     orphan ref and push this attempt's tree, so body and commit
+          #     match by construction;
+          #   - neither exists → the ordinary path.
+          reuse_pr=""
+          if git ls-remote --exit-code origin "refs/heads/${branch}" >/dev/null 2>&1; then
+            reuse_pr=$(GH_TOKEN="${{ github.token }}" gh pr list --state open --head "$branch" \
+              --json url --jq '.[0].url // empty')
+            if [ -n "$reuse_pr" ]; then
+              echo "branch ${branch} and its PR survive from a previous attempt — finishing their lifecycle"
+            else
+              echo "branch ${branch} is an orphan with no PR — replacing it with this attempt's tree"
+              git push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" --delete "refs/heads/${branch}"
+            fi
+          fi
+          if [ -z "$reuse_pr" ]; then
+            # Commit by explicit pathspec — the gate already proved the diff is
+            # in scope, and adding by name means a stray file could not ride
+            # along even if it were not.
+            git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
+              add -- latitudesh sdk-coverage.yaml templates examples docs
+            git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
+              commit -m "feat(${short}): scaffold ${TF_NAME} from SDK group ${GROUP}"
+            git push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/${branch}"
+          fi
 
           prompt_version=$(sed -n 's/^prompt-version: *//p' .github/prompts/scaffold-resource.md | head -1)
           # The handoff is agent-authored free text going into a PR body — cap it
@@ -628,6 +753,19 @@ jobs:
           covered_after=$(echo "$after" | jq -r '.counts.covered')
           pending_after=$(echo "$after" | jq -r '.counts.pending')
 
+          # Speakeasy-style version suggestion. A new resource/data source is a
+          # backwards-compatible addition, so the bump is always minor; the
+          # `type: feature` label applied below is what actually drives it —
+          # release-drafter's version resolver maps that label to a minor bump
+          # when drafting the next release.
+          latest_release=$(GH_TOKEN="${{ github.token }}" gh api "repos/$GH_REPO/releases/latest" --jq '.tag_name' 2>/dev/null || true)
+          if [[ "$latest_release" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            suggested_release="v${BASH_REMATCH[1]}.$((BASH_REMATCH[2] + 1)).0"
+            version_line="Version Bump Type: [minor] - 🤖 (automated) — latest release is \`$latest_release\`, this ships in \`$suggested_release\`"
+          else
+            version_line="Version Bump Type: [minor] - 🤖 (automated)"
+          fi
+
           methods_md=$(printf '%s' "$METHODS" | sed 's/, /`, `/g; s/^/`/; s/$/`/')
 
           # Body structure mirrors the Speakeasy generation PRs on
@@ -637,12 +775,19 @@ jobs:
           {
             echo "# Provider scaffold"
             echo
+            echo "## Versioning"
+            echo
+            echo "$version_line"
+            echo
+            echo "> [!TIP]"
+            echo "> A new resource or data source is a backwards-compatible addition, so the bump is always **minor**. The \`type: feature\` label on this PR feeds release-drafter's version resolver, and the draft release picks it up on merge."
+            echo
             echo "## Coverage"
             echo
             echo "Coverage Bump: [${COVERED_BEFORE} → ${covered_after} of ${TOTAL_GROUPS} SDK service groups] - 🤖 (automated)"
             echo
             echo "> [!TIP]"
-            echo "> Reviewing this draft is where the keep-or-drop decision is made. **Keep it** — merge, and \`$GROUP\` is covered. **Drop it** — close this PR **and** record a \`ceiling\` + \`rationale\` under \`$GROUP\` in \`sdk-coverage.yaml\`, so it stops being regenerated."
+            echo "> Reviewing this PR is where the keep-or-drop decision is made. **Keep it** — merge, and \`$GROUP\` is covered. **Drop it** — close this PR **and** record a \`ceiling\` + \`rationale\` under \`$GROUP\` in \`sdk-coverage.yaml\`, so it stops being regenerated."
             echo
             echo "## Provider Changes:"
             echo
@@ -654,8 +799,6 @@ jobs:
             echo "|---|---|"
             echo "| SDK version | \`$SDK_VERSION\` |"
             echo "| Pending groups | ${PENDING_BEFORE} → ${pending_after} |"
-            echo "| Prompt | \`.github/prompts/scaffold-resource.md\` v${prompt_version:-?} |"
-            echo "| Agent | \`$SCAFFOLD_MODEL\`, ${TURNS:-?} turn(s), \$${COST:-?} |"
             echo
             echo "<details>"
             echo "<summary>Manifest notes</summary>"
@@ -680,17 +823,82 @@ jobs:
             echo
             echo "</details>"
             echo
+            echo "<details>"
+            echo "<summary>Manual validation (copy-paste)</summary>"
+            echo
+            # Fully literal template (quoted heredoc — backticks, \$(...) and the
+            # inner heredocs must reach the reviewer verbatim); the three
+            # run-specific values are spliced by sed. The inner terminators are
+            # EOF, which never collides with MANUAL_EOF.
+            cat <<'MANUAL_EOF' | sed -e "s|__BRANCH__|$branch|g" -e "s|__REPO__|$GH_REPO|g" -e "s|__EXAMPLE__|examples/$TF_NAME.tf|g"
+          The agent's acceptance tests run against a local mock — nothing in this PR touched the real API. The snippets below build this branch and exercise the resource end-to-end against the real API. Credentials are separate blocks so you can paste them independently.
+
+          **1. Token:**
+
+          ```bash
+          export LATITUDESH_AUTH_TOKEN="<your-api-token>"
+          ```
+
+          **2. Test project** (ID or slug; used as the provider-level default — harmless for resources that do not take a project):
+
+          ```bash
+          export LATITUDESH_PROJECT="<test-project-id-or-slug>"
+          ```
+
+          **3. Build this branch and apply the example:**
+
+          ```bash
+          workdir=$(mktemp -d)
+          git clone --depth 1 --branch __BRANCH__ \
+            https://github.com/__REPO__.git "$workdir/provider"
+          make -C "$workdir/provider" build   # binary lands at the repo root — do NOT `make install`
+
+          cat > "$workdir/dev.tfrc" <<EOF
+          provider_installation {
+            dev_overrides {
+              "latitudesh/latitudesh" = "$workdir/provider"
+            }
+            direct {}
+          }
+          EOF
+          export TF_CLI_CONFIG_FILE="$workdir/dev.tfrc"
+
+          mkdir "$workdir/manual-test" && cd "$workdir/manual-test"
+          cat > provider.tf <<EOF
+          terraform {
+            required_providers {
+              latitudesh = { source = "latitudesh/latitudesh" }
+            }
+          }
+
+          provider "latitudesh" {
+            project = "$LATITUDESH_PROJECT"
+          }
+          EOF
+          cp "$workdir/provider/__EXAMPLE__" main.tf
+          # The example is gate-enforced to be self-contained; note it may declare
+          # helper resources it depends on, and apply will create those too.
+
+          terraform plan     # dev_overrides active: no init needed; expect the overrides warning
+          terraform apply
+          terraform state show "$(terraform state list | head -1)"
+          terraform destroy
+          ```
+          MANUAL_EOF
+            echo
+            echo "</details>"
+            echo
             echo "## Reviewer checklist"
             echo
             echo "- [ ] Endpoints verified against production (mandatory when the manifest notes flag spec gaps)"
             echo "- [ ] Schema reviewed: types, required vs optional, sensitive fields that would land in state"
             echo "- [ ] Acceptance test exercised — record a cassette (\`LATITUDE_TEST_RECORDER=record\`) or note why it runs live-only"
             echo "- [ ] Docs and example read sensibly, not just generated-correct"
-            echo "- [ ] Mark ready for review so e2e runs (drafts never run acceptance)"
+            echo "- [ ] Remove the \`skip-e2e\` label (and re-run the checks) to exercise the full acceptance suite"
             echo
             echo "---"
             echo
-            echo "Generated from [\`latitudesh-go-sdk\`](https://github.com/latitudesh/latitudesh-go-sdk) \`$SDK_VERSION\` by the [sdk-watch workflow]($RUN_URL)."
+            echo "Generated from [\`latitudesh-go-sdk\`](https://github.com/latitudesh/latitudesh-go-sdk) \`$SDK_VERSION\` by the [sdk-watch workflow]($RUN_URL) — prompt v${prompt_version:-?}."
             echo
             echo "<!-- scaffold:$GROUP -->"
           } > pr-body.md
@@ -703,13 +911,32 @@ jobs:
             --description "Agent-scaffolded SDK coverage PR" 2>/dev/null || true
           GH_TOKEN="${{ github.token }}" gh label create "scaffold:${GROUP}" --color 5319e7 \
             --description "Scaffold PR for SDK group ${GROUP}" 2>/dev/null || true
+          GH_TOKEN="${{ github.token }}" gh label create "type: feature" --color 0e8a16 \
+            --description "New user-facing functionality" 2>/dev/null || true
+          GH_TOKEN="${{ github.token }}" gh label create skip-e2e --color ededed \
+            --description "Skip the acceptance suite on this PR" 2>/dev/null || true
 
-          url=$(GH_TOKEN="$APP_TOKEN" gh pr create --draft \
-            --head "$branch" \
-            --title "feat(${short}): 🤖 scaffold ${TF_NAME} from SDK group ${GROUP}" \
-            --body-file pr-body.md)
-          GH_TOKEN="$APP_TOKEN" gh pr edit "$url" --add-label scaffold --add-label "scaffold:${GROUP}"
-          echo "Draft PR: $url" >> "$GITHUB_STEP_SUMMARY"
+          # Draft first, label, THEN mark ready. Creating the PR non-draft would
+          # race test.yml: the `opened` event fires before any label exists, so
+          # e2e would see no skip-e2e and launch the full live acceptance suite
+          # on every agent PR. The ready_for_review event sees the labels.
+          # Labeling and readying are idempotent, so a reused PR from a previous
+          # attempt just gets its lifecycle finished here — its body stays as
+          # written by the attempt whose tree is actually on the branch.
+          url="$reuse_pr"
+          if [ -z "$url" ]; then
+            url=$(GH_TOKEN="$APP_TOKEN" gh pr create --draft \
+              --head "$branch" \
+              --title "feat(${short}): 🤖 scaffold ${TF_NAME} from SDK group ${GROUP}" \
+              --body-file pr-body.md)
+          fi
+          GH_TOKEN="$APP_TOKEN" gh pr edit "$url" \
+            --add-label scaffold --add-label "scaffold:${GROUP}" \
+            --add-label "type: feature" --add-label skip-e2e
+          if [ "$(GH_TOKEN="$APP_TOKEN" gh pr view "$url" --json isDraft --jq '.isDraft')" = "true" ]; then
+            GH_TOKEN="$APP_TOKEN" gh pr ready "$url"
+          fi
+          echo "PR (ready for review): $url" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the transcript
         if: steps.select.outputs.has_work == 'true' && steps.agent.outputs.execution_file != ''

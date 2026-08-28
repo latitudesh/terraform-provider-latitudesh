@@ -273,6 +273,39 @@ done
 case " ${kinds[*]} " in
 *" resource "* | *" datasource "*)
 	[ -f "examples/${TYPE_NAME}.tf" ] || fail "missing examples/${TYPE_NAME}.tf"
+	# The example must be SELF-CONTAINED: the PR's manual-validation snippet
+	# copies it alone into a scratch directory, so any reference satisfied only
+	# by a sibling file — a var.*, another example's resource, a local, a
+	# module — turns the advertised `terraform plan` into an undeclared-
+	# reference error instead of exercising the provider. Validate it exactly
+	# the way the snippet consumes it: alone, against this very build, through
+	# a throwaway dev_overrides. No init, no credentials, no network.
+	command -v terraform >/dev/null || fail "the terraform CLI is required: the gate validates examples/${TYPE_NAME}.tf standalone"
+	tfscratch=$(mktemp -d)
+	go build -o "$tfscratch/terraform-provider-latitudesh" . ||
+		{ rm -rf "$tfscratch"; fail "could not build the provider binary for standalone example validation"; }
+	cat >"$tfscratch/dev.tfrc" <<-TFRC
+		provider_installation {
+		  dev_overrides {
+		    "latitudesh/latitudesh" = "$tfscratch"
+		  }
+		  direct {}
+		}
+	TFRC
+	mkdir "$tfscratch/example"
+	cp "examples/${TYPE_NAME}.tf" "$tfscratch/example/main.tf"
+	cat >"$tfscratch/example/provider.tf" <<-'TFPROVIDER'
+		terraform {
+		  required_providers {
+		    latitudesh = { source = "latitudesh/latitudesh" }
+		  }
+		}
+	TFPROVIDER
+	if ! (cd "$tfscratch/example" && TF_CLI_CONFIG_FILE="$tfscratch/dev.tfrc" terraform validate -no-color); then
+		rm -rf "$tfscratch"
+		fail "examples/${TYPE_NAME}.tf does not validate standalone — it must be self-contained: no var.*, no references to resources declared elsewhere; declare helper resources in the same file"
+	fi
+	rm -rf "$tfscratch"
 	;;
 esac
 case " ${kinds[*]} " in
