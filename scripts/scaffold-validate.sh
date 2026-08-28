@@ -15,14 +15,24 @@
 #
 # Usage:
 #   scripts/scaffold-validate.sh --group <SDKGroup> --type-name <latitudesh_x> --kinds <resource,datasource> [--base <ref>]
+#   scripts/scaffold-validate.sh --mode drift --group <SDKGroup>[,<SDKGroup>...] [--base <ref>]
 #
-#   --group       the SDK service group that was scaffolded (e.g. PublicNetworks)
+#   --group       the SDK service group that was scaffolded (e.g. PublicNetworks).
+#                 In drift mode this may be a comma-separated list: a drift PR
+#                 that bumps the SDK must resolve EVERY breaking-drifted group in
+#                 one change, or the gate (which checks the whole surface) could
+#                 never go green for any of them.
 #   --type-name   the Terraform type name that was added (e.g. latitudesh_public_network)
 #   --kinds       comma-separated kinds that were REQUESTED (resource, datasource,
 #                 action). Required: coverage alone cannot express this — one
 #                 implemented kind marks the whole group covered, so a datasource
 #                 the shape asked for would otherwise go silently undelivered,
 #                 and the group never returns to the pending queue to flag it.
+#   --mode        scaffold (default) gates a NEW type; drift gates a change that
+#                 reconciles an EXISTING covered group with SDK field drift. In
+#                 drift mode --type-name/--kinds do not apply: success is "zero
+#                 remaining drift for the group, lock synced, own tests present",
+#                 not "a new type was delivered".
 #   --base        git ref the change is measured against (default: HEAD)
 #
 set -euo pipefail
@@ -30,11 +40,12 @@ set -euo pipefail
 GROUP=""
 TYPE_NAME=""
 KINDS=""
+MODE="scaffold"
 BASE="HEAD"
 
 while [ $# -gt 0 ]; do
 	case "$1" in
-	--group | --type-name | --kinds | --base)
+	--group | --type-name | --kinds | --mode | --base)
 		# Explicit check: under set -e a bare `shift 2` with no value would kill
 		# the script silently, with no message and a misleading exit code.
 		if [ $# -lt 2 ]; then
@@ -45,6 +56,7 @@ while [ $# -gt 0 ]; do
 		--group) GROUP="$2" ;;
 		--type-name) TYPE_NAME="$2" ;;
 		--kinds) KINDS="$2" ;;
+		--mode) MODE="$2" ;;
 		--base) BASE="$2" ;;
 		esac
 		shift 2
@@ -56,26 +68,46 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-if [ -z "$GROUP" ] || [ -z "$TYPE_NAME" ] || [ -z "$KINDS" ]; then
-	echo "usage: $0 --group <SDKGroup> --type-name <latitudesh_x> --kinds <resource,datasource> [--base <ref>]" >&2
+case "$MODE" in
+scaffold)
+	if [ -z "$GROUP" ] || [ -z "$TYPE_NAME" ] || [ -z "$KINDS" ]; then
+		echo "usage: $0 --group <SDKGroup> --type-name <latitudesh_x> --kinds <resource,datasource> [--base <ref>]" >&2
+		exit 2
+	fi
+	;;
+drift)
+	if [ -z "$GROUP" ]; then
+		echo "usage: $0 --mode drift --group <SDKGroup> [--base <ref>]" >&2
+		exit 2
+	fi
+	if [ -n "$TYPE_NAME" ] || [ -n "$KINDS" ]; then
+		echo "--type-name/--kinds do not apply in drift mode" >&2
+		exit 2
+	fi
+	;;
+*)
+	echo "unknown mode $MODE (want scaffold or drift)" >&2
 	exit 2
-fi
+	;;
+esac
 
 # Normalize the kinds list ("resource, datasource" and "resource,datasource"
 # both arrive here — the report joins with a comma and a space).
 kinds=()
-for kind in $(printf '%s' "$KINDS" | tr ',' ' '); do
-	case "$kind" in
-	resource | datasource | action) kinds+=("$kind") ;;
-	*)
-		echo "unknown kind $kind (want resource, datasource, or action)" >&2
+if [ "$MODE" = "scaffold" ]; then
+	for kind in $(printf '%s' "$KINDS" | tr ',' ' '); do
+		case "$kind" in
+		resource | datasource | action) kinds+=("$kind") ;;
+		*)
+			echo "unknown kind $kind (want resource, datasource, or action)" >&2
+			exit 2
+			;;
+		esac
+	done
+	if [ "${#kinds[@]}" -eq 0 ]; then
+		echo "--kinds lists no kinds" >&2
 		exit 2
-		;;
-	esac
-done
-if [ "${#kinds[@]}" -eq 0 ]; then
-	echo "--kinds lists no kinds" >&2
-	exit 2
+	fi
 fi
 
 ROOT=$(git rev-parse --show-toplevel)
@@ -132,7 +164,7 @@ for p in "${paths[@]}"; do
 		: ;;
 	latitudesh/provider.go)
 		: ;;
-	sdk-coverage.yaml)
+	sdk-coverage.yaml | sdk-fields.lock.yaml)
 		: ;;
 	# The first pattern of each pair already admits the subdirectories ('*'
 	# spans '/'), but the explicit variants spell the intent out — reviewers
@@ -203,12 +235,36 @@ echo "ok: unit tests pass"
 # covered). A group still pending means the resource was written but never
 # registered or never recorded in sdk-coverage.yaml.
 step "7/9 coverage reconciles"
+# check covers both ledgers: group-level contradictions AND breaking field
+# drift against sdk-fields.lock.yaml.
 go run ./cmd/sdkcoverage check || fail "sdkcoverage check found contradictions"
-report=$(go run ./cmd/sdkcoverage report -format json)
-if ! echo "$report" | jq -e --arg g "$GROUP" '.pending | map(.group) | index($g) | not' >/dev/null; then
-	fail "group $GROUP is still pending — the resource is not registered or not recorded in sdk-coverage.yaml"
+if [ "$MODE" = "scaffold" ]; then
+	report=$(go run ./cmd/sdkcoverage report -format json)
+	if ! echo "$report" | jq -e --arg g "$GROUP" '.pending | map(.group) | index($g) | not' >/dev/null; then
+		fail "group $GROUP is still pending — the resource is not registered or not recorded in sdk-coverage.yaml"
+	fi
+	echo "ok: coverage reconciles and $GROUP is covered"
+else
+	# The lock must still exist and actually load: deleting it would make every
+	# drift check downstream an inert no-op that reads as success.
+	[ -f sdk-fields.lock.yaml ] || fail "sdk-fields.lock.yaml is gone — a drift change regenerates the lock, never deletes it"
+
+	# Drift mode's success criterion: the target groups no longer drift AT ALL —
+	# every row was either mapped or accepted into the lock. A leftover
+	# informational row would pass `check` (breaking-only) while leaving the
+	# tracking issue reporting the very drift this PR claims to close.
+	drift=$(go run ./cmd/sdkcoverage drift -format json)
+	if [ "$(echo "$drift" | jq -r '.lock_missing')" = "true" ]; then
+		fail "the drift report cannot see the lock — sdk-fields.lock.yaml is missing or unreadable"
+	fi
+	groups_json=$(printf '%s' "$GROUP" | jq -R 'split(",") | map(gsub("^\\s+|\\s+$"; ""))')
+	remaining=$(echo "$drift" | jq --argjson gs "$groups_json" '[.drift[] | select(.group as $g | $gs | index($g))] | length')
+	if [ "$remaining" -ne 0 ]; then
+		echo "$drift" | jq -r --argjson gs "$groups_json" '.drift[] | select(.group as $g | $gs | index($g)) | "  - [\(.kind)] \(.group) \(.model) \(.field): \(.detail)"' >&2
+		fail "target group(s) still have $remaining drift row(s) — map each one or accept it via 'go run ./cmd/sdkcoverage fields -write -group $GROUP'"
+	fi
+	echo "ok: coverage reconciles and $GROUP has zero remaining drift"
 fi
-echo "ok: coverage reconciles and $GROUP is covered"
 
 # ------------------------------------------------------------ 8. docs reproduce --
 # docs/ is generated from templates/ plus the schema. A hand-edit to docs/ is
@@ -229,6 +285,71 @@ fi
 echo "ok: docs regenerate with no drift"
 
 # -------------------------------------------------- 9. deliverables per kind --
+# Drift mode first: its deliverables are different in kind, not in degree. The
+# lock must be part of the change (regenerating it IS the act of acceptance the
+# whole pipeline hinges on), and a mapping change must bring its own offline
+# test — but there is no new type, so nothing below about registration,
+# templates, or examples applies.
+if [ "$MODE" = "drift" ]; then
+	step "9/9 drift deliverables"
+
+	lock_changed=false
+	code_changed=false
+	test_files=()
+	for p in "${paths[@]}"; do
+		case "$p" in
+		sdk-fields.lock.yaml) lock_changed=true ;;
+		latitudesh/*_test.go) [ -f "$p" ] && test_files+=("$p") ;;
+		latitudesh/*.go) code_changed=true ;;
+		esac
+	done
+
+	if [ "$lock_changed" != "true" ]; then
+		fail "sdk-fields.lock.yaml did not change — a drift PR must accept the drift it closes (go run ./cmd/sdkcoverage fields -write -group $GROUP)"
+	fi
+
+	# The lock diff must be scoped to the target groups: a full regenerate here
+	# would silently accept every OTHER group's drift inside a PR reviewed for
+	# these. Reconstruct the only acceptable lock — BASE's lock with exactly the
+	# target groups resynced — and require byte equality.
+	base_lock=$(mktemp)
+	expected_lock=$(mktemp)
+	if ! git show "$BASE:sdk-fields.lock.yaml" > "$base_lock" 2>/dev/null; then
+		rm -f "$base_lock" "$expected_lock"
+		fail "drift mode needs sdk-fields.lock.yaml to exist at $BASE — seeding the lock is a full 'fields -write', not a drift PR"
+	fi
+	if ! go run ./cmd/sdkcoverage fields -lock "$base_lock" -group "$GROUP" > "$expected_lock"; then
+		rm -f "$base_lock" "$expected_lock"
+		fail "could not compute the expected lock for $GROUP"
+	fi
+	if ! cmp -s "$expected_lock" sdk-fields.lock.yaml; then
+		diff "$expected_lock" sdk-fields.lock.yaml | head -20 >&2
+		rm -f "$base_lock" "$expected_lock"
+		fail "sdk-fields.lock.yaml changed outside the target group(s) $GROUP — regenerate it with 'go run ./cmd/sdkcoverage fields -write -group $GROUP' only"
+	fi
+	rm -f "$base_lock" "$expected_lock"
+
+	if [ "$code_changed" = "true" ]; then
+		if [ "${#test_files[@]}" -eq 0 ]; then
+			fail "the mapping changed but no latitudesh/*_test.go did — a schema or mapping change must bring its own test"
+		fi
+		has_offline=false
+		for f in "${test_files[@]}"; do
+			total=$(grep -cE '^func Test' "$f" || true)
+			acc=$(grep -cE '^func TestAcc' "$f" || true)
+			if [ "${total:-0}" -gt "${acc:-0}" ]; then
+				has_offline=true
+			fi
+		done
+		[ "$has_offline" = "true" ] || fail "no offline (non-TestAcc) test in the changed test files — nothing about the mapping change runs on ordinary PRs"
+	fi
+
+	echo "ok: lock accepted the drift$([ "$code_changed" = "true" ] && echo ", mapping change ships its own offline test")"
+	echo
+	echo "PASS: $GROUP — field drift reconciles"
+	exit 0
+fi
+
 # Coverage (step 7) only proves SOME implementation claimed the group. This step
 # holds the scaffold to what was actually requested: every asked-for kind is
 # actually registered and ships its Go file and doc template, an example exists,
