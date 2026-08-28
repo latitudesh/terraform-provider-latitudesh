@@ -622,14 +622,25 @@ jobs:
           short="${TF_NAME#latitudesh_}"
           branch="scaffold/${short}-${{ github.run_id }}"
 
-          # Commit by explicit pathspec — the gate already proved the diff is in
-          # scope, and adding by name means a stray file could not ride along
-          # even if it were not.
-          git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
-            add -- latitudesh sdk-coverage.yaml templates examples docs
-          git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
-            commit -m "feat(${short}): scaffold ${TF_NAME} from SDK group ${GROUP}"
-          git push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/${branch}"
+          # The finalize sequence (push → create → label → ready) must be
+          # RERUNNABLE: an attempt can die between any two of these calls, a
+          # rerun keeps the same run_id (same branch name) but regenerates a
+          # different tree, and a plain push would then die non-fast-forward —
+          # stranding the previous attempt's PR in draft forever. When the
+          # branch already exists, reuse it as-is: whatever attempt pushed it
+          # ran this same gate first, and this repo never force-pushes.
+          if git ls-remote --exit-code origin "refs/heads/${branch}" >/dev/null 2>&1; then
+            echo "branch ${branch} already pushed by a previous attempt — reusing it"
+          else
+            # Commit by explicit pathspec — the gate already proved the diff is
+            # in scope, and adding by name means a stray file could not ride
+            # along even if it were not.
+            git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
+              add -- latitudesh sdk-coverage.yaml templates examples docs
+            git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
+              commit -m "feat(${short}): scaffold ${TF_NAME} from SDK group ${GROUP}"
+            git push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/${branch}"
+          fi
 
           prompt_version=$(sed -n 's/^prompt-version: *//p' .github/prompts/scaffold-resource.md | head -1)
           # The handoff is agent-authored free text going into a PR body — cap it
@@ -774,7 +785,8 @@ jobs:
           }
           EOF
           cp "$workdir/provider/__EXAMPLE__" main.tf
-          # If the example references var.*, replace them with literals before applying.
+          # The example is gate-enforced to be self-contained; note it may declare
+          # helper resources it depends on, and apply will create those too.
 
           terraform plan     # dev_overrides active: no init needed; expect the overrides warning
           terraform apply
@@ -817,14 +829,27 @@ jobs:
           # race test.yml: the `opened` event fires before any label exists, so
           # e2e would see no skip-e2e and launch the full live acceptance suite
           # on every agent PR. The ready_for_review event sees the labels.
-          url=$(GH_TOKEN="$APP_TOKEN" gh pr create --draft \
-            --head "$branch" \
-            --title "feat(${short}): 🤖 scaffold ${TF_NAME} from SDK group ${GROUP}" \
-            --body-file pr-body.md)
+          # Every call here is reuse-aware for the same rerun reason as the push
+          # above — a previous attempt may have already created the PR (dedupe
+          # in the select step cannot catch it: labels are what it keys on, and
+          # they only exist after the edit below succeeds).
+          url=$(GH_TOKEN="$APP_TOKEN" gh pr list --state open --head "$branch" \
+            --json url --jq '.[0].url // empty')
+          if [ -z "$url" ]; then
+            url=$(GH_TOKEN="$APP_TOKEN" gh pr create --draft \
+              --head "$branch" \
+              --title "feat(${short}): 🤖 scaffold ${TF_NAME} from SDK group ${GROUP}" \
+              --body-file pr-body.md)
+          else
+            echo "PR for ${branch} already open from a previous attempt — finishing its lifecycle"
+            GH_TOKEN="$APP_TOKEN" gh pr edit "$url" --body-file pr-body.md
+          fi
           GH_TOKEN="$APP_TOKEN" gh pr edit "$url" \
             --add-label scaffold --add-label "scaffold:${GROUP}" \
             --add-label "type: feature" --add-label skip-e2e
-          GH_TOKEN="$APP_TOKEN" gh pr ready "$url"
+          if [ "$(GH_TOKEN="$APP_TOKEN" gh pr view "$url" --json isDraft --jq '.isDraft')" = "true" ]; then
+            GH_TOKEN="$APP_TOKEN" gh pr ready "$url"
+          fi
           echo "PR (ready for review): $url" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the transcript

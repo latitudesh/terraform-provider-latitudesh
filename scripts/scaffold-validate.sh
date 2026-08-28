@@ -273,6 +273,19 @@ done
 case " ${kinds[*]} " in
 *" resource "* | *" datasource "*)
 	[ -f "examples/${TYPE_NAME}.tf" ] || fail "missing examples/${TYPE_NAME}.tf"
+	# The example must be SELF-CONTAINED: the PR's manual-validation snippet
+	# copies it alone into a scratch directory, so a var.* reference (those
+	# are declared only in the shared examples/variables.tf) turns the
+	# advertised `terraform plan` into an undeclared-reference error instead
+	# of exercising the provider. Use literal placeholders, or declare any
+	# helper resource the example depends on in the same file. Two greps, not
+	# one alternated pattern: `(^|...)var\.` is not portable across the grep
+	# implementations this gate runs under (GNU in CI, whatever aliases grep
+	# on a dev machine running the eval).
+	if grep -qE '[^a-zA-Z0-9_.]var\.' "examples/${TYPE_NAME}.tf" ||
+		grep -qE '^var\.' "examples/${TYPE_NAME}.tf"; then
+		fail "examples/${TYPE_NAME}.tf references var.* — the example must be self-contained (inline literals or declare helper resources in-file)"
+	fi
 	;;
 esac
 case " ${kinds[*]} " in
