@@ -120,3 +120,34 @@ make coverage-check    # what CI enforces
 
 Both run offline against the module cache and need no API token. The file's header
 comment explains every field.
+
+### Field drift
+
+Coverage says a Terraform type exists for a group; it says nothing about the fields
+*inside* it. [`sdk-fields.lock.yaml`](sdk-fields.lock.yaml) closes that gap: it is a
+go.sum-style snapshot of the covered groups' models — fields, types, wire names,
+enums, defaults, method signatures — as they were when a human last looked.
+`TestProviderSDKFieldDrift` diffs the pinned SDK against it on every PR.
+
+The severity split mirrors the group-level gate:
+
+- **Breaking drift fails CI** — a field removed or retyped, a required↔optional
+  flip, an enum value gone, a method removed or re-signed. The provider still
+  compiles in the old shape, so an SDK bump must not absorb these silently. Fix the
+  mapping in the named resource (or deliberately omit the change), then regenerate
+  the lock **in the same PR** — its diff is the review record of what you accepted.
+- **Additive drift never fails** — a new field, a new enum value, a deprecation, a
+  changed default or doc comment. It surfaces in the weekly tracking issue, and the
+  sdk-watch drift-fix job turns it into a draft PR.
+
+```sh
+make drift-report      # what moved, lock vs the pinned SDK
+make fields-sync       # accept it: regenerate the lock (full)
+go run ./cmd/sdkcoverage fields -write -group Servers   # accept one group only
+```
+
+Prefer the `-group` form in a PR that fixes one group's drift, so you do not
+silently accept every other group's. To leave an SDK field deliberately unmapped
+(the firewall's seeded port-22 rule is the canonical case), sync the lock and record
+why in that group's `notes:` in `sdk-coverage.yaml` — the lock line is the
+acceptance, the note is the audit trail.

@@ -63,3 +63,28 @@ func TestSuggestTypeNameHonorsProviderPrefix(t *testing.T) {
 		t.Errorf("SuggestTypeName with custom prefix = %q, want example_server", got)
 	}
 }
+
+func TestSuggestAttributeName(t *testing.T) {
+	cases := []struct {
+		field FieldShape
+		want  string
+	}{
+		// json wire names are already Terraform-shaped.
+		{FieldShape{Name: "BgpReady", Wire: "bgp_ready"}, "bgp_ready"},
+		// filter[] query parameters flatten, including nested brackets.
+		{FieldShape{Name: "FilterProject", Wire: "filter[project]"}, "project"},
+		{FieldShape{Name: "FilterRAMEql", Wire: "filter[ram][eql]"}, "ram_eql"},
+		// Pagination and metadata families are provider-internal: no suggestion.
+		{FieldShape{Name: "PageSize", Wire: "page[size]"}, ""},
+		{FieldShape{Name: "StatsTotal", Wire: "stats[total]"}, ""},
+		{FieldShape{Name: "ExtraFieldsServers", Wire: "extra_fields[servers]"}, ""},
+		// Untagged fields fall back to the Go name.
+		{FieldShape{Name: "Widget"}, "widget"},
+		{FieldShape{Name: "BgpReady"}, "bgp_ready"},
+	}
+	for _, tc := range cases {
+		if got := SuggestAttributeName(tc.field); got != tc.want {
+			t.Errorf("SuggestAttributeName(%q/%q) = %q, want %q", tc.field.Name, tc.field.Wire, got, tc.want)
+		}
+	}
+}

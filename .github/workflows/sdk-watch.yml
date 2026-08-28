@@ -52,6 +52,10 @@ jobs:
       pinned: ${{ steps.resolve.outputs.pinned }}
       latest: ${{ steps.resolve.outputs.latest }}
       pinned_check_ok: ${{ steps.pinned_check.outputs.ok }}
+      pinned_group_ok: ${{ steps.pinned_check.outputs.group_ok }}
+      drift_breaking: ${{ steps.drift.outputs.breaking }}
+      drift_new: ${{ steps.drift.outputs.informational }}
+      drift_data_ok: ${{ steps.drift.outputs.data_ok }}
     steps:
       # Every action here is pinned to an immutable commit SHA: this workflow's
       # sibling job writes issues, so a mutable tag would let reviewed action code
@@ -103,6 +107,36 @@ jobs:
           echo "pending=$pending" >> "$GITHUB_OUTPUT"
           echo "$pending group(s) pending against $LATEST"
 
+      - name: Report field drift against the latest SDK
+        id: drift
+        env:
+          SDK_MODULE: github.com/latitudesh/latitudesh-go-sdk
+          LATEST: ${{ steps.resolve.outputs.latest }}
+        run: |
+          set -euo pipefail
+          # Field drift on covered groups: the committed sdk-fields.lock.yaml vs
+          # the latest SDK's models. Informational here by design — the gate that
+          # fails on breaking drift runs against the PINNED SDK on every PR; this
+          # channel is the early warning that feeds the tracking issue and the
+          # drift-fix job. It must never sink detect: no drift data beats no
+          # tracking issue.
+          dir=$(go mod download -json "$SDK_MODULE@$LATEST" | jq -r '.Dir')
+          # A missing lock is NOT a failure here — the tool exits 0 with a
+          # lock_missing document. A nonzero exit is a genuine crash (corrupt
+          # lock, parse error), and the one thing a crash must not do is
+          # fabricate a healthy zero-drift document: mark the data unusable and
+          # let the issue say so, instead of closing over drift nobody measured.
+          if go run ./cmd/sdkcoverage drift -format json -sdk-dir "$dir" > drift.json; then
+            echo "data_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::field drift report failed — drift status is unknown this run"
+            echo '{"sdk_module":"'"$SDK_MODULE"'","lock_missing":false,"ok":false,"counts":{"total":0,"breaking":0,"informational":0},"drift":[]}' > drift.json
+            echo "data_ok=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "breaking=$(jq -r '.counts.breaking' drift.json)" >> "$GITHUB_OUTPUT"
+          echo "informational=$(jq -r '.counts.informational' drift.json)" >> "$GITHUB_OUTPUT"
+          echo "$(jq -r '.counts.total' drift.json) field drift row(s) against $LATEST ($(jq -r '.counts.breaking' drift.json) breaking)"
+
       - name: Check the pinned SDK for contradictions
         id: pinned_check
         # Advisory here, not fatal: a contradiction on the pinned SDK is already a
@@ -117,9 +151,14 @@ jobs:
             echo "ok=true" >> "$GITHUB_OUTPUT"
           else
             echo "ok=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::pinned SDK has coverage contradictions; see the tracking issue"
+            echo "::warning::pinned SDK has coverage contradictions or breaking field drift; see the tracking issue"
           fi
           cat pinned_check.txt
+          # check now covers two ledgers (group contradictions AND breaking
+          # field drift vs the lock). The drift-fix job must still run when the
+          # ONLY problem is drift — it is the automation that fixes exactly that
+          # — so record the group-level verdict separately for its gate.
+          echo "group_ok=$(go run ./cmd/sdkcoverage report -format json | jq -r '.ok')" >> "$GITHUB_OUTPUT"
 
       - name: Upload coverage report
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -127,6 +166,7 @@ jobs:
           name: sdk-coverage-report
           path: |
             report.json
+            drift.json
             pinned_check.txt
           retention-days: 14
           # v4 artifacts are immutable per run (not per attempt): without this,
@@ -154,6 +194,9 @@ jobs:
       PINNED: ${{ needs.detect.outputs.pinned }}
       LATEST: ${{ needs.detect.outputs.latest }}
       PINNED_CHECK_OK: ${{ needs.detect.outputs.pinned_check_ok }}
+      DRIFT_BREAKING: ${{ needs.detect.outputs.drift_breaking }}
+      DRIFT_NEW: ${{ needs.detect.outputs.drift_new }}
+      DRIFT_DATA_OK: ${{ needs.detect.outputs.drift_data_ok }}
       DRY_RUN: ${{ github.event.inputs.dry_run }}
     steps:
       - name: Download coverage report
@@ -178,7 +221,7 @@ jobs:
             if [ "${PINNED_CHECK_OK}" = "false" ]; then
               echo
               echo "> [!WARNING]"
-              echo "> The pinned SDK (\`${PINNED}\`) has coverage contradictions. This normally fails a PR's unit tests; seeing it here means something reached \`main\` unchecked. Fix \`sdk-coverage.yaml\` and/or the provider registration."
+              echo "> The pinned SDK (\`${PINNED}\`) has coverage contradictions or breaking field drift against the lock. This normally fails a PR's unit tests; seeing it here means something reached \`main\` unchecked. Fix \`sdk-coverage.yaml\` / the provider registration, or reconcile \`sdk-fields.lock.yaml\` (\`make drift-report\`)."
             fi
 
             # Violations against the LATEST SDK never fail a PR (nothing pins that
@@ -216,6 +259,61 @@ jobs:
               echo "Excluded on API grounds, but the SDK has since grown past the recorded ceiling. Not urgent — re-triage when convenient."
               echo
               jq -r '.revisit[] | "- `\(.group)` — recorded ceiling `\(.ceiling)`, now `\(.crud)`"' report.json
+            fi
+
+            # Field drift on covered groups: the committed lock vs the latest
+            # SDK's models. Breaking rows get the warning treatment — they will
+            # fail the gate on whatever PR bumps the SDK; additions are the
+            # drift-fix job's queue. Rows are deduped by (kind, model, field):
+            # a shared component drifts once per covered group in drift.json
+            # (attribution), but reads better here as one line naming them all.
+            drift_total=$(jq -r '.counts.total' drift.json)
+            lock_missing=$(jq -r '.lock_missing' drift.json)
+            if [ "${DRIFT_DATA_OK}" != "true" ]; then
+              echo
+              echo "## Field drift on covered groups"
+              echo
+              echo "> [!WARNING]"
+              echo "> The field drift report crashed this run — drift status is **unknown**, not clean. Check the workflow logs."
+            elif [ "$lock_missing" = "true" ]; then
+              echo
+              echo "## Field drift on covered groups"
+              echo
+              echo "_No \`sdk-fields.lock.yaml\` — field drift is not being tracked. Seed it with \`make fields-sync\`._"
+            elif [ "$drift_total" -gt 0 ]; then
+              echo
+              echo "## Field drift on covered groups"
+              echo
+              echo "The SDK's models moved under groups the provider already covers (lock \`$(jq -r '.lock_sdk_version // "?"' drift.json)\` vs \`${LATEST}\`). The drift-fix job turns these into draft PRs; accepting a change deliberately means regenerating \`sdk-fields.lock.yaml\` in a reviewed PR."
+              if [ "${DRIFT_BREAKING}" -gt 0 ]; then
+                echo
+                echo "> [!WARNING]"
+                echo "> ${DRIFT_BREAKING} breaking change(s): the provider's compiled-in mappings assume a shape the SDK no longer has. These fail the field-drift gate on whatever PR bumps the SDK."
+                echo ">"
+                jq -r '
+                  [.drift[] | select(.breaking)]
+                  | group_by([.kind, .model, .field, .detail]) | .[] | .[0] as $d
+                  | (map(.group) | unique | map("`"+.+"`") | join(", ")) as $groups
+                  | "> - " + $groups
+                    + (if ($d.model // "") != "" then " `\($d.model)`" else "" end)
+                    + (if ($d.field // "") != "" then " `\($d.field)`" else "" end)
+                    + " — \($d.kind): \($d.detail)"
+                    + (if ($d.implemented_by | length) > 0 then " (fix in " + ($d.implemented_by | map("`"+.+"`") | join(", ")) + ")" else "" end)
+                ' drift.json
+              fi
+              if [ "${DRIFT_NEW}" -gt 0 ]; then
+                echo
+                jq -r '
+                  [.drift[] | select(.breaking | not)]
+                  | group_by([.kind, .model, .field, .detail]) | .[] | .[0] as $d
+                  | (map(.group) | unique | map("`"+.+"`") | join(", ")) as $groups
+                  | "- [ ] " + $groups
+                    + (if ($d.model // "") != "" then " `\($d.model)`" else "" end)
+                    + (if ($d.field // "") != "" then " `\($d.field)`" else "" end)
+                    + " — \($d.kind): \($d.detail)"
+                    + (if ($d.suggested_attribute // "") != "" then " → suggested attribute `\($d.suggested_attribute)`" else "" end)
+                ' drift.json
+              fi
             fi
 
             echo
@@ -277,18 +375,26 @@ jobs:
           if [ "$violations" -gt 0 ]; then
             title="SDK coverage: ${PENDING} pending, ${violations} violation(s) against ${LATEST}"
           fi
+          drift_total=$(( ${DRIFT_BREAKING:-0} + ${DRIFT_NEW:-0} ))
+          if [ "${DRIFT_BREAKING:-0}" -gt 0 ]; then
+            title="${title}, ${drift_total} field drift (${DRIFT_BREAKING} breaking)"
+          elif [ "$drift_total" -gt 0 ]; then
+            title="${title}, ${drift_total} field drift"
+          fi
           if [ "${PINNED_CHECK_OK}" != "true" ]; then
             title="${title} — pinned SDK check failing"
           fi
 
           # Close only when there is truly nothing to report: zero pending, a
-          # clean latest reconcile, AND a passing pinned check. The pinned check
-          # is this run's backstop — main has no required status checks, so a
-          # contradiction that reached it unchecked surfaces nowhere else; closing
-          # over it would bury the one warning this workflow exists to keep
-          # visible. Anything but an explicit "true" (including an empty output
-          # from a broken step) keeps the issue open.
-          if [ "${PENDING}" -eq 0 ] && [ "$violations" -eq 0 ] && [ "${PINNED_CHECK_OK}" = "true" ]; then
+          # clean latest reconcile, a passing pinned check, AND zero field drift.
+          # The pinned check is this run's backstop — main has no required status
+          # checks, so a contradiction that reached it unchecked surfaces nowhere
+          # else; closing over it would bury the one warning this workflow exists
+          # to keep visible. Field drift counts too: a drift-only week closing
+          # the tracker would hide the exact section the drift-fix pipeline works
+          # from. Anything but an explicit "true" (including an empty output from
+          # a broken step) keeps the issue open.
+          if [ "${PENDING}" -eq 0 ] && [ "$violations" -eq 0 ] && [ "${PINNED_CHECK_OK}" = "true" ] && [ "$drift_total" -eq 0 ] && [ "${DRIFT_DATA_OK}" = "true" ]; then
             if [ -n "$existing" ]; then
               gh issue comment "$existing" --body "All SDK service groups are now covered or excluded as of \`${LATEST}\`. Closing; a future run opens a fresh tracking issue if a coverage gap reappears."
               gh issue close "$existing"
@@ -307,18 +413,611 @@ jobs:
             echo "Created a new tracking issue"
           fi
 
+  # Turn field drift on ONE covered group into a draft PR. The scaffold job's
+  # sibling with a different unit of work: not a new type, but the reconciliation
+  # of an existing group's mapping after the SDK's models moved. It handles every
+  # drift kind — breaking included, with a warning block in the PR body — because
+  # the reviewer of real code is the arbiter here, exactly as in scaffolding. It
+  # runs BEFORE scaffold (scaffold `needs` it): breaking drift gets its fix PR
+  # opened ahead of new-group work, and the scaffold bump guard refuses to ride
+  # over what this job has not yet reconciled.
+  driftfix:
+    name: drift-fix
+    needs: detect
+    # Never on a dry run, never when a human is retrying a specific scaffold
+    # group, never on GROUP-LEVEL contradictions (a lying ledger), and only
+    # when there is drift. Deliberately pinned_group_ok rather than the full
+    # pinned check: the full check also fails on breaking field drift, and
+    # suppressing this job on that would deadlock the one automation that
+    # fixes it. A missing lock reports zero drift, so this job stays skipped
+    # until the lock is seeded — the $0-on-no-drift guarantee is structural.
+    if: >-
+      github.event.inputs.dry_run != 'true' &&
+      github.event.inputs.group == '' &&
+      needs.detect.outputs.pinned_group_ok == 'true' &&
+      (needs.detect.outputs.drift_breaking != '0' || needs.detect.outputs.drift_new != '0')
+    runs-on: ubuntu-latest
+    # Same slack as scaffold, same reason: a job-level timeout is a cancellation
+    # and skips every failure() handler; the step timeouts are the real budget.
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    env:
+      # Same token discipline as scaffold: no job-level GH_TOKEN, because the
+      # agent step inherits job env and runs code it just wrote.
+      GH_REPO: ${{ github.repository }}
+      SDK_MODULE: github.com/latitudesh/latitudesh-go-sdk
+      LATEST: ${{ needs.detect.outputs.latest }}
+      # One open drift PR at a time: drift PRs edit existing resources, so two
+      # in flight would conflict on the same files far more readily than two
+      # scaffolds do.
+      MAX_OPEN_DRIFT_PRS: "1"
+      DRIFT_MODEL: claude-sonnet-5
+      # Keep in sync with SCAFFOLD_MAX_TURNS: same budget rationale.
+      DRIFT_MAX_TURNS: "200"
+      GIT_BOT_NAME: "latitudesh-sdk-watch[bot]"
+      GIT_BOT_EMAIL: "latitudesh-sdk-watch[bot]@users.noreply.github.com"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Same as scaffold: never let the default token shadow the app token
+          # in .git/config, never leave it readable during the agent step.
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: "go.mod"
+
+      - name: Download coverage report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: sdk-coverage-report
+          # NEVER into the workspace — the gate's diff-scope check scans
+          # untracked files (see the scaffold job's identical step).
+          path: ${{ runner.temp }}/sdk-coverage
+
+      # Same orphan semantics as scaffold, keyed on this job's own body marker:
+      # an open draft with a `<!-- drift:... -->` marker at the start of a run
+      # was pushed by an attempt that died before finishing its lifecycle.
+      - name: Find orphaned drift drafts
+        id: orphans
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Ownership is verified structurally, never by the body marker alone:
+          # the draft must have been AUTHORED by this workflow's GitHub App, sit
+          # on a same-repo drift/* branch, and carry the marker. Anything else —
+          # a fork, an off-namespace branch, or a human-authored draft that
+          # imitates all of it — must never be granted skip-e2e and promoted to
+          # ready by the app token. If the app is ever renamed, adoption fails
+          # CLOSED: orphans stay visibly draft until this login is updated.
+          adoptions=$(gh pr list --state open --limit 100 --json number,isDraft,body,author,headRefName,isCrossRepository \
+            --jq '[.[] | select(.isDraft)
+                   | select(.author.login == "app/latitudesh-sdk-watch")
+                   | select(.isCrossRepository | not)
+                   | select(.headRefName | startswith("drift/"))
+                   | select((.body // "") | contains("<!-- drift:"))
+                   | "\(.number)=\((.body | capture("<!-- drift:(?<g>[^ ]+) -->").g))"] | join(" ")')
+          echo "adoptions=$adoptions" >> "$GITHUB_OUTPUT"
+          if [ -n "$adoptions" ]; then
+            echo "::notice::orphaned draft drift PR(s) to adopt: $adoptions"
+          else
+            echo "no orphaned drafts"
+          fi
+
+      - name: Mint a token to adopt orphans
+        id: adopt_app
+        if: steps.orphans.outputs.adoptions != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.SDK_WATCH_CLIENT_ID }}
+          private-key: ${{ secrets.SDK_WATCH_APP_PRIVATE_KEY }}
+
+      - name: Adopt orphaned drift drafts
+        if: steps.orphans.outputs.adoptions != ''
+        env:
+          DEFAULT_TOKEN: ${{ github.token }}
+          APP_TOKEN: ${{ steps.adopt_app.outputs.token }}
+          ADOPTIONS: ${{ steps.orphans.outputs.adoptions }}
+        run: |
+          set -euo pipefail
+          for adoption in $ADOPTIONS; do
+            n="${adoption%%=*}"
+            g="${adoption#*=}"
+            # The marker carries a comma-separated set when the PR reconciled
+            # several breaking groups at once — one drift:<group> label each.
+            GH_TOKEN="$DEFAULT_TOKEN" gh label create drift --color b60205 \
+              --description "Agent PR reconciling SDK field drift on a covered group" 2>/dev/null || true
+            group_label_args=""
+            for one in ${g//,/ }; do
+              GH_TOKEN="$DEFAULT_TOKEN" gh label create "drift:${one}" --color b60205 \
+                --description "Drift PR for SDK group ${one}" 2>/dev/null || true
+              group_label_args="$group_label_args --add-label drift:${one}"
+            done
+            GH_TOKEN="$DEFAULT_TOKEN" gh label create skip-e2e --color ededed \
+              --description "Skip the acceptance suite on this PR" 2>/dev/null || true
+            # shellcheck disable=SC2086 — group_label_args is a flag list on purpose
+            GH_TOKEN="$APP_TOKEN" gh pr edit "$n" \
+              --add-label drift $group_label_args --add-label skip-e2e
+            GH_TOKEN="$APP_TOKEN" gh pr ready "$n"
+            echo "adopted drift PR #$n (group(s) ${g}) — labels healed, marked ready"
+          done
+
+      - name: Select the group to reconcile
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Same claim/park discipline as scaffold, in this job's own label
+          # namespace: an open drift PR claims its group; a drift PR closed
+          # without merging parks the group until a human decides (re-triggering
+          # is a manual sync or a workflow_dispatch after the park is resolved).
+          claimed=$(gh pr list --label drift --state open --json labels \
+            --jq '[.[].labels[].name | select(startswith("drift:")) | ltrimstr("drift:")] | unique | .[]')
+          parked=$(gh pr list --label drift --state closed --limit 100 --json labels,mergedAt \
+            --jq '[.[] | select(.mergedAt == null) | .labels[].name | select(startswith("drift:")) | ltrimstr("drift:")] | unique | .[]')
+
+          open_count=$(gh pr list --label drift --state open --json number --jq 'length')
+          if [ "$open_count" -ge "$MAX_OPEN_DRIFT_PRS" ]; then
+            echo "has_work=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$open_count drift PR(s) already open (cap $MAX_OPEN_DRIFT_PRS) — not reconciling this run"
+            exit 0
+          fi
+
+          # group_stale rows (a group that left coverage but still sits in the
+          # lock) are excluded: their fix is the human PR that changed coverage,
+          # not a per-group resync — `fields -write -group` cannot even name a
+          # group the manifest no longer covers.
+          drift_json="$RUNNER_TEMP/sdk-coverage/drift.json"
+          breaking_groups=$(jq -r '[.drift[] | select(.breaking) | .group] | unique | .[]' "$drift_json")
+
+          if [ -n "$breaking_groups" ]; then
+            # Breaking drift is all-or-nothing per SDK bump: the gate checks the
+            # whole surface against the bumped tree, so a PR fixing one breaking
+            # group would still be red on the others and could never merge. One
+            # PR carries every breaking group; a parked breaking group therefore
+            # blocks the set and needs a human decision first — fail loudly
+            # BEFORE spending agent tokens.
+            blocked=$(printf '%s\n' "$breaking_groups" | grep -Fxf <(printf '%s\n' "$parked") || true)
+            if [ -n "$blocked" ]; then
+              echo "::error::breaking drift includes parked group(s): $(echo "$blocked" | tr '\n' ' ')— resolve their closed drift PR decision (or sync the lock in a reviewed PR) before this job can proceed"
+              exit 1
+            fi
+            pick=$(printf '%s\n' "$breaking_groups" | paste -sd, -)
+          else
+            # Informational-only drift: one group per run, most-moved first,
+            # name for determinism, claimed/parked skipped.
+            pick=""
+            while read -r g; do
+              printf '%s\n' "$claimed" | grep -Fxq "$g" && continue
+              printf '%s\n' "$parked" | grep -Fxq "$g" && continue
+              pick="$g"
+              break
+            done < <(jq -r '
+              [.drift[] | select(.kind != "group_stale") | {group}] | group_by(.group)
+              | map({group: .[0].group, total: length})
+              | sort_by([-.total, .group])
+              | .[].group
+            ' "$drift_json")
+          fi
+
+          if [ -z "$pick" ]; then
+            echo "has_work=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::every drifted group is claimed, parked, or stale-only — nothing to reconcile"
+            exit 0
+          fi
+          echo "has_work=true" >> "$GITHUB_OUTPUT"
+          echo "group=$pick" >> "$GITHUB_OUTPUT"
+          echo "Selected: $pick"
+
+      - name: Bump the SDK to the latest release
+        if: steps.select.outputs.has_work == 'true'
+        run: |
+          set -euo pipefail
+          # Drift is measured against the latest published SDK, so the fix must
+          # compile against it. Same division of labor as scaffold: the workflow
+          # owns go.mod, the agent is forbidden from touching it. No drift guard
+          # here, deliberately — this is the job that RESOLVES the drift the
+          # scaffold bump guard refuses to ride over.
+          pinned=$(go list -m -f '{{.Version}}' "$SDK_MODULE")
+          if [ "$pinned" = "$LATEST" ]; then
+            echo "pinned SDK already at $LATEST — no bump needed"
+            exit 0
+          fi
+          go get "$SDK_MODULE@$LATEST"
+          go mod tidy
+          # A bump that breaks the build is human work, not agent work.
+          go build ./...
+          git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
+            commit -m "chore(deps): bump latitudesh-go-sdk to $LATEST" -- go.mod go.sum
+
+      - name: Render the drift prompt
+        id: render
+        if: steps.select.outputs.has_work == 'true'
+        env:
+          GROUP: ${{ steps.select.outputs.group }}
+        run: |
+          set -euo pipefail
+          # Recompute in-branch rather than trusting the artifact: the bump just
+          # made pinned == latest, and the agent must see exactly the rows the
+          # gate on this branch will hold it to. GROUP may be a comma-separated
+          # set (every breaking group rides in one PR — see the select step).
+          drift=$(go run ./cmd/sdkcoverage drift -format json)
+          groups_json=$(printf '%s' "$GROUP" | jq -R 'split(",")')
+          group_drift=$(echo "$drift" | jq --argjson gs "$groups_json" '[.drift[] | select(.group as $g | $gs | index($g))]')
+          rows=$(echo "$group_drift" | jq 'length')
+          if [ "$rows" -eq 0 ]; then
+            echo "::error::$GROUP no longer drifts against the pinned SDK after the bump — stale selection"
+            exit 1
+          fi
+          breaking=$(echo "$group_drift" | jq '[.[] | select(.breaking)] | length')
+          additions=$(echo "$group_drift" | jq '[.[] | select(.kind == "field_added" or .kind == "enum_value_added" or .kind == "method_added" or .kind == "model_added")] | length')
+          implemented_by=$(echo "$group_drift" | jq -r '[.[].implemented_by[]] | unique | map("`"+.+"`") | join(", ")')
+          sdk_version=$(go run ./cmd/sdkcoverage report -format json | jq -r '.sdk_version')
+
+          # A stale handoff from a previous process must never masquerade as
+          # this run's.
+          rm -f /tmp/drift-handoff.md
+
+          GROUP="$GROUP" DRIFT_JSON="$group_drift" IMPLEMENTED_BY="${implemented_by:-unknown}" \
+            SDK_VERSION="$sdk_version" MAX_TURNS="$DRIFT_MAX_TURNS" \
+            scripts/render-scaffold-prompt.sh .github/prompts/fix-field-drift.md > /tmp/drift-prompt.md
+
+          {
+            echo "prompt<<DRIFT_PROMPT_EOF"
+            cat /tmp/drift-prompt.md
+            echo "DRIFT_PROMPT_EOF"
+            echo "rows=$rows"
+            echo "breaking=$breaking"
+            echo "additions=$additions"
+            echo "implemented_by=$implemented_by"
+            echo "sdk_version=$sdk_version"
+            echo "group_drift<<DRIFT_JSON_EOF"
+            echo "$group_drift"
+            echo "DRIFT_JSON_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run the drift-fix agent
+        id: agent
+        if: steps.select.outputs.has_work == 'true'
+        timeout-minutes: 30
+        # The gate below is the arbiter, not the agent's exit code — same
+        # rationale as scaffold.
+        continue-on-error: true
+        uses: anthropics/claude-code-action@70fec183852c4f82f3f1969faed7dd60c5149ca7 # v1.0.207
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          prompt: ${{ steps.render.outputs.prompt }}
+          # Identical allowlist to scaffold: no gh, no git writes, no network,
+          # no free shell.
+          claude_args: >-
+            --model ${{ env.DRIFT_MODEL }}
+            --max-turns ${{ env.DRIFT_MAX_TURNS }}
+            --allowedTools "Read,Glob,Grep,Edit,Write,MultiEdit,Bash(go build:*),Bash(go vet:*),Bash(go test:*),Bash(go doc:*),Bash(gofmt:*),Bash(go generate:*),Bash(go run ./cmd/sdkcoverage:*),Bash(jq:*),Bash(scripts/scaffold-validate.sh:*)"
+
+      - name: Report agent cost and stats
+        id: cost
+        if: always() && steps.agent.outcome != 'skipped' && steps.agent.outputs.execution_file != ''
+        env:
+          EXEC_FILE: ${{ steps.agent.outputs.execution_file }}
+          GROUP: ${{ steps.select.outputs.group }}
+        run: |
+          set -uo pipefail
+          cost=$(jq -r 'if type=="array" then (map(select(.type? == "result")) | last | .total_cost_usd // empty) else (.total_cost_usd // empty) end' "$EXEC_FILE" 2>/dev/null || true)
+          turns=$(jq -r 'if type=="array" then (map(select(.type? == "result")) | last | .num_turns // empty) else (.num_turns // empty) end' "$EXEC_FILE" 2>/dev/null || true)
+          cost=${cost:-unknown}
+          turns=${turns:-unknown}
+
+          cost_fmt="$cost"
+          if [ "$cost" != "unknown" ]; then
+            cost_fmt=$(printf '%.2f' "$cost")
+          fi
+          prompt_version=$(sed -n 's/^prompt-version: *//p' .github/prompts/fix-field-drift.md | head -1)
+          if [ -f /tmp/drift-handoff.md ]; then
+            handoff="present ($(wc -c < /tmp/drift-handoff.md | tr -d ' ') bytes)"
+          else
+            handoff="MISSING"
+          fi
+          {
+            echo "## Drift-fix agent"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Group | \`$GROUP\` |"
+            echo "| Model | \`$DRIFT_MODEL\` |"
+            echo "| Prompt | v${prompt_version:-?} |"
+            echo "| Turns | ${turns} (cap $DRIFT_MAX_TURNS) |"
+            echo "| Cost | \$${cost_fmt} |"
+            echo "| Handoff file | $handoff |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$cost" != "unknown" ] && awk "BEGIN { exit !($cost > 6) }"; then
+            echo "::warning::agent run cost \$${cost_fmt} — above the \$6 watermark, review the transcript for thrash"
+          fi
+
+      - name: Validate the reconciliation
+        if: steps.select.outputs.has_work == 'true'
+        env:
+          GROUP: ${{ steps.select.outputs.group }}
+        run: |
+          set -euo pipefail
+          bash scripts/scaffold-validate.sh --mode drift --group "$GROUP" --base HEAD
+
+      # Undo any agent tampering with git's code-execution surfaces before the
+      # write token exists: hooks emptied, and the repo-local config REGENERATED
+      # from scratch — never restored from a snapshot, because every snapshot
+      # location (including RUNNER_TEMP) is reachable by the agent's Write tool,
+      # and restoring an agent-writable file would just launder the tampering
+      # back in. Everything below is deterministic; filters, fsmonitor,
+      # credential helpers, and insteadOf rewrites cannot survive it. The
+      # finalize step additionally ignores global and system git config.
+      - name: Reset git metadata to known-good
+        if: steps.select.outputs.has_work == 'true'
+        run: |
+          set -euo pipefail
+          rm -rf .git/hooks
+          mkdir .git/hooks
+          cat > .git/config <<EOF
+          [core]
+          	repositoryformatversion = 0
+          	filemode = true
+          	bare = false
+          	logallrefupdates = true
+          [remote "origin"]
+          	url = https://github.com/${GH_REPO}.git
+          	fetch = +refs/heads/*:refs/remotes/origin/*
+          [gc]
+          	auto = 0
+          EOF
+
+      - name: Mint the installation token
+        id: app
+        if: steps.select.outputs.has_work == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.SDK_WATCH_CLIENT_ID }}
+          private-key: ${{ secrets.SDK_WATCH_APP_PRIVATE_KEY }}
+
+      - name: Push the branch and open the PR
+        if: steps.select.outputs.has_work == 'true'
+        env:
+          GROUP: ${{ steps.select.outputs.group }}
+          ROWS: ${{ steps.render.outputs.rows }}
+          BREAKING: ${{ steps.render.outputs.breaking }}
+          ADDITIONS: ${{ steps.render.outputs.additions }}
+          IMPLEMENTED_BY: ${{ steps.render.outputs.implemented_by }}
+          SDK_VERSION: ${{ steps.render.outputs.sdk_version }}
+          GROUP_DRIFT: ${{ steps.render.outputs.group_drift }}
+          EXEC_FILE: ${{ steps.agent.outputs.execution_file }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # Global/system git config are agent-reachable files too — ignore
+          # them entirely in this token-bearing step. Repo-local config was
+          # regenerated from scratch a few steps up.
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_SYSTEM: /dev/null
+        run: |
+          # This step holds the WRITE token, so it runs nothing the tree can
+          # extend: no go (a package initializer in agent-written code would
+          # execute with the token in reach), and git only with its
+          # code-execution surfaces neutralized — hooks dir emptied and config
+          # restored above, hooksPath overridden again on commit and push as a
+          # second layer. jq/sed/gh/awk only read data.
+          set -euo pipefail
+          slug=$(printf '%s' "$GROUP" | tr '[:upper:]' '[:lower:]' | tr '.,' '--')
+          branch="drift/${slug}-${{ github.run_id }}"
+
+          # feat + `type: feature` (minor) when the drift includes additions;
+          # fix + `type: bug` (patch) for a pure breaking/notes reconciliation —
+          # release-drafter's version resolver keys off exactly these labels,
+          # and the branch commit below uses the same prefix so the two never
+          # disagree.
+          if [ "${ADDITIONS:-0}" -gt 0 ]; then
+            prefix="feat"
+            type_label="type: feature"
+          else
+            prefix="fix"
+            type_label="type: bug"
+          fi
+
+          # Same rerunnable finalize as scaffold: reuse a surviving branch+PR
+          # pair untouched, replace an orphan branch, otherwise push fresh.
+          reuse_pr=""
+          if git ls-remote --exit-code origin "refs/heads/${branch}" >/dev/null 2>&1; then
+            reuse_pr=$(GH_TOKEN="${{ github.token }}" gh pr list --state open --head "$branch" \
+              --json url --jq '.[0].url // empty')
+            if [ -n "$reuse_pr" ]; then
+              echo "branch ${branch} and its PR survive from a previous attempt — finishing their lifecycle"
+            else
+              echo "branch ${branch} is an orphan with no PR — replacing it with this attempt's tree"
+              git -c core.hooksPath=/dev/null push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" --delete "refs/heads/${branch}"
+            fi
+          fi
+          if [ -z "$reuse_pr" ]; then
+            git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
+              add -- latitudesh sdk-coverage.yaml sdk-fields.lock.yaml templates examples docs
+            git -c core.hooksPath=/dev/null -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
+              commit -m "${prefix}(coverage): reconcile field drift on SDK group ${GROUP}"
+            git -c core.hooksPath=/dev/null push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/${branch}"
+          fi
+
+          prompt_version=$(sed -n 's/^prompt-version: *//p' .github/prompts/fix-field-drift.md | head -1)
+          handoff=$(jq -r 'if type=="array" then (map(select(.type? == "result")) | last | .result // "") else (.result // "") end' "$EXEC_FILE" 2>/dev/null | awk '/^## Handoff/{found=1} found' | head -c 8000 || true)
+          if [ -z "$handoff" ] && [ -f /tmp/drift-handoff.md ]; then
+            handoff=$(head -c 8000 /tmp/drift-handoff.md)
+          fi
+          if [ -z "$handoff" ]; then
+            handoff="_The agent did not emit a handoff block — read the transcript in the run artifacts before reviewing._"
+          fi
+
+          {
+            echo "# Field drift reconciliation"
+            echo
+            echo "SDK group \`$GROUP\` moved under the provider's feet; this PR reconciles the mapping owned by ${IMPLEMENTED_BY:-\`?\`} and accepts the new shape into \`sdk-fields.lock.yaml\` — the lock diff in this PR **is** the acceptance record."
+            echo
+            if [ "${BREAKING:-0}" -gt 0 ]; then
+              echo "> [!WARNING]"
+              echo "> ${BREAKING} of the ${ROWS} drift row(s) below are **breaking**: the SDK no longer has a shape the provider's mappings assumed. Until this PR merges, \`TestProviderSDKFieldDrift\` fails on any branch that bumps the SDK. Review what happens to existing state especially carefully."
+              echo
+            fi
+            echo "## Versioning"
+            echo
+            if [ "$prefix" = "feat" ]; then
+              echo "Version Bump Type: [minor] - 🤖 (automated) — the drift includes new capability (fields/enum values) now exposed"
+            else
+              echo "Version Bump Type: [patch] - 🤖 (automated) — mapping reconciliation only, no new capability"
+            fi
+            echo
+            echo "## The drift"
+            echo
+            echo "Lock vs \`$SDK_VERSION\` at the time this PR was generated:"
+            echo
+            echo "| Group | Kind | Where | Detail | Breaking |"
+            echo "|---|---|---|---|---|"
+            echo "$GROUP_DRIFT" | jq -r '.[] | ((.model // "") as $m | (.field // "") as $f | "| `\(.group)` | `\(.kind)` | \(if $m != "" then "`"+$m+"`" else "" end)\(if $f != "" then " `"+$f+"`" else "" end) | \(.detail) | \(if .breaking then "⚠️ yes" else "no" end) |")'
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| SDK version | \`$SDK_VERSION\` |"
+            echo "| Owning types | ${IMPLEMENTED_BY:-?} |"
+            echo
+            echo "<details>"
+            echo "<summary>Agent handoff — not verified offline</summary>"
+            echo
+            echo "$handoff"
+            echo
+            echo "</details>"
+            echo
+            echo "<details>"
+            echo "<summary>Validation report</summary>"
+            echo
+            echo "Every gate step passed before this PR was opened (drift mode): diff scope, forbidden-content grep, gofmt, go vet, go build, unit tests (incl. \`TestProviderSDKCoverage\` and \`TestProviderSDKFieldDrift\`), zero remaining drift for \`$GROUP\`, docs regeneration, lock accepted."
+            echo
+            echo "The gate proves the change is well-formed, **not that it is correct** — that is what the checklist below is for."
+            echo
+            echo "</details>"
+            echo
+            echo "## Reviewer checklist"
+            echo
+            echo "- [ ] Every drift row is either mapped or deliberately omitted with the why in \`sdk-coverage.yaml\` \`notes:\`"
+            echo "- [ ] New attributes are Optional+Computed; nothing existing changed Required/Optional or gained a plan modifier"
+            echo "- [ ] Breaking rows: checked what a plan against existing state does after this change"
+            echo "- [ ] Enum changes: every validation AND coercion site touched (see handoff)"
+            echo "- [ ] Remove the \`skip-e2e\` label (and re-run the checks) to exercise the full acceptance suite"
+            echo
+            echo "---"
+            echo
+            echo "Generated from [\`latitudesh-go-sdk\`](https://github.com/latitudesh/latitudesh-go-sdk) \`$SDK_VERSION\` by the [sdk-watch workflow]($RUN_URL) — prompt v${prompt_version:-?}."
+            echo
+            echo "<!-- drift:$GROUP -->"
+          } > pr-body.md
+
+          # One drift:<group> label PER group — the claim/park queries key on
+          # individual group names, and a multi-group PR claims each of them.
+          GH_TOKEN="${{ github.token }}" gh label create drift --color b60205 \
+            --description "Agent PR reconciling SDK field drift on a covered group" 2>/dev/null || true
+          group_label_args=""
+          for g in ${GROUP//,/ }; do
+            GH_TOKEN="${{ github.token }}" gh label create "drift:${g}" --color b60205 \
+              --description "Drift PR for SDK group ${g}" 2>/dev/null || true
+            group_label_args="$group_label_args --add-label drift:${g}"
+          done
+          GH_TOKEN="${{ github.token }}" gh label create "$type_label" --color 0e8a16 \
+            --description "Release-drafter version resolver label" 2>/dev/null || true
+          GH_TOKEN="${{ github.token }}" gh label create skip-e2e --color ededed \
+            --description "Skip the acceptance suite on this PR" 2>/dev/null || true
+
+          # Draft first, label, then ready — same test.yml race avoidance as
+          # scaffold.
+          url="$reuse_pr"
+          if [ -z "$url" ]; then
+            url=$(GH_TOKEN="$APP_TOKEN" gh pr create --draft \
+              --head "$branch" \
+              --title "${prefix}(coverage): 🤖 reconcile field drift on SDK group(s) ${GROUP}" \
+              --body-file pr-body.md)
+          fi
+          # shellcheck disable=SC2086 — group_label_args is a flag list on purpose
+          GH_TOKEN="$APP_TOKEN" gh pr edit "$url" \
+            --add-label drift $group_label_args \
+            --add-label "$type_label" --add-label skip-e2e
+          if [ "$(GH_TOKEN="$APP_TOKEN" gh pr view "$url" --json isDraft --jq '.isDraft')" = "true" ]; then
+            GH_TOKEN="$APP_TOKEN" gh pr ready "$url"
+          fi
+          echo "PR (ready for review): $url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the transcript
+        if: steps.select.outputs.has_work == 'true' && steps.agent.outputs.execution_file != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: drift-transcript
+          path: ${{ steps.agent.outputs.execution_file }}
+          retention-days: 14
+          overwrite: true
+          if-no-files-found: ignore
+
+      - name: Capture the failed tree
+        if: failure() && steps.select.outputs.has_work == 'true'
+        run: |
+          set -uo pipefail
+          git add -A
+          git diff --cached HEAD > drift-failure.patch || true
+          git status --porcelain > drift-failure-status.txt || true
+          if grep -Eq 'sk-ant-|ANTHROPIC_API_KEY|BEGIN[ A-Z]*PRIVATE KEY' drift-failure.patch; then
+            echo "patch withheld: it matches a key-material pattern; inspect the run log instead" > drift-failure.patch
+            echo "::warning::failure patch withheld — key-material pattern detected in the agent's tree"
+          fi
+
+      - name: Upload failure artifacts
+        if: failure() && steps.select.outputs.has_work == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: drift-failure
+          path: |
+            /tmp/drift-prompt.md
+            ${{ steps.agent.outputs.execution_file }}
+            drift-failure.patch
+            drift-failure-status.txt
+          retention-days: 14
+          overwrite: true
+          if-no-files-found: ignore
+
+      - name: Note the failure on the tracking issue
+        if: failure() && steps.select.outputs.has_work == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GROUP: ${{ steps.select.outputs.group }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          existing=$(gh issue list --label sdk-coverage --state open --limit 100 \
+            --json number,body --jq \
+            'map(select(.body | contains("<!-- sdk-coverage-tracking -->"))) | sort_by(.number) | .[0].number // empty')
+          [ -n "$existing" ] || exit 0
+          gh issue comment "$existing" --body "Drift-fix run for \`$GROUP\` failed — no PR was opened. Transcript and diff: $RUN_URL"
+
   # Turn ONE pending group into a draft PR. One group per run keeps prompts
   # small, failures attributable, and manifest/provider.go conflicts between
   # sibling scaffold PRs structurally rare; the open-PR cap keeps the reviewer's
-  # plate full without flooding. This is the only job that can see the Anthropic
-  # key, and it never runs on an empty queue — the $0-on-no-delta guarantee is
-  # structural, not behavioral.
+  # plate full without flooding. This job and driftfix are the only ones that can
+  # see the Anthropic key, and neither runs on an empty queue — the $0-on-no-delta
+  # guarantee is structural, not behavioral.
   scaffold:
-    needs: detect
+    needs: [detect, driftfix]
     # Real work only, on a sane pinned manifest, never on a dry run. A
     # contradicted manifest means the coverage ledger is lying, and scaffolding
-    # on top of it risks double-implementing a group.
+    # on top of it risks double-implementing a group. driftfix goes first purely
+    # for ORDERING (never two agent jobs racing on PRs); its failure does not
+    # block scaffolding — a bump-free scaffold is safe whatever the drift
+    # picture, and a bumping one has its own drift guard that parks it.
     if: >-
+      !cancelled() &&
+      needs.driftfix.result != 'cancelled' &&
       github.event.inputs.dry_run != 'true' &&
       needs.detect.outputs.pending != '0' &&
       needs.detect.outputs.pinned_check_ok == 'true'
@@ -409,8 +1108,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          adoptions=$(gh pr list --state open --json number,isDraft,body \
-            --jq '[.[] | select(.isDraft) | select((.body // "") | contains("<!-- scaffold:"))
+          # Ownership is verified structurally, never by the body marker alone:
+          # the draft must have been AUTHORED by this workflow's GitHub App, sit
+          # on a same-repo scaffold/* branch, and carry the marker. Anything
+          # else — a fork, an off-namespace branch, or a human-authored draft
+          # that imitates all of it — must never be granted skip-e2e and
+          # promoted to ready by the app token. If the app is ever renamed,
+          # adoption fails CLOSED: orphans stay visibly draft until this login
+          # is updated.
+          adoptions=$(gh pr list --state open --limit 100 --json number,isDraft,body,author,headRefName,isCrossRepository \
+            --jq '[.[] | select(.isDraft)
+                   | select(.author.login == "app/latitudesh-sdk-watch")
+                   | select(.isCrossRepository | not)
+                   | select(.headRefName | startswith("scaffold/"))
+                   | select((.body // "") | contains("<!-- scaffold:"))
                    | "\(.number)=\((.body | capture("<!-- scaffold:(?<g>[^ ]+) -->").g))"] | join(" ")')
           echo "adoptions=$adoptions" >> "$GITHUB_OUTPUT"
           if [ -n "$adoptions" ]; then
@@ -539,6 +1250,15 @@ jobs:
           # A bump that breaks the build is human work, not agent work: stop
           # before spending a single token.
           go build ./...
+          # The bump must not ride over breaking field drift on covered groups:
+          # the lock is only ever synced by a PR that addresses the drift (the
+          # drift-fix job, or a human), so syncing it here would launder a
+          # breaking change into a scaffold PR about something else. Additive
+          # drift does not block — the gate is breaking-only.
+          if ! go run ./cmd/sdkcoverage drift -strict -format text; then
+            echo "::error::bumping to $LATEST carries breaking field drift on covered groups — merge the drift-fix PR (or sync sdk-fields.lock.yaml in a reviewed PR) first; parking this scaffold run"
+            exit 1
+          fi
           git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
             commit -m "chore(deps): bump latitudesh-go-sdk to $LATEST" -- go.mod go.sum
 
@@ -669,6 +1389,58 @@ jobs:
           set -euo pipefail
           bash scripts/scaffold-validate.sh --group "$GROUP" --type-name "$TF_NAME" --kinds "$KINDS" --base HEAD
 
+      # Everything that COMPILES OR RUNS code from the tree happens here, before
+      # any write token exists in the job. `go run ./cmd/sdkcoverage` imports the
+      # agent-modifiable latitudesh package, so a package-level initializer the
+      # agent planted would execute inside this step — which is exactly why this
+      # step carries no token, and why the finalize step below must never invoke
+      # go (or anything else the tree can extend).
+      - name: Seed the lock and take the after-merge numbers
+        id: after
+        if: steps.select.outputs.has_work == 'true'
+        env:
+          GROUP: ${{ steps.select.outputs.group }}
+        run: |
+          set -euo pipefail
+          # The group is covered as of this tree, so seed its lock entry
+          # surgically (one group, nothing else) — otherwise every scaffold
+          # merge immediately spawns a group_unlocked drift PR whose whole
+          # content would be this line. Deterministic, so it happens here and
+          # not in the agent.
+          go run ./cmd/sdkcoverage fields -write -group "$GROUP"
+          # The tree now carries the scaffold, so a fresh report gives the
+          # after-merge coverage numbers for the PR body.
+          after=$(go run ./cmd/sdkcoverage report -format json)
+          echo "covered_after=$(echo "$after" | jq -r '.counts.covered')" >> "$GITHUB_OUTPUT"
+          echo "pending_after=$(echo "$after" | jq -r '.counts.pending')" >> "$GITHUB_OUTPUT"
+
+      # Undo any agent tampering with git's code-execution surfaces before the
+      # write token exists: hooks emptied, and the repo-local config REGENERATED
+      # from scratch — never restored from a snapshot, because every snapshot
+      # location (including RUNNER_TEMP) is reachable by the agent's Write tool,
+      # and restoring an agent-writable file would just launder the tampering
+      # back in. Everything below is deterministic; filters, fsmonitor,
+      # credential helpers, and insteadOf rewrites cannot survive it. The
+      # finalize step additionally ignores global and system git config.
+      - name: Reset git metadata to known-good
+        if: steps.select.outputs.has_work == 'true'
+        run: |
+          set -euo pipefail
+          rm -rf .git/hooks
+          mkdir .git/hooks
+          cat > .git/config <<EOF
+          [core]
+          	repositoryformatversion = 0
+          	filemode = true
+          	bare = false
+          	logallrefupdates = true
+          [remote "origin"]
+          	url = https://github.com/${GH_REPO}.git
+          	fetch = +refs/heads/*:refs/remotes/origin/*
+          [gc]
+          	auto = 0
+          EOF
+
       - name: Mint the installation token
         id: app
         if: steps.select.outputs.has_work == 'true'
@@ -690,10 +1462,23 @@ jobs:
           PENDING_BEFORE: ${{ steps.render.outputs.pending_before }}
           TOTAL_GROUPS: ${{ steps.render.outputs.total_groups }}
           NOTES: ${{ steps.render.outputs.notes }}
+          COVERED_AFTER: ${{ steps.after.outputs.covered_after }}
+          PENDING_AFTER: ${{ steps.after.outputs.pending_after }}
           EXEC_FILE: ${{ steps.agent.outputs.execution_file }}
           APP_TOKEN: ${{ steps.app.outputs.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # Global/system git config are agent-reachable files too — ignore
+          # them entirely in this token-bearing step. Repo-local config was
+          # regenerated from scratch a few steps up.
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_SYSTEM: /dev/null
         run: |
+          # This step holds the WRITE token, so it runs nothing the tree can
+          # extend: no go (a package initializer in agent-written code would
+          # execute with the token in reach), and git only with its
+          # code-execution surfaces neutralized — hooks dir emptied and config
+          # restored above, hooksPath overridden again on commit and push as a
+          # second layer. jq/sed/gh/awk only read data.
           set -euo pipefail
           short="${TF_NAME#latitudesh_}"
           branch="scaffold/${short}-${{ github.run_id }}"
@@ -719,18 +1504,19 @@ jobs:
               echo "branch ${branch} and its PR survive from a previous attempt — finishing their lifecycle"
             else
               echo "branch ${branch} is an orphan with no PR — replacing it with this attempt's tree"
-              git push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" --delete "refs/heads/${branch}"
+              git -c core.hooksPath=/dev/null push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" --delete "refs/heads/${branch}"
             fi
           fi
           if [ -z "$reuse_pr" ]; then
             # Commit by explicit pathspec — the gate already proved the diff is
             # in scope, and adding by name means a stray file could not ride
-            # along even if it were not.
+            # along even if it were not. (The lock entry for the new group was
+            # seeded by the tokenless step above.)
             git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
-              add -- latitudesh sdk-coverage.yaml templates examples docs
-            git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
+              add -- latitudesh sdk-coverage.yaml sdk-fields.lock.yaml templates examples docs
+            git -c core.hooksPath=/dev/null -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
               commit -m "feat(${short}): scaffold ${TF_NAME} from SDK group ${GROUP}"
-            git push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/${branch}"
+            git -c core.hooksPath=/dev/null push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/${branch}"
           fi
 
           prompt_version=$(sed -n 's/^prompt-version: *//p' .github/prompts/scaffold-resource.md | head -1)
@@ -747,11 +1533,10 @@ jobs:
             handoff="_The agent did not emit a handoff block — read the transcript in the run artifacts before reviewing._"
           fi
 
-          # The tree now carries the scaffold, so a fresh report gives the
-          # after-merge coverage numbers for the summary.
-          after=$(go run ./cmd/sdkcoverage report -format json)
-          covered_after=$(echo "$after" | jq -r '.counts.covered')
-          pending_after=$(echo "$after" | jq -r '.counts.pending')
+          # After-merge coverage numbers come from the tokenless step above —
+          # never recomputed here, where computing them would execute tree code.
+          covered_after="$COVERED_AFTER"
+          pending_after="$PENDING_AFTER"
 
           # Speakeasy-style version suggestion. A new resource/data source is a
           # backwards-compatible addition, so the bump is always minor; the

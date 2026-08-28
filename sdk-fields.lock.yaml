@@ -1,0 +1,2584 @@
+# Field-level shape of the covered latitudesh-go-sdk service groups, as last
+# acknowledged. Regenerate with `make fields-sync` (or `go run ./cmd/sdkcoverage
+# fields -write`) in the PR that maps — or deliberately omits — the change;
+# this file's git diff is the record of what that PR accepted.
+# See CONTRIBUTING.md, "Field drift".
+version: 1
+sdk_module: github.com/latitudesh/latitudesh-go-sdk
+sdk_version: v1.19.12
+groups:
+  ElasticIps:
+    methods:
+      CreateElasticIP: {signature: "(context.Context, components.CreateElasticIP, ...operations.Option) (*operations.CreateElasticIPResponse, error)"}
+      CreateElasticIPBgpSession: {signature: "(context.Context, string, components.CreateBgpSession, ...operations.Option) (*operations.CreateElasticIPBgpSessionResponse, error)"}
+      DeleteElasticIP: {signature: "(context.Context, string, ...operations.Option) (*operations.DeleteElasticIPResponse, error)"}
+      DeleteElasticIPBgpSession: {signature: "(context.Context, string, string, *bool, ...operations.Option) (*operations.DeleteElasticIPBgpSessionResponse, error)"}
+      GetElasticIP: {signature: "(context.Context, string, ...operations.Option) (*operations.GetElasticIPResponse, error)"}
+      GetElasticIPBgpSession: {signature: "(context.Context, string, string, ...operations.Option) (*operations.GetElasticIPBgpSessionResponse, error)"}
+      ListElasticIPBgpSessions: {signature: "(context.Context, string, ...operations.Option) (*operations.ListElasticIPBgpSessionsResponse, error)"}
+      ListElasticIps: {signature: "(context.Context, operations.ListElasticIpsRequest, ...operations.Option) (*operations.ListElasticIpsResponse, error)"}
+      UpdateElasticIP: {signature: "(context.Context, string, components.UpdateElasticIP, ...operations.Option) (*operations.UpdateElasticIPResponse, error)"}
+    models:
+      components.BgpSession:
+        fields:
+          - {name: "Data", wire: "data", type: "*BgpSessionData", optional: true}
+      components.BgpSessionData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*BgpSessionDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*BgpSessionDataType", optional: true}
+      components.BgpSessionDataAttributes:
+        fields:
+          - {name: "Asn", wire: "asn", type: "*int64", optional: true}
+          - {name: "CreatedAt", wire: "created_at", type: "*time.Time", optional: true}
+          - {name: "Region", wire: "region", type: "*BgpSessionDataRegion", optional: true, doc: "21a2d42b"}
+          - {name: "Server", wire: "server", type: "*BgpSessionDataServer", optional: true, doc: "56545f09"}
+          - {name: "ServerIP", wire: "server_ip", type: "*string", optional: true}
+          - {name: "Status", wire: "status", type: "*BgpSessionDataStatus", optional: true}
+          - {name: "StatusMessage", wire: "status_message", type: "*string", optional: true, doc: "99520b2f"}
+      components.BgpSessionDataLocation:
+        doc: "d2730c26"
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true, doc: "2c1c4e48"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "558a9d7e"}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true, doc: "06ebf066"}
+      components.BgpSessionDataRegion:
+        doc: "9759e85d"
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true, doc: "7ed16c35"}
+          - {name: "Location", wire: "location", type: "*BgpSessionDataLocation", optional: true, doc: "35ff6857"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "d1a29dab"}
+      components.BgpSessionDataServer:
+        doc: "92ac1bb6"
+        fields:
+          - {name: "Hostname", wire: "hostname", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "OperatingSystem", wire: "operating_system", type: "*string", optional: true}
+          - {name: "PrimaryIpv4", wire: "primary_ipv4", type: "*string", optional: true}
+      components.BgpSessionDataStatus:
+        enum: ["active", "configuring", "error", "pending", "removing"]
+      components.BgpSessionDataType:
+        enum: ["bgp_sessions"]
+      components.BgpSessions:
+        fields:
+          - {name: "Data", wire: "data", type: "[]BgpSessionData", optional: true}
+      components.CreateBgpSession:
+        fields:
+          - {name: "Data", wire: "data", type: "CreateBgpSessionData"}
+      components.CreateBgpSessionAttributes:
+        fields:
+          - {name: "RequestorID", wire: "requestor_id", type: "*string", optional: true, doc: "c5801cde"}
+          - {name: "ServerID", wire: "server_id", type: "string", doc: "25dfc17b"}
+      components.CreateBgpSessionData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*CreateBgpSessionAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "CreateBgpSessionType"}
+      components.CreateBgpSessionType:
+        enum: ["bgp_sessions"]
+      components.CreateElasticIP:
+        fields:
+          - {name: "Data", wire: "data", type: "CreateElasticIPData"}
+      components.CreateElasticIPAttributes:
+        fields:
+          - {name: "Mode", wire: "mode", type: "*CreateElasticIPMode", optional: true, default: "routed", doc: "b024709a"}
+          - {name: "ProjectID", wire: "project_id", type: "string", doc: "aed8fe66"}
+          - {name: "ServerID", wire: "server_id", type: "*string", optional: true, doc: "3a677a1a"}
+          - {name: "ServerIds", wire: "server_ids", type: "[]string", optional: true, doc: "0f0f76f0"}
+          - {name: "Site", wire: "site", type: "*string", optional: true, doc: "21d77075"}
+      components.CreateElasticIPData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*CreateElasticIPAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "CreateElasticIPType"}
+      components.CreateElasticIPMode:
+        doc: "f6ad0574"
+        enum: ["bgp", "routed"]
+      components.CreateElasticIPType:
+        enum: ["elastic_ips"]
+      components.ElasticIP:
+        fields:
+          - {name: "Data", wire: "data", type: "*ElasticIPData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*ElasticIPMeta", optional: true}
+      components.ElasticIPData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*ElasticIPDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true, doc: "20134be6"}
+          - {name: "Type", wire: "type", type: "*ElasticIPDataType", optional: true}
+      components.ElasticIPDataAttributes:
+        fields:
+          - {name: "Address", wire: "address", type: "*string", optional: true, doc: "594c336d"}
+          - {name: "CreatedAt", wire: "created_at", type: "*time.Time", optional: true, doc: "38c629e4"}
+          - {name: "Family", wire: "family", type: "*Family", optional: true, doc: "e7e3e78f"}
+          - {name: "Mode", wire: "mode", type: "*Mode", optional: true, doc: "e8bb01b2"}
+          - {name: "PrefixLength", wire: "prefix_length", type: "*int64", optional: true, doc: "483fc205"}
+          - {name: "Project", wire: "project", type: "*ElasticIPDataProject", optional: true, doc: "da562966"}
+          - {name: "Region", wire: "region", type: "*ElasticIPDataRegion", optional: true, doc: "21a2d42b"}
+          - {name: "Server", wire: "server", type: "*ElasticIPDataServer", optional: true, doc: "cd2483fc"}
+          - {name: "Status", wire: "status", type: "*Status", optional: true, doc: "04b0410b"}
+      components.ElasticIPDataProject:
+        doc: "ffc9bcd8"
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+      components.ElasticIPDataRegion:
+        doc: "aa874796"
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true, doc: "7ed16c35"}
+          - {name: "Location", wire: "location", type: "*Location", optional: true, doc: "35ff6857"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "d1a29dab"}
+      components.ElasticIPDataServer:
+        doc: "147484a2"
+        fields:
+          - {name: "Hostname", wire: "hostname", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "OperatingSystem", wire: "operating_system", type: "*string", optional: true}
+          - {name: "PrimaryIpv4", wire: "primary_ipv4", type: "*string", optional: true}
+      components.ElasticIPDataType:
+        enum: ["elastic_ips"]
+      components.ElasticIPMeta:
+      components.ElasticIps:
+        fields:
+          - {name: "Data", wire: "data", type: "[]ElasticIPData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*ElasticIpsMeta", optional: true}
+      components.ElasticIpsMeta:
+      components.Family:
+        doc: "a05bc2d2"
+        enum: ["IPv4"]
+      components.Location:
+        doc: "17a561dd"
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true, doc: "2c1c4e48"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "558a9d7e"}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true, doc: "06ebf066"}
+      components.Mode:
+        doc: "a18e28cc"
+        enum: ["bgp", "routed"]
+      components.Status:
+        doc: "f3077d7e"
+        enum: ["active", "configuring", "error", "moving", "pending", "releasing"]
+      components.UpdateElasticIP:
+        fields:
+          - {name: "Data", wire: "data", type: "UpdateElasticIPData"}
+      components.UpdateElasticIPAttributes:
+        fields:
+          - {name: "ServerID", wire: "server_id", type: "string", doc: "74c796e0"}
+      components.UpdateElasticIPData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "UpdateElasticIPAttributes"}
+          - {name: "Type", wire: "type", type: "UpdateElasticIPType"}
+      components.UpdateElasticIPType:
+        enum: ["elastic_ips"]
+      operations.CreateElasticIPBgpSessionResponse:
+        fields:
+          - {name: "BgpSession", type: "*components.BgpSession", optional: true, doc: "41d09a60"}
+      operations.CreateElasticIPResponse:
+        fields:
+          - {name: "ElasticIP", type: "*components.ElasticIP", optional: true, doc: "41d09a60"}
+      operations.DeleteElasticIPBgpSessionResponse:
+      operations.DeleteElasticIPResponse:
+      operations.FilterStatus:
+        doc: "f758ffc1"
+        enum: ["active", "configuring", "error", "moving", "releasing"]
+      operations.GetElasticIPBgpSessionResponse:
+        fields:
+          - {name: "BgpSession", type: "*components.BgpSession", optional: true, doc: "6d8303b0"}
+      operations.GetElasticIPResponse:
+        fields:
+          - {name: "ElasticIP", type: "*components.ElasticIP", optional: true, doc: "6d8303b0"}
+      operations.ListElasticIPBgpSessionsResponse:
+        fields:
+          - {name: "BgpSessions", type: "*components.BgpSessions", optional: true, doc: "6d8303b0"}
+      operations.ListElasticIpsRequest:
+        fields:
+          - {name: "FilterProject", wire: "filter[project]", type: "*string", optional: true, doc: "71642854"}
+          - {name: "FilterServer", wire: "filter[server]", type: "*string", optional: true, doc: "5db5257a"}
+          - {name: "FilterStatus", wire: "filter[status]", type: "*FilterStatus", optional: true, doc: "738f454c"}
+          - {name: "PageNumber", wire: "page[number]", type: "*int64", optional: true, default: "1", doc: "52d4faa2"}
+          - {name: "PageSize", wire: "page[size]", type: "*int64", optional: true, default: "20", doc: "5cd3806e"}
+      operations.ListElasticIpsResponse:
+        fields:
+          - {name: "ElasticIps", type: "*components.ElasticIps", optional: true, doc: "6d8303b0"}
+      operations.UpdateElasticIPResponse:
+        fields:
+          - {name: "ElasticIP", type: "*components.ElasticIP", optional: true, doc: "41d09a60"}
+  Firewalls:
+    methods:
+      Create: {signature: "(context.Context, operations.CreateFirewallFirewallsRequestBody, ...operations.Option) (*operations.CreateFirewallResponse, error)"}
+      Delete: {signature: "(context.Context, string, ...operations.Option) (*operations.DeleteFirewallResponse, error)"}
+      DeleteAssignment: {signature: "(context.Context, string, string, ...operations.Option) (*operations.DeleteFirewallAssignmentResponse, error)"}
+      Get: {signature: "(context.Context, string, ...operations.Option) (*operations.GetFirewallResponse, error)"}
+      GetAllFirewallAssignments: {signature: "(context.Context, *string, *string, *int64, *int64, ...operations.Option) (*operations.GetAllFirewallAssignmentsResponse, error)"}
+      List: {signature: "(context.Context, *string, *string, *int64, *int64, ...operations.Option) (*operations.ListFirewallsResponse, error)"}
+      ListAssignments: {signature: "(context.Context, string, *int64, *int64, ...operations.Option) (*operations.GetFirewallAssignmentsResponse, error)"}
+      Update: {signature: "(context.Context, string, operations.UpdateFirewallFirewallsRequestBody, ...operations.Option) (*operations.UpdateFirewallResponse, error)"}
+    models:
+      components.Firewall:
+        fields:
+          - {name: "Data", wire: "data", type: "*FirewallData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*FirewallMeta", optional: true}
+      components.FirewallAssignmentData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*FirewallAssignmentDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*FirewallAssignmentDataType", optional: true}
+      components.FirewallAssignmentDataAttributes:
+        fields:
+          - {name: "Firewall", wire: "firewall", type: "*FirewallAssignmentDataFirewall", optional: true}
+          - {name: "FirewallID", wire: "firewall_id", type: "*string", optional: true}
+          - {name: "Server", wire: "server", type: "*FirewallAssignmentDataServer", optional: true, doc: "b1e30418"}
+          - {name: "VirtualMachine", wire: "virtual_machine", type: "*FirewallAssignmentDataVirtualMachine", optional: true, doc: "6c1c1971"}
+      components.FirewallAssignmentDataFirewall:
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.FirewallAssignmentDataServer:
+        doc: "4e4c7655"
+        fields:
+          - {name: "Hostname", wire: "hostname", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "PrimaryIpv4", wire: "primary_ipv4", type: "*string", optional: true}
+      components.FirewallAssignmentDataType:
+        enum: ["firewall_assignments"]
+      components.FirewallAssignmentDataVirtualMachine:
+        doc: "538a393d"
+        fields:
+          - {name: "Hostname", wire: "hostname", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "PrimaryIpv4", wire: "primary_ipv4", type: "*string", optional: true}
+      components.FirewallAssignments:
+        fields:
+          - {name: "Data", wire: "data", type: "[]FirewallAssignmentData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*FirewallAssignmentsMeta", optional: true}
+      components.FirewallAssignmentsMeta:
+      components.FirewallData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*FirewallDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*FirewallDataType", optional: true}
+      components.FirewallDataAttributes:
+        fields:
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Project", wire: "project", type: "*FirewallDataProject", optional: true}
+          - {name: "Rules", wire: "rules", type: "[]Rules", optional: true}
+          - {name: "Tags", wire: "tags", type: "[]Tags", optional: true}
+      components.FirewallDataProject:
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+      components.FirewallDataType:
+        enum: ["firewalls"]
+      components.FirewallMeta:
+      components.Firewalls:
+        fields:
+          - {name: "Data", wire: "data", type: "[]FirewallData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*FirewallsMeta", optional: true}
+      components.FirewallsMeta:
+      components.Rules:
+        fields:
+          - {name: "Default", wire: "default", type: "*bool", optional: true, doc: "97a9c6ee"}
+          - {name: "Description", wire: "description", type: "*string", optional: true, doc: "77a04ac8"}
+          - {name: "From", wire: "from", type: "*string", optional: true, doc: "b85679de"}
+          - {name: "Port", wire: "port", type: "*string", optional: true}
+          - {name: "Protocol", wire: "protocol", type: "*string", optional: true}
+          - {name: "To", wire: "to", type: "*string", optional: true, doc: "53d408d3"}
+      components.Tags:
+        fields:
+          - {name: "Color", wire: "color", type: "*string", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      operations.CreateFirewallFirewallsAttributes:
+        fields:
+          - {name: "Name", wire: "name", type: "string"}
+          - {name: "Project", wire: "project", type: "string"}
+          - {name: "Rules", wire: "rules", type: "[]CreateFirewallRules", optional: true, doc: "69d44e3e"}
+          - {name: "Tags", wire: "tags", type: "[]string", optional: true, doc: "4c13ef02"}
+      operations.CreateFirewallFirewallsData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*CreateFirewallFirewallsAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "CreateFirewallFirewallsType"}
+      operations.CreateFirewallFirewallsRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "CreateFirewallFirewallsData"}
+      operations.CreateFirewallFirewallsType:
+        enum: ["firewalls"]
+      operations.CreateFirewallProtocol:
+        enum: ["TCP", "UDP"]
+      operations.CreateFirewallResponse:
+        fields:
+          - {name: "Firewall", type: "*components.Firewall", optional: true, doc: "09de135b"}
+      operations.CreateFirewallRules:
+        fields:
+          - {name: "Description", wire: "description", type: "*string", optional: true, doc: "77a04ac8"}
+          - {name: "From", wire: "from", type: "*string", optional: true, doc: "b85679de"}
+          - {name: "Port", wire: "port", type: "*string", optional: true, doc: "782de412"}
+          - {name: "Protocol", wire: "protocol", type: "*CreateFirewallProtocol", optional: true}
+          - {name: "To", wire: "to", type: "*string", optional: true, doc: "53d408d3"}
+      operations.DeleteFirewallAssignmentResponse:
+      operations.DeleteFirewallResponse:
+      operations.GetAllFirewallAssignmentsResponse:
+        fields:
+          - {name: "FirewallAssignments", type: "*components.FirewallAssignments", optional: true, doc: "6d8303b0"}
+      operations.GetFirewallAssignmentsResponse:
+        fields:
+          - {name: "FirewallAssignments", type: "*components.FirewallAssignments", optional: true, doc: "6d8303b0"}
+      operations.GetFirewallResponse:
+        fields:
+          - {name: "Firewall", type: "*components.Firewall", optional: true, doc: "6d8303b0"}
+      operations.ListFirewallsResponse:
+        fields:
+          - {name: "Firewalls", type: "*components.Firewalls", optional: true, doc: "6d8303b0"}
+      operations.UpdateFirewallFirewallsAttributes:
+        fields:
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Rules", wire: "rules", type: "[]UpdateFirewallFirewallsRules", optional: true}
+          - {name: "Tags", wire: "tags", type: "[]string", optional: true, doc: "a34d61dd"}
+      operations.UpdateFirewallFirewallsData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*UpdateFirewallFirewallsAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "UpdateFirewallFirewallsType"}
+      operations.UpdateFirewallFirewallsProtocol:
+        enum: ["TCP", "UDP"]
+      operations.UpdateFirewallFirewallsRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "UpdateFirewallFirewallsData"}
+      operations.UpdateFirewallFirewallsRules:
+        fields:
+          - {name: "Description", wire: "description", type: "*string", optional: true, doc: "77a04ac8"}
+          - {name: "From", wire: "from", type: "*string", optional: true}
+          - {name: "Port", wire: "port", type: "*string", optional: true, doc: "782de412"}
+          - {name: "Protocol", wire: "protocol", type: "*UpdateFirewallFirewallsProtocol", optional: true}
+          - {name: "To", wire: "to", type: "*string", optional: true}
+      operations.UpdateFirewallFirewallsType:
+        enum: ["firewalls"]
+      operations.UpdateFirewallResponse:
+        fields:
+          - {name: "Firewall", type: "*components.Firewall", optional: true, doc: "6d8303b0"}
+  Firewalls.Assignments:
+    methods:
+      Create: {signature: "(context.Context, string, operations.CreateFirewallAssignmentFirewallsAssignmentsRequestBody, ...operations.Option) (*operations.CreateFirewallAssignmentResponse, error)"}
+    models:
+      components.FirewallServer:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*FirewallServerAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*FirewallServerType", optional: true}
+      components.FirewallServerAttributes:
+        fields:
+          - {name: "FirewallID", wire: "firewall_id", type: "*string", optional: true}
+          - {name: "ServerID", wire: "server_id", type: "*string", optional: true}
+      components.FirewallServerType:
+        enum: ["firewall_servers"]
+      operations.CreateFirewallAssignmentFirewallsAssignmentsAttributes:
+        fields:
+          - {name: "ServerID", wire: "server_id", type: "*string", optional: true, doc: "ba9fef2b"}
+          - {name: "VirtualMachineID", wire: "virtual_machine_id", type: "*string", optional: true, doc: "4751a8f1"}
+      operations.CreateFirewallAssignmentFirewallsAssignmentsData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*CreateFirewallAssignmentFirewallsAssignmentsAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "CreateFirewallAssignmentFirewallsAssignmentsType"}
+      operations.CreateFirewallAssignmentFirewallsAssignmentsRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "CreateFirewallAssignmentFirewallsAssignmentsData"}
+      operations.CreateFirewallAssignmentFirewallsAssignmentsType:
+        enum: ["firewall_assignments"]
+      operations.CreateFirewallAssignmentResponse:
+        fields:
+          - {name: "FirewallServer", type: "*components.FirewallServer", optional: true, doc: "09de135b"}
+  Plans:
+    methods:
+      Get: {signature: "(context.Context, string, ...operations.Option) (*operations.GetPlanResponse, error)"}
+      GetBandwidth: {signature: "(context.Context, operations.GetBandwidthPlansRequest, ...operations.Option) (*operations.GetBandwidthPlansResponse, error)"}
+      GetManagedDatabasePlans: {signature: "(context.Context, ...operations.Option) (*operations.GetManagedDatabasePlansResponse, error)"}
+      List: {signature: "(context.Context, operations.GetPlansRequest, ...operations.Option) (*operations.GetPlansResponse, error)"}
+      ListStorage: {signature: "(context.Context, *string, *string, ...operations.Option) (*operations.GetStoragePlansResponse, error)"}
+      UpdateBandwidth: {signature: "(context.Context, operations.UpdatePlansBandwidthPlansRequestBody, ...operations.Option) (*operations.UpdatePlansBandwidthResponse, error)"}
+    models:
+      components.BandwidthPackages:
+        fields:
+          - {name: "Data", wire: "data", type: "*BandwidthPackagesData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*BandwidthPackagesMeta", optional: true}
+      components.BandwidthPackagesAttributes:
+        fields:
+          - {name: "Packages", wire: "packages", type: "[]Packages", optional: true}
+          - {name: "Project", wire: "project", type: "*BandwidthPackagesProject", optional: true}
+      components.BandwidthPackagesData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*BandwidthPackagesAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*BandwidthPackagesType", optional: true}
+      components.BandwidthPackagesMeta:
+      components.BandwidthPackagesProject:
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+      components.BandwidthPackagesType:
+        enum: ["bandwidth_packages"]
+      components.BandwidthPlanData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*BandwidthPlanDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*BandwidthPlanDataType", optional: true}
+      components.BandwidthPlanDataAttributes:
+        fields:
+          - {name: "Locations", wire: "locations", type: "[]string", optional: true}
+          - {name: "Pricing", wire: "pricing", type: "*Pricing", optional: true}
+          - {name: "Region", wire: "region", type: "*string", optional: true}
+      components.BandwidthPlanDataType:
+        enum: ["bandwidth_plan"]
+      components.BandwidthPlans:
+        fields:
+          - {name: "Data", wire: "data", type: "[]BandwidthPlanData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*PaginationMeta", optional: true}
+      components.Brl:
+        fields:
+          - {name: "Hourly", wire: "hourly", type: "*int64", optional: true}
+          - {name: "Monthly", wire: "monthly", type: "*int64", optional: true}
+          - {name: "Yearly", wire: "yearly", type: "*int64", optional: true}
+      components.CPU:
+        fields:
+          - {name: "Clock", wire: "clock", type: "*float64", optional: true}
+          - {name: "Cores", wire: "cores", type: "*float64", optional: true}
+          - {name: "Count", wire: "count", type: "*float64", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.Drives:
+        fields:
+          - {name: "Count", wire: "count", type: "*float64", optional: true}
+          - {name: "Size", wire: "size", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*PlanDataAttributesType", optional: true}
+      components.Gpu:
+        fields:
+          - {name: "Count", wire: "count", type: "*float64", optional: true}
+          - {name: "Interconnect", wire: "interconnect", type: "*string", optional: true, doc: "fade139f"}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+          - {name: "VramPerGpu", wire: "vram_per_gpu", type: "*float64", optional: true, doc: "850c64d2"}
+      components.Locations:
+        fields:
+          - {name: "Available", wire: "available", type: "[]string", optional: true}
+          - {name: "InStock", wire: "in_stock", type: "[]string", optional: true}
+      components.ManagedDatabasePlanAttributes:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*ManagedDatabasePlanAttributesAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*ManagedDatabasePlanAttributesType", optional: true}
+      components.ManagedDatabasePlanAttributesAttributes:
+        fields:
+          - {name: "Engine", wire: "engine", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Regions", wire: "regions", type: "[]ManagedDatabasePlanAttributesRegions", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Specs", wire: "specs", type: "*ManagedDatabasePlanAttributesSpecs", optional: true}
+      components.ManagedDatabasePlanAttributesPricing:
+        fields:
+          - {name: "Month", wire: "month", type: "*float64", optional: true}
+          - {name: "Year", wire: "year", type: "*float64", optional: true}
+      components.ManagedDatabasePlanAttributesRegions:
+        fields:
+          - {name: "City", wire: "city", type: "*string", optional: true}
+          - {name: "Country", wire: "country", type: "*string", optional: true}
+          - {name: "Pricing", wire: "pricing", type: "map[string]ManagedDatabasePlanAttributesPricing", optional: true}
+          - {name: "Region", wire: "region", type: "*string", optional: true}
+          - {name: "Site", wire: "site", type: "*ManagedDatabasePlanAttributesSite", optional: true}
+      components.ManagedDatabasePlanAttributesSite:
+        fields:
+          - {name: "Facility", wire: "facility", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+      components.ManagedDatabasePlanAttributesSpecs:
+        fields:
+          - {name: "CPU", wire: "cpu", type: "*string", optional: true}
+          - {name: "Iops", wire: "iops", type: "*string", optional: true}
+          - {name: "Memory", wire: "memory", type: "*string", optional: true}
+          - {name: "Replicas", wire: "replicas", type: "*int64", optional: true}
+          - {name: "Shards", wire: "shards", type: "*int64", optional: true}
+          - {name: "Storage", wire: "storage", type: "*string", optional: true}
+      components.ManagedDatabasePlanAttributesType:
+        enum: ["managed_database_plans"]
+      components.ManagedDatabasePlans:
+        fields:
+          - {name: "Data", wire: "data", type: "[]ManagedDatabasePlanAttributes", optional: true}
+      components.Memory:
+        fields:
+          - {name: "Total", wire: "total", type: "*float64", optional: true}
+      components.Nics:
+        fields:
+          - {name: "Count", wire: "count", type: "*float64", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.Packages:
+        fields:
+          - {name: "Contracted", wire: "contracted", type: "*int64", optional: true}
+          - {name: "Currency", wire: "currency", type: "*string", optional: true}
+          - {name: "RegionSlug", wire: "region_slug", type: "*string", optional: true}
+          - {name: "TotalPrice", wire: "total_price", type: "*float64", optional: true}
+          - {name: "UnitPrice", wire: "unit_price", type: "*float64", optional: true}
+      components.PaginationMeta:
+        fields:
+          - {name: "Stats", wire: "stats", type: "*Stats", optional: true}
+      components.Plan:
+        fields:
+          - {name: "Data", wire: "data", type: "*PlanData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*PlanMeta", optional: true}
+      components.PlanData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*PlanDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*PlanDataType", optional: true}
+      components.PlanDataAttributes:
+        fields:
+          - {name: "AvailableOperatingSystems", wire: "available_operating_systems", type: "[]string", optional: true}
+          - {name: "Features", wire: "features", type: "[]PlanDataFeatures", optional: true, doc: "275f88e3"}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Regions", wire: "regions", type: "[]PlanDataRegions", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Specs", wire: "specs", type: "*Specs", optional: true}
+      components.PlanDataAttributesType:
+        enum: ["HDD", "NVME", "SSD"]
+      components.PlanDataBRL:
+        fields:
+          - {name: "Hour", wire: "hour", type: "*float64", optional: true}
+          - {name: "Month", wire: "month", type: "*float64", optional: true}
+          - {name: "Year", wire: "year", type: "*float64", optional: true}
+      components.PlanDataFeatures:
+        enum: ["raid", "sev", "ssh", "user_data"]
+      components.PlanDataPricing:
+        fields:
+          - {name: "Brl", wire: "BRL", type: "*PlanDataBRL", optional: true}
+          - {name: "Usd", wire: "USD", type: "*PlanDataUSD", optional: true}
+      components.PlanDataRegions:
+        fields:
+          - {name: "DeploysInstantly", wire: "deploys_instantly", type: "[]string", optional: true}
+          - {name: "Locations", wire: "locations", type: "*Locations", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Pricing", wire: "pricing", type: "*PlanDataPricing", optional: true}
+          - {name: "StockLevel", wire: "stock_level", type: "*StockLevel", optional: true}
+      components.PlanDataType:
+        enum: ["plans"]
+      components.PlanDataUSD:
+        fields:
+          - {name: "Hour", wire: "hour", type: "*float64", optional: true}
+          - {name: "Month", wire: "month", type: "*float64", optional: true}
+          - {name: "Year", wire: "year", type: "*float64", optional: true}
+      components.PlanMeta:
+      components.Pricing:
+        fields:
+          - {name: "Brl", wire: "brl", type: "*Brl", optional: true}
+          - {name: "Usd", wire: "usd", type: "*Usd", optional: true}
+      components.Specs:
+        fields:
+          - {name: "CPU", wire: "cpu", type: "*CPU", optional: true}
+          - {name: "Drives", wire: "drives", type: "[]Drives", optional: true}
+          - {name: "Gpu", wire: "gpu", type: "*Gpu", optional: true}
+          - {name: "Memory", wire: "memory", type: "*Memory", optional: true}
+          - {name: "Nics", wire: "nics", type: "[]Nics", optional: true}
+      components.Stats:
+        fields:
+          - {name: "Total", wire: "total", type: "*Total", optional: true}
+      components.StockLevel:
+        enum: ["high", "low", "medium", "unavailable"]
+      components.StoragePlanData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*StoragePlanDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*StoragePlanDataType", optional: true}
+      components.StoragePlanDataAttributes:
+        fields:
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Regions", wire: "regions", type: "[]StoragePlanDataRegions", optional: true}
+          - {name: "StoragePlanStorageClass", wire: "storage_class", type: "*StoragePlanStorageClass", optional: true}
+          - {name: "StoragePlanStorageType", wire: "storage_type", type: "*StoragePlanStorageType", optional: true}
+      components.StoragePlanDataBRL:
+        fields:
+          - {name: "Month", wire: "month", type: "*float64", optional: true}
+      components.StoragePlanDataPricing:
+        fields:
+          - {name: "Brl", wire: "BRL", type: "*StoragePlanDataBRL", optional: true}
+          - {name: "Usd", wire: "USD", type: "*StoragePlanDataUSD", optional: true}
+      components.StoragePlanDataRegions:
+        fields:
+          - {name: "Locations", wire: "locations", type: "[]string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Pricing", wire: "pricing", type: "*StoragePlanDataPricing", optional: true}
+      components.StoragePlanDataType:
+        enum: ["storage_plans"]
+      components.StoragePlanDataUSD:
+        fields:
+          - {name: "Month", wire: "month", type: "*float64", optional: true}
+      components.StoragePlanStorageClass:
+        enum: ["high_performance", "standard"]
+      components.StoragePlanStorageType:
+        enum: ["filesystem", "object"]
+      components.StoragePlans:
+        fields:
+          - {name: "Data", wire: "data", type: "[]StoragePlanData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*StoragePlansMeta", optional: true}
+      components.StoragePlansMeta:
+      components.Total:
+        fields:
+          - {name: "Count", wire: "count", type: "*int64", optional: true, doc: "892c1421"}
+      components.Usd:
+        fields:
+          - {name: "Hourly", wire: "hourly", type: "*int64", optional: true}
+          - {name: "Monthly", wire: "monthly", type: "*int64", optional: true}
+          - {name: "Yearly", wire: "yearly", type: "*int64", optional: true}
+      operations.FilterStockLevel:
+        doc: "431d4ce8"
+        enum: ["high", "low", "medium", "unavailable", "unique"]
+      operations.GetBandwidthPlansRequest:
+        fields:
+          - {name: "APIVersion", type: "*string", optional: true, default: "2023-06-01"}
+          - {name: "FilterID", wire: "filter[id]", type: "*string", optional: true, doc: "42c84e6a"}
+          - {name: "PageNumber", wire: "page[number]", type: "*int64", optional: true, default: "1", doc: "52d4faa2"}
+          - {name: "PageSize", wire: "page[size]", type: "*int64", optional: true, default: "20", doc: "5cd3806e"}
+          - {name: "StatsTotal", wire: "stats[total]", type: "*string", optional: true, doc: "186835ea"}
+      operations.GetBandwidthPlansResponse:
+        fields:
+          - {name: "BandwidthPlans", type: "*components.BandwidthPlans", optional: true, doc: "6d8303b0"}
+      operations.GetManagedDatabasePlansResponse:
+        fields:
+          - {name: "ManagedDatabasePlans", type: "*components.ManagedDatabasePlans", optional: true, doc: "6d8303b0"}
+      operations.GetPlanResponse:
+        fields:
+          - {name: "Plan", type: "*components.Plan", optional: true, doc: "6d8303b0"}
+      operations.GetPlansRequest:
+        fields:
+          - {name: "FilterDisk", wire: "filter[disk]", type: "*int64", optional: true, doc: "8b9e5ead"}
+          - {name: "FilterGpu", wire: "filter[gpu]", type: "*bool", optional: true, doc: "d15cf75d"}
+          - {name: "FilterInStock", wire: "filter[in_stock]", type: "*bool", optional: true, doc: "34c93e66"}
+          - {name: "FilterLocation", wire: "filter[location]", type: "*string", optional: true, doc: "7768c6cc"}
+          - {name: "FilterName", wire: "filter[name]", type: "*string", optional: true, doc: "5ea359a4"}
+          - {name: "FilterRAM", wire: "filter[ram]", type: "*int64", optional: true, doc: "2f2f6210"}
+          - {name: "FilterSlug", wire: "filter[slug]", type: "*string", optional: true, doc: "fa16d1ec"}
+          - {name: "FilterStockLevel", wire: "filter[stock_level]", type: "*FilterStockLevel", optional: true, doc: "196e87f9"}
+      operations.GetPlansResponse:
+        fields:
+          - {name: "Object", type: "*GetPlansResponseBody", optional: true, doc: "6d8303b0"}
+      operations.GetPlansResponseBody:
+        doc: "4ae7c7ca"
+        fields:
+          - {name: "Data", wire: "data", type: "[]components.PlanData", optional: true}
+      operations.GetStoragePlansResponse:
+        fields:
+          - {name: "StoragePlans", type: "*components.StoragePlans", optional: true, doc: "6d8303b0"}
+      operations.UpdatePlansBandwidthPlansAttributes:
+        fields:
+          - {name: "Project", wire: "project", type: "*string", optional: true, doc: "a16e8892"}
+          - {name: "Quantity", wire: "quantity", type: "*int64", optional: true, doc: "31d166b4"}
+          - {name: "RegionSlug", wire: "region_slug", type: "*string", optional: true, doc: "cbece953"}
+      operations.UpdatePlansBandwidthPlansData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*UpdatePlansBandwidthPlansAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "*UpdatePlansBandwidthPlansType", optional: true}
+      operations.UpdatePlansBandwidthPlansRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "*UpdatePlansBandwidthPlansData", optional: true}
+      operations.UpdatePlansBandwidthPlansType:
+        enum: ["bandwidth_packages"]
+      operations.UpdatePlansBandwidthResponse:
+        fields:
+          - {name: "BandwidthPackages", type: "*components.BandwidthPackages", optional: true, doc: "6d8303b0"}
+  PrivateNetworks:
+    methods:
+      Assign: {signature: "(context.Context, operations.AssignServerVirtualNetworkPrivateNetworksRequestBody, ...operations.Option) (*operations.AssignServerVirtualNetworkResponse, error)"}
+      Create: {signature: "(context.Context, operations.CreateVirtualNetworkPrivateNetworksRequestBody, ...operations.Option) (*operations.CreateVirtualNetworkResponse, error)"}
+      DeleteAssignment: {signature: "(context.Context, string, ...operations.Option) (*operations.DeleteVirtualNetworksAssignmentsResponse, error)"}
+      Get: {signature: "(context.Context, string, ...operations.Option) (*operations.GetVirtualNetworkResponse, error)"}
+      List: {signature: "(context.Context, operations.GetVirtualNetworksRequest, ...operations.Option) (*operations.GetVirtualNetworksResponse, error)"}
+      ListAssignments: {signature: "(context.Context, operations.GetVirtualNetworksAssignmentsRequest, ...operations.Option) (*operations.GetVirtualNetworksAssignmentsResponse, error)"}
+      Update: {signature: "(context.Context, string, operations.UpdateVirtualNetworkPrivateNetworksRequestBody, ...operations.Option) (*operations.UpdateVirtualNetworkResponse, error)"}
+    models:
+      components.Billing:
+        fields:
+          - {name: "Method", wire: "method", type: "*string", optional: true}
+          - {name: "SubscriptionID", wire: "subscription_id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.PaginationMeta:
+        fields:
+          - {name: "Stats", wire: "stats", type: "*Stats", optional: true}
+      components.ProjectInclude:
+        fields:
+          - {name: "BandwidthAlert", wire: "bandwidth_alert", type: "*bool", optional: true}
+          - {name: "Billing", wire: "billing", type: "*Billing", optional: true}
+          - {name: "BillingMethod", wire: "billing_method", type: "*string", optional: true}
+          - {name: "BillingType", wire: "billing_type", type: "*string", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "Environment", wire: "environment", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "ProvisioningType", wire: "provisioning_type", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Stats", wire: "stats", type: "*ProjectIncludeStats", optional: true}
+      components.ProjectIncludeStats:
+        fields:
+          - {name: "Databases", wire: "databases", type: "*int64", optional: true}
+          - {name: "IPAddresses", wire: "ip_addresses", type: "*int64", optional: true}
+          - {name: "Prefixes", wire: "prefixes", type: "*int64", optional: true}
+          - {name: "Servers", wire: "servers", type: "*int64", optional: true}
+          - {name: "Storages", wire: "storages", type: "*int64", optional: true}
+          - {name: "VirtualMachines", wire: "virtual_machines", type: "*int64", optional: true}
+          - {name: "Vlans", wire: "vlans", type: "*int64", optional: true}
+      components.Stats:
+        fields:
+          - {name: "Total", wire: "total", type: "*Total", optional: true}
+      components.Total:
+        fields:
+          - {name: "Count", wire: "count", type: "*int64", optional: true, doc: "892c1421"}
+      components.VirtualNetwork:
+        fields:
+          - {name: "Data", wire: "data", type: "*VirtualNetworkData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*VirtualNetworkMeta", optional: true}
+      components.VirtualNetworkAssignment:
+        fields:
+          - {name: "Data", wire: "data", type: "*VirtualNetworkAssignmentData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*VirtualNetworkAssignmentMeta", optional: true}
+      components.VirtualNetworkAssignmentData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*VirtualNetworkAssignmentDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*VirtualNetworkAssignmentDataType", optional: true}
+      components.VirtualNetworkAssignmentDataAttributes:
+        fields:
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "Server", wire: "server", type: "*VirtualNetworkAssignmentDataServer", optional: true}
+          - {name: "Status", wire: "status", type: "*string", optional: true}
+          - {name: "Vid", wire: "vid", type: "*int64", optional: true}
+          - {name: "VirtualNetworkID", wire: "virtual_network_id", type: "*string", optional: true}
+      components.VirtualNetworkAssignmentDataServer:
+        fields:
+          - {name: "Hostname", wire: "hostname", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Label", wire: "label", type: "*string", optional: true}
+          - {name: "Locked", wire: "locked", type: "*bool", optional: true}
+          - {name: "Status", wire: "status", type: "*string", optional: true}
+      components.VirtualNetworkAssignmentDataType:
+        enum: ["virtual_network_assignment"]
+      components.VirtualNetworkAssignmentMeta:
+      components.VirtualNetworkAssignments:
+        fields:
+          - {name: "Data", wire: "data", type: "[]VirtualNetworkAssignmentData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*PaginationMeta", optional: true}
+      components.VirtualNetworkData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*VirtualNetworkDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*VirtualNetworkDataType", optional: true}
+      components.VirtualNetworkDataAttributes:
+        fields:
+          - {name: "AssignmentsCount", wire: "assignments_count", type: "*int64", optional: true, doc: "c6df2bba"}
+          - {name: "CreatedAt", wire: "created_at", type: "*time.Time", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true, doc: "d26f3cd8"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "81b25629"}
+          - {name: "Project", wire: "project", type: "*ProjectInclude", optional: true}
+          - {name: "Region", wire: "region", type: "*VirtualNetworkDataRegion", optional: true}
+          - {name: "Tags", wire: "tags", type: "[]VirtualNetworkDataTags", optional: true, doc: "8c63a69c"}
+          - {name: "Vid", wire: "vid", type: "*int64", optional: true, doc: "24a9e0c8"}
+      components.VirtualNetworkDataRegion:
+        fields:
+          - {name: "City", wire: "city", type: "*string", optional: true}
+          - {name: "Country", wire: "country", type: "*string", optional: true}
+          - {name: "Site", wire: "site", type: "*VirtualNetworkDataSite", optional: true}
+      components.VirtualNetworkDataSite:
+        fields:
+          - {name: "Facility", wire: "facility", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+      components.VirtualNetworkDataTags:
+        fields:
+          - {name: "Color", wire: "color", type: "*string", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.VirtualNetworkDataType:
+        enum: ["virtual_networks"]
+      components.VirtualNetworkMeta:
+      components.VirtualNetworks:
+        fields:
+          - {name: "Data", wire: "data", type: "[]VirtualNetworkData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*PaginationMeta", optional: true}
+      operations.AssignServerVirtualNetworkPrivateNetworksAttributes:
+        fields:
+          - {name: "ServerID", wire: "server_id", type: "string"}
+          - {name: "VirtualNetworkID", wire: "virtual_network_id", type: "string"}
+      operations.AssignServerVirtualNetworkPrivateNetworksData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*AssignServerVirtualNetworkPrivateNetworksAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "AssignServerVirtualNetworkPrivateNetworksType"}
+      operations.AssignServerVirtualNetworkPrivateNetworksRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "*AssignServerVirtualNetworkPrivateNetworksData", optional: true}
+      operations.AssignServerVirtualNetworkPrivateNetworksType:
+        enum: ["virtual_network_assignment"]
+      operations.AssignServerVirtualNetworkResponse:
+        fields:
+          - {name: "VirtualNetworkAssignment", type: "*components.VirtualNetworkAssignment", optional: true, doc: "09de135b"}
+      operations.CreateVirtualNetworkPrivateNetworksAttributes:
+        fields:
+          - {name: "Description", wire: "description", type: "string"}
+          - {name: "Project", wire: "project", type: "string", doc: "b2158adf"}
+          - {name: "Site", wire: "site", type: "*CreateVirtualNetworkPrivateNetworksSite", optional: true, doc: "007b22a5"}
+      operations.CreateVirtualNetworkPrivateNetworksData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "CreateVirtualNetworkPrivateNetworksAttributes"}
+          - {name: "Type", wire: "type", type: "CreateVirtualNetworkPrivateNetworksType"}
+      operations.CreateVirtualNetworkPrivateNetworksRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "CreateVirtualNetworkPrivateNetworksData"}
+      operations.CreateVirtualNetworkPrivateNetworksSite:
+        doc: "6dce0dd4"
+        enum: ["ASH", "BUE", "CHI", "DAL", "FRA", "LAX", "LON", "MEX", "MEX2", "MIA", "MIA2", "NYC", "SAO", "SAO2", "SGP", "SYD", "TYO", "TYO2"]
+      operations.CreateVirtualNetworkPrivateNetworksType:
+        enum: ["virtual_network"]
+      operations.CreateVirtualNetworkResponse:
+        fields:
+          - {name: "VirtualNetwork", type: "*components.VirtualNetwork", optional: true, doc: "09de135b"}
+      operations.DeleteVirtualNetworksAssignmentsResponse:
+      operations.GetVirtualNetworkResponse:
+        fields:
+          - {name: "VirtualNetwork", type: "*components.VirtualNetwork", optional: true, doc: "6d8303b0"}
+      operations.GetVirtualNetworksAssignmentsRequest:
+        fields:
+          - {name: "FilterServer", wire: "filter[server]", type: "*string", optional: true, doc: "5db5257a"}
+          - {name: "FilterVid", wire: "filter[vid]", type: "*string", optional: true, doc: "ee41f374"}
+          - {name: "FilterVirtualNetworkID", wire: "filter[virtual_network_id]", type: "*string", optional: true, doc: "f5d6e7f8"}
+          - {name: "PageNumber", wire: "page[number]", type: "*int64", optional: true, default: "1", doc: "52d4faa2"}
+          - {name: "PageSize", wire: "page[size]", type: "*int64", optional: true, default: "20", doc: "5cd3806e"}
+          - {name: "StatsTotal", wire: "stats[total]", type: "*string", optional: true, doc: "186835ea"}
+      operations.GetVirtualNetworksAssignmentsResponse:
+        fields:
+          - {name: "VirtualNetworkAssignments", type: "*components.VirtualNetworkAssignments", optional: true, doc: "6d8303b0"}
+      operations.GetVirtualNetworksRequest:
+        fields:
+          - {name: "FilterLocation", wire: "filter[location]", type: "*string", optional: true, doc: "f71f9080"}
+          - {name: "FilterProject", wire: "filter[project]", type: "*string", optional: true, doc: "2bc99d14"}
+          - {name: "FilterTags", wire: "filter[tags]", type: "*string", optional: true, doc: "62493801"}
+          - {name: "PageNumber", wire: "page[number]", type: "*int64", optional: true, default: "1", doc: "52d4faa2"}
+          - {name: "PageSize", wire: "page[size]", type: "*int64", optional: true, default: "20", doc: "5cd3806e"}
+          - {name: "StatsTotal", wire: "stats[total]", type: "*string", optional: true, doc: "186835ea"}
+      operations.GetVirtualNetworksResponse:
+        fields:
+          - {name: "VirtualNetworks", type: "*components.VirtualNetworks", optional: true, doc: "6d8303b0"}
+      operations.UpdateVirtualNetworkPrivateNetworksAttributes:
+        fields:
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "Tags", wire: "tags", type: "[]string", optional: true}
+      operations.UpdateVirtualNetworkPrivateNetworksData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*UpdateVirtualNetworkPrivateNetworksAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "string"}
+          - {name: "Type", wire: "type", type: "UpdateVirtualNetworkPrivateNetworksType"}
+      operations.UpdateVirtualNetworkPrivateNetworksRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "UpdateVirtualNetworkPrivateNetworksData"}
+      operations.UpdateVirtualNetworkPrivateNetworksType:
+        enum: ["virtual_networks"]
+      operations.UpdateVirtualNetworkResponse:
+        fields:
+          - {name: "VirtualNetwork", type: "*components.VirtualNetwork", optional: true, doc: "6d8303b0"}
+  Projects:
+    methods:
+      Create: {signature: "(context.Context, operations.CreateProjectProjectsRequestBody, ...operations.Option) (*operations.CreateProjectResponse, error)"}
+      Delete: {signature: "(context.Context, string, ...operations.Option) (*operations.DeleteProjectResponse, error)"}
+      GetProject: {signature: "(context.Context, string, ...operations.Option) (*operations.GetProjectResponse, error)"}
+      List: {signature: "(context.Context, operations.GetProjectsRequest, ...operations.Option) (*operations.GetProjectsResponse, error)"}
+      Update: {signature: "(context.Context, string, *operations.UpdateProjectProjectsRequestBody, ...operations.Option) (*operations.UpdateProjectResponse, error)"}
+    models:
+      components.BillingMethod:
+        enum: ["95th percentile", "Normal"]
+      components.BillingType:
+        enum: ["Custom", "Hourly", "Monthly", "Normal", "Yearly"]
+      components.Currency:
+        fields:
+          - {name: "Code", wire: "code", type: "*string", optional: true}
+          - {name: "CurrencyID", wire: "currency_id", type: "*int64", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.Environment:
+        enum: ["Development", "Production", "Staging"]
+      components.Limits:
+        fields:
+          - {name: "BareMetal", wire: "bare_metal", type: "*int64", optional: true}
+          - {name: "BareMetalGpu", wire: "bare_metal_gpu", type: "*int64", optional: true}
+          - {name: "BgpSessionPerIP", wire: "bgp_session_per_ip", type: "*int64", optional: true}
+          - {name: "BlockStorage", wire: "block_storage", type: "*int64", optional: true}
+          - {name: "Database", wire: "database", type: "*int64", optional: true}
+          - {name: "ElasticIP", wire: "elastic_ip", type: "*int64", optional: true}
+          - {name: "Filesystem", wire: "filesystem", type: "*int64", optional: true}
+          - {name: "PublicNetwork", wire: "public_network", type: "*int64", optional: true}
+          - {name: "VirtualMachine", wire: "virtual_machine", type: "*int64", optional: true}
+          - {name: "VirtualMachineGpu", wire: "virtual_machine_gpu", type: "*int64", optional: true}
+          - {name: "VirtualNetwork", wire: "virtual_network", type: "*int64", optional: true}
+      components.PaginationMeta:
+        fields:
+          - {name: "Stats", wire: "stats", type: "*Stats", optional: true}
+      components.Project:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*ProjectAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true, doc: "6a8c9d96"}
+          - {name: "Type", wire: "type", type: "*ProjectType", optional: true}
+      components.ProjectAttributes:
+        fields:
+          - {name: "BandwidthAlert", wire: "bandwidth_alert", type: "*bool", optional: true, doc: "e25b4220"}
+          - {name: "Billing", wire: "billing", type: "*ProjectBilling", optional: true}
+          - {name: "BillingMethod", wire: "billing_method", type: "*BillingMethod", optional: true}
+          - {name: "BillingType", wire: "billing_type", type: "*BillingType", optional: true}
+          - {name: "Cost", wire: "cost", type: "*string", optional: true}
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true, doc: "86d2ffdf"}
+          - {name: "Environment", wire: "environment", type: "*Environment", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "74851300"}
+          - {name: "ProvisioningType", wire: "provisioning_type", type: "*string", optional: true, doc: "8135fd6a"}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true, doc: "12cff93d"}
+          - {name: "Stats", wire: "stats", type: "*ProjectStats", optional: true}
+          - {name: "Tags", wire: "tags", type: "[]ProjectTags", optional: true, doc: "d425495e"}
+          - {name: "Team", wire: "team", type: "*TeamInclude", optional: true}
+          - {name: "UpdatedAt", wire: "updated_at", type: "*string", optional: true}
+      components.ProjectBilling:
+        fields:
+          - {name: "Method", wire: "method", type: "*string", optional: true}
+          - {name: "SubscriptionID", wire: "subscription_id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.ProjectStats:
+        fields:
+          - {name: "Databases", wire: "databases", type: "*float64", optional: true, doc: "e1f45e2c"}
+          - {name: "IPAddresses", wire: "ip_addresses", type: "*float64", optional: true, doc: "6b81cdc8"}
+          - {name: "Prefixes", wire: "prefixes", type: "*float64", optional: true, doc: "17d7dac4"}
+          - {name: "Servers", wire: "servers", type: "*float64", optional: true, doc: "b028f1dd"}
+          - {name: "Storages", wire: "storages", type: "*float64", optional: true, doc: "442bcb73"}
+          - {name: "VirtualMachines", wire: "virtual_machines", type: "*float64", optional: true, doc: "4bb32ef0"}
+          - {name: "Vlans", wire: "vlans", type: "*float64", optional: true, doc: "9ea72033"}
+      components.ProjectTags:
+      components.ProjectType:
+        enum: ["projects"]
+      components.Projects:
+        fields:
+          - {name: "Data", wire: "data", type: "[]Project", optional: true}
+          - {name: "Meta", wire: "meta", type: "*PaginationMeta", optional: true}
+      components.Stats:
+        fields:
+          - {name: "Total", wire: "total", type: "*Total", optional: true}
+      components.TeamInclude:
+        fields:
+          - {name: "Address", wire: "address", type: "*string", optional: true}
+          - {name: "Currency", wire: "currency", type: "*Currency", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "FeatureFlags", wire: "feature_flags", type: "[]string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Limits", wire: "limits", type: "*Limits", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Status", wire: "status", type: "*string", optional: true}
+      components.Total:
+        fields:
+          - {name: "Count", wire: "count", type: "*int64", optional: true, doc: "892c1421"}
+      operations.CreateProjectEnvironment:
+        enum: ["Development", "Production", "Staging"]
+      operations.CreateProjectProjectsAttributes:
+        fields:
+          - {name: "Description", wire: "description", type: "*string", optional: true, doc: "2f28e863"}
+          - {name: "Environment", wire: "environment", type: "*CreateProjectEnvironment", optional: true}
+          - {name: "Name", wire: "name", type: "string", doc: "5b81c5ff"}
+          - {name: "ProvisioningType", wire: "provisioning_type", type: "CreateProjectProvisioningType", doc: "05010788"}
+      operations.CreateProjectProjectsData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*CreateProjectProjectsAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "CreateProjectProjectsType"}
+      operations.CreateProjectProjectsRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "*CreateProjectProjectsData", optional: true}
+      operations.CreateProjectProjectsType:
+        enum: ["projects"]
+      operations.CreateProjectProvisioningType:
+        doc: "f2ebd5c1"
+        enum: ["on_demand", "reserved"]
+      operations.CreateProjectResponse:
+        fields:
+          - {name: "Object", type: "*CreateProjectResponseBody", optional: true, doc: "09de135b"}
+      operations.CreateProjectResponseBody:
+        doc: "0021df52"
+        fields:
+          - {name: "Data", wire: "data", type: "*components.Project", optional: true}
+      operations.DeleteProjectResponse:
+      operations.GetProjectResponse:
+        fields:
+          - {name: "Object", type: "*GetProjectResponseBody", optional: true, doc: "6d8303b0"}
+      operations.GetProjectResponseBody:
+        doc: "1fbccb77"
+        fields:
+          - {name: "Data", wire: "data", type: "*components.Project", optional: true}
+          - {name: "Meta", wire: "meta", type: "*Meta", optional: true}
+      operations.GetProjectsRequest:
+        fields:
+          - {name: "ExtraFieldsProjects", wire: "extra_fields[projects]", type: "*string", optional: true, doc: "23ef3c73"}
+          - {name: "FilterBillingType", wire: "filter[billing_type]", type: "*string", optional: true, doc: "63d8ad45"}
+          - {name: "FilterDescription", wire: "filter[description]", type: "*string", optional: true, doc: "ae085a3b"}
+          - {name: "FilterEnvironment", wire: "filter[environment]", type: "*string", optional: true, doc: "80a8ee15"}
+          - {name: "FilterName", wire: "filter[name]", type: "*string", optional: true, doc: "4714748a"}
+          - {name: "FilterSlug", wire: "filter[slug]", type: "*string", optional: true, doc: "54e71846"}
+          - {name: "FilterTags", wire: "filter[tags]", type: "*string", optional: true, doc: "687603e1"}
+          - {name: "PageNumber", wire: "page[number]", type: "*int64", optional: true, default: "1", doc: "52d4faa2"}
+          - {name: "PageSize", wire: "page[size]", type: "*int64", optional: true, default: "20", doc: "5cd3806e"}
+          - {name: "StatsTotal", wire: "stats[total]", type: "*string", optional: true, doc: "186835ea"}
+      operations.GetProjectsResponse:
+        fields:
+          - {name: "Projects", type: "*components.Projects", optional: true, doc: "6d8303b0"}
+      operations.Meta:
+      operations.UpdateProjectProjectsAttributes:
+        fields:
+          - {name: "BandwidthAlert", wire: "bandwidth_alert", type: "*bool", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "Environment", wire: "environment", type: "*UpdateProjectProjectsEnvironment", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Tags", wire: "tags", type: "[]string", optional: true}
+      operations.UpdateProjectProjectsData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*UpdateProjectProjectsAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "string"}
+          - {name: "Type", wire: "type", type: "UpdateProjectProjectsType"}
+      operations.UpdateProjectProjectsEnvironment:
+        enum: ["Development", "Production", "Staging"]
+      operations.UpdateProjectProjectsRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "UpdateProjectProjectsData"}
+      operations.UpdateProjectProjectsType:
+        enum: ["projects"]
+      operations.UpdateProjectResponse:
+        fields:
+          - {name: "Object", type: "*UpdateProjectResponseBody", optional: true, doc: "6d8303b0"}
+      operations.UpdateProjectResponseBody:
+        doc: "cdaaa32a"
+        fields:
+          - {name: "Data", wire: "data", type: "*components.Project", optional: true}
+  Regions:
+    methods:
+      Fetch: {signature: "(context.Context, string, ...operations.Option) (*operations.GetRegionResponse, error)"}
+      Get: {signature: "(context.Context, operations.GetRegionsRequest, ...operations.Option) (*operations.GetRegionsResponse, error)"}
+    models:
+      components.Country:
+        fields:
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+      components.PaginationMeta:
+        fields:
+          - {name: "Stats", wire: "stats", type: "*Stats", optional: true}
+      components.Region:
+        fields:
+          - {name: "Data", wire: "data", type: "*RegionData", optional: true}
+      components.RegionAttributes:
+        fields:
+          - {name: "Country", wire: "country", type: "*RegionCountry", optional: true}
+          - {name: "Facility", wire: "facility", type: "*string", optional: true}
+          - {name: "Features", wire: "features", type: "[]string", optional: true, doc: "6ac52a34"}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "NetworkGroup", wire: "network_group", type: "*string", optional: true, doc: "e4800b0d"}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.RegionCountry:
+        fields:
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+      components.RegionData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*RegionAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*RegionType", optional: true}
+      components.RegionType:
+        enum: ["regions"]
+      components.Regions:
+        fields:
+          - {name: "Data", wire: "data", type: "[]RegionsData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*PaginationMeta", optional: true}
+      components.RegionsAttributes:
+        fields:
+          - {name: "Country", wire: "country", type: "*Country", optional: true}
+          - {name: "Facility", wire: "facility", type: "*string", optional: true}
+          - {name: "Features", wire: "features", type: "[]string", optional: true, doc: "6ac52a34"}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "NetworkGroup", wire: "network_group", type: "*string", optional: true, doc: "e4800b0d"}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.RegionsData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*RegionsAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*RegionsType", optional: true}
+      components.RegionsType:
+        enum: ["regions"]
+      components.Stats:
+        fields:
+          - {name: "Total", wire: "total", type: "*Total", optional: true}
+      components.Total:
+        fields:
+          - {name: "Count", wire: "count", type: "*int64", optional: true, doc: "892c1421"}
+      operations.GetRegionResponse:
+        fields:
+          - {name: "Region", type: "*components.Region", optional: true, doc: "6d8303b0"}
+      operations.GetRegionsRequest:
+        fields:
+          - {name: "FilterFeatures", wire: "filter[features]", type: "*string", optional: true, doc: "93d5e6b9"}
+          - {name: "IncludeCustom", wire: "include_custom", type: "*bool", optional: true, doc: "e37557f8"}
+          - {name: "PageNumber", wire: "page[number]", type: "*int64", optional: true, default: "1", doc: "52d4faa2"}
+          - {name: "PageSize", wire: "page[size]", type: "*int64", optional: true, default: "20", doc: "5cd3806e"}
+          - {name: "StatsTotal", wire: "stats[total]", type: "*string", optional: true, doc: "186835ea"}
+      operations.GetRegionsResponse:
+        fields:
+          - {name: "Regions", type: "*components.Regions", optional: true, doc: "6d8303b0"}
+  Roles:
+    methods:
+      Get: {signature: "(context.Context, string, ...operations.Option) (*operations.GetRoleIDResponse, error)"}
+      List: {signature: "(context.Context, *int64, *int64, *string, ...operations.Option) (*operations.GetRolesResponse, error)"}
+    models:
+      components.PaginationMeta:
+        fields:
+          - {name: "Stats", wire: "stats", type: "*Stats", optional: true}
+      components.Role:
+        fields:
+          - {name: "Data", wire: "data", type: "*RoleData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*RoleMeta", optional: true}
+      components.RoleData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*RoleDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*RoleDataType", optional: true}
+      components.RoleDataAttributes:
+        fields:
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "3b8bfa48"}
+      components.RoleDataType:
+        enum: ["roles"]
+      components.RoleMeta:
+      components.Stats:
+        fields:
+          - {name: "Total", wire: "total", type: "*Total", optional: true}
+      components.Total:
+        fields:
+          - {name: "Count", wire: "count", type: "*int64", optional: true, doc: "892c1421"}
+      operations.GetRoleIDResponse:
+        fields:
+          - {name: "Role", type: "*components.Role", optional: true, doc: "6d8303b0"}
+      operations.GetRolesResponse:
+        fields:
+          - {name: "Object", type: "*GetRolesResponseBody", optional: true, doc: "6d8303b0"}
+      operations.GetRolesResponseBody:
+        doc: "3b772cdb"
+        fields:
+          - {name: "Data", wire: "data", type: "[]components.RoleData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*components.PaginationMeta", optional: true}
+  SSHKeys:
+    methods:
+      Create: {signature: "(context.Context, operations.PostSSHKeySSHKeysRequestBody, ...operations.Option) (*operations.PostSSHKeyResponse, error)"}
+      Delete: {signature: "(context.Context, string, ...operations.Option) (*operations.DeleteSSHKeyResponse, error)"}
+      Get: {signature: "(context.Context, string, string, ...operations.Option) (*operations.GetProjectSSHKeyResponse, error)", deprecated: true}
+      List: {signature: "(context.Context, operations.GetProjectSSHKeysRequest, ...operations.Option) (*operations.GetProjectSSHKeysResponse, error)", deprecated: true}
+      ListAll: {signature: "(context.Context, operations.GetSSHKeysRequest, ...operations.Option) (*operations.GetSSHKeysResponse, error)"}
+      ModifyProjectKey: {signature: "(context.Context, string, string, operations.PutProjectSSHKeySSHKeysRequestBody, ...operations.Option) (*operations.PutProjectSSHKeyResponse, error)", deprecated: true}
+      RemoveFromProject: {signature: "(context.Context, string, string, ...operations.Option) (*operations.DeleteProjectSSHKeyResponse, error)", deprecated: true}
+      Retrieve: {signature: "(context.Context, string, ...operations.Option) (*operations.GetSSHKeyResponse, error)"}
+      Update: {signature: "(context.Context, string, operations.PutSSHKeySSHKeysRequestBody, ...operations.Option) (*operations.PutSSHKeyResponse, error)"}
+    models:
+      components.Billing:
+        fields:
+          - {name: "Method", wire: "method", type: "*string", optional: true}
+          - {name: "SubscriptionID", wire: "subscription_id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.PaginationMeta:
+        fields:
+          - {name: "Stats", wire: "stats", type: "*Stats", optional: true}
+      components.ProjectInclude:
+        fields:
+          - {name: "BandwidthAlert", wire: "bandwidth_alert", type: "*bool", optional: true}
+          - {name: "Billing", wire: "billing", type: "*Billing", optional: true}
+          - {name: "BillingMethod", wire: "billing_method", type: "*string", optional: true}
+          - {name: "BillingType", wire: "billing_type", type: "*string", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "Environment", wire: "environment", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "ProvisioningType", wire: "provisioning_type", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Stats", wire: "stats", type: "*ProjectIncludeStats", optional: true}
+      components.ProjectIncludeStats:
+        fields:
+          - {name: "Databases", wire: "databases", type: "*int64", optional: true}
+          - {name: "IPAddresses", wire: "ip_addresses", type: "*int64", optional: true}
+          - {name: "Prefixes", wire: "prefixes", type: "*int64", optional: true}
+          - {name: "Servers", wire: "servers", type: "*int64", optional: true}
+          - {name: "Storages", wire: "storages", type: "*int64", optional: true}
+          - {name: "VirtualMachines", wire: "virtual_machines", type: "*int64", optional: true}
+          - {name: "Vlans", wire: "vlans", type: "*int64", optional: true}
+      components.SSHKeyData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*SSHKeyDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "SSHKeyDataType"}
+      components.SSHKeyDataAttributes:
+        fields:
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "Fingerprint", wire: "fingerprint", type: "*string", optional: true, doc: "005afc5e"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "56ba9e45"}
+          - {name: "Project", wire: "project", type: "*ProjectInclude", optional: true}
+          - {name: "PublicKey", wire: "public_key", type: "*string", optional: true, doc: "a4909821"}
+          - {name: "Tags", wire: "tags", type: "[]SSHKeyDataTags", optional: true}
+          - {name: "UpdatedAt", wire: "updated_at", type: "*string", optional: true}
+          - {name: "User", wire: "user", type: "*UserInclude", optional: true}
+      components.SSHKeyDataTags:
+        fields:
+          - {name: "Color", wire: "color", type: "*string", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.SSHKeyDataType:
+        enum: ["ssh_keys"]
+      components.SSHKeys:
+        fields:
+          - {name: "Data", wire: "data", type: "[]SSHKeyData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*PaginationMeta", optional: true}
+      components.Stats:
+        fields:
+          - {name: "Total", wire: "total", type: "*Total", optional: true}
+      components.Total:
+        fields:
+          - {name: "Count", wire: "count", type: "*int64", optional: true, doc: "892c1421"}
+      components.UserInclude:
+        fields:
+          - {name: "AuthenticationFactorID", wire: "authentication_factor_id", type: "*string", optional: true}
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "Email", wire: "email", type: "*string", optional: true}
+          - {name: "FirstName", wire: "first_name", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "LastName", wire: "last_name", type: "*string", optional: true}
+          - {name: "Role", wire: "role", type: "*UserIncludeRole", optional: true}
+          - {name: "UpdatedAt", wire: "updated_at", type: "*string", optional: true}
+      components.UserIncludeRole:
+        fields:
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "UpdatedAt", wire: "updated_at", type: "*string", optional: true}
+      operations.DeleteProjectSSHKeyResponse:
+      operations.DeleteSSHKeyResponse:
+      operations.GetProjectSSHKeyResponse:
+        fields:
+          - {name: "Object", type: "*GetProjectSSHKeyResponseBody", optional: true, doc: "6d8303b0"}
+      operations.GetProjectSSHKeyResponseBody:
+        doc: "a472511e"
+        fields:
+          - {name: "Data", wire: "data", type: "*components.SSHKeyData", optional: true}
+      operations.GetProjectSSHKeysRequest:
+        fields:
+          - {name: "FilterTags", wire: "filter[tags]", type: "*string", optional: true, doc: "62493801"}
+          - {name: "PageNumber", wire: "page[number]", type: "*int64", optional: true, doc: "192780e0"}
+          - {name: "PageSize", wire: "page[size]", type: "*int64", optional: true, doc: "c6f100f1"}
+          - {name: "ProjectID", type: "string", doc: "31e93ebf"}
+          - {name: "StatsTotal", wire: "stats[total]", type: "*string", optional: true, doc: "186835ea"}
+      operations.GetProjectSSHKeysResponse:
+        fields:
+          - {name: "SSHKeys", type: "*components.SSHKeys", optional: true, doc: "6d8303b0"}
+      operations.GetSSHKeyResponse:
+        fields:
+          - {name: "Object", type: "*GetSSHKeyResponseBody", optional: true, doc: "6d8303b0"}
+      operations.GetSSHKeyResponseBody:
+        doc: "7313f931"
+        fields:
+          - {name: "Data", wire: "data", type: "*components.SSHKeyData", optional: true}
+      operations.GetSSHKeysRequest:
+        fields:
+          - {name: "FilterProject", wire: "filter[project]", type: "*string", optional: true, doc: "b2158adf"}
+          - {name: "FilterScope", wire: "filter[scope]", type: "*string", optional: true, doc: "7f1df16d"}
+          - {name: "FilterTags", wire: "filter[tags]", type: "*string", optional: true, doc: "62493801"}
+          - {name: "PageNumber", wire: "page[number]", type: "*int64", optional: true, doc: "192780e0"}
+          - {name: "PageSize", wire: "page[size]", type: "*int64", optional: true, doc: "c6f100f1"}
+          - {name: "StatsTotal", wire: "stats[total]", type: "*string", optional: true, doc: "186835ea"}
+      operations.GetSSHKeysResponse:
+        fields:
+          - {name: "SSHKeys", type: "*components.SSHKeys", optional: true, doc: "6d8303b0"}
+      operations.PostSSHKeyResponse:
+        fields:
+          - {name: "Object", type: "*PostSSHKeyResponseBody", optional: true, doc: "09de135b"}
+      operations.PostSSHKeyResponseBody:
+        doc: "df148c42"
+        fields:
+          - {name: "Data", wire: "data", type: "*components.SSHKeyData", optional: true}
+      operations.PostSSHKeySSHKeysAttributes:
+        fields:
+          - {name: "Name", wire: "name", type: "string", doc: "56ba9e45"}
+          - {name: "Project", wire: "project", type: "*string", optional: true, doc: "b2158adf"}
+          - {name: "PublicKey", wire: "public_key", type: "string", doc: "a4909821"}
+      operations.PostSSHKeySSHKeysData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*PostSSHKeySSHKeysAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "PostSSHKeySSHKeysType"}
+      operations.PostSSHKeySSHKeysRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "PostSSHKeySSHKeysData"}
+      operations.PostSSHKeySSHKeysType:
+        enum: ["ssh_keys"]
+      operations.PutProjectSSHKeyResponse:
+        fields:
+          - {name: "Object", type: "*PutProjectSSHKeyResponseBody", optional: true, doc: "6d8303b0"}
+      operations.PutProjectSSHKeyResponseBody:
+        doc: "567b3a09"
+        fields:
+          - {name: "Data", wire: "data", type: "*components.SSHKeyData", optional: true}
+      operations.PutProjectSSHKeySSHKeysAttributes:
+        fields:
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "56ba9e45"}
+          - {name: "Tags", wire: "tags", type: "[]string", optional: true}
+      operations.PutProjectSSHKeySSHKeysData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*PutProjectSSHKeySSHKeysAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "string"}
+          - {name: "Type", wire: "type", type: "PutProjectSSHKeySSHKeysType"}
+      operations.PutProjectSSHKeySSHKeysRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "PutProjectSSHKeySSHKeysData"}
+      operations.PutProjectSSHKeySSHKeysType:
+        enum: ["ssh_keys"]
+      operations.PutSSHKeyResponse:
+        fields:
+          - {name: "Object", type: "*PutSSHKeyResponseBody", optional: true, doc: "6d8303b0"}
+      operations.PutSSHKeyResponseBody:
+        doc: "a95ffe9c"
+        fields:
+          - {name: "Data", wire: "data", type: "*components.SSHKeyData", optional: true}
+      operations.PutSSHKeySSHKeysAttributes:
+        fields:
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "56ba9e45"}
+          - {name: "Tags", wire: "tags", type: "[]string", optional: true}
+      operations.PutSSHKeySSHKeysData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*PutSSHKeySSHKeysAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "string"}
+          - {name: "Type", wire: "type", type: "PutSSHKeySSHKeysType"}
+      operations.PutSSHKeySSHKeysRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "PutSSHKeySSHKeysData"}
+      operations.PutSSHKeySSHKeysType:
+        enum: ["ssh_keys"]
+  Servers:
+    methods:
+      Create: {signature: "(context.Context, operations.CreateServerServersRequestBody, ...operations.Option) (*operations.CreateServerResponse, error)"}
+      CreateIpmiSession: {signature: "(context.Context, string, ...operations.Option) (*operations.CreateIpmiSessionResponse, error)"}
+      Delete: {signature: "(context.Context, string, *string, ...operations.Option) (*operations.DestroyServerResponse, error)"}
+      ExitRescueMode: {signature: "(context.Context, string, ...operations.Option) (*operations.ServerExitRescueModeResponse, error)"}
+      Get: {signature: "(context.Context, string, *string, ...operations.Option) (*operations.GetServerResponse, error)"}
+      GetDeployConfig: {signature: "(context.Context, string, ...operations.Option) (*operations.GetServerDeployConfigResponse, error)"}
+      GetOutOfBand: {signature: "(context.Context, string, ...operations.Option) (*operations.GetServerOutOfBandResponse, error)"}
+      List: {signature: "(context.Context, operations.GetServersRequest, ...operations.Option) (*operations.GetServersResponse, error)"}
+      Lock: {signature: "(context.Context, string, ...operations.Option) (*operations.ServerLockResponse, error)"}
+      Reinstall: {signature: "(context.Context, string, operations.CreateServerReinstallServersRequestBody, ...operations.Option) (*operations.CreateServerReinstallResponse, error)"}
+      RunAction: {signature: "(context.Context, string, operations.CreateServerActionServersRequestBody, ...operations.Option) (*operations.CreateServerActionResponse, error)"}
+      ScheduleDeletion: {signature: "(context.Context, string, ...operations.Option) (*operations.ServerScheduleDeletionResponse, error)"}
+      StartOutOfBandConnection: {signature: "(context.Context, string, operations.CreateServerOutOfBandServersRequestBody, ...operations.Option) (*operations.CreateServerOutOfBandResponse, error)"}
+      StartRescueMode: {signature: "(context.Context, string, ...operations.Option) (*operations.ServerStartRescueModeResponse, error)"}
+      Unlock: {signature: "(context.Context, string, ...operations.Option) (*operations.ServerUnlockResponse, error)"}
+      UnscheduleDeletion: {signature: "(context.Context, string, ...operations.Option) (*operations.ServerUnscheduleDeletionResponse, error)"}
+      Update: {signature: "(context.Context, string, operations.UpdateServerServersRequestBody, ...operations.Option) (*operations.UpdateServerResponse, error)"}
+      UpdateDeployConfig: {signature: "(context.Context, string, operations.UpdateServerDeployConfigServersRequestBody, ...operations.Option) (*operations.UpdateServerDeployConfigResponse, error)"}
+    models:
+      components.Billing:
+        fields:
+          - {name: "Method", wire: "method", type: "*string", optional: true}
+          - {name: "SubscriptionID", wire: "subscription_id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.Currency:
+        fields:
+          - {name: "Code", wire: "code", type: "*string", optional: true}
+          - {name: "CurrencyID", wire: "currency_id", type: "*int64", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.DeployConfig:
+        fields:
+          - {name: "Data", wire: "data", type: "*DeployConfigData", optional: true}
+      components.DeployConfigAttributes:
+        fields:
+          - {name: "DiskLayout", wire: "disk_layout", type: "[]DiskLayout", optional: true}
+          - {name: "Hostname", wire: "hostname", type: "*string", optional: true}
+          - {name: "OperatingSystem", wire: "operating_system", type: "*string", optional: true}
+          - {name: "PersistentNetboot", wire: "persistent_netboot", type: "*bool", optional: true, doc: "ffca1d5f"}
+          - {name: "PublicNetwork", wire: "public_network", type: "*bool", optional: true}
+          - {name: "PublicNetworkID", wire: "public_network_id", type: "*string", optional: true}
+          - {name: "Raid", wire: "raid", type: "*string", optional: true}
+          - {name: "SSHKeys", wire: "ssh_keys", type: "[]string", optional: true}
+          - {name: "UserData", wire: "user_data", type: "*string", optional: true}
+      components.DeployConfigData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*DeployConfigAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+      components.DeployConfigFilesystem:
+        enum: ["ext4", "xfs"]
+      components.DeployConfigRaidLevel:
+        enum: ["raid-0", "raid-1"]
+      components.DeployConfigRole:
+        enum: ["os", "raw", "storage"]
+      components.DiskLayout:
+        fields:
+          - {name: "Count", wire: "count", type: "int64"}
+          - {name: "Filesystem", wire: "filesystem", type: "*DeployConfigFilesystem", optional: true}
+          - {name: "MountPoint", wire: "mount_point", type: "*string", optional: true}
+          - {name: "RaidLevel", wire: "raid_level", type: "*DeployConfigRaidLevel", optional: true}
+          - {name: "Role", wire: "role", type: "DeployConfigRole"}
+      components.Distro:
+        fields:
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "d0b9ff50"}
+          - {name: "Series", wire: "series", type: "*string", optional: true, doc: "118aca62"}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true, doc: "6cd6dff4"}
+      components.Interfaces:
+        fields:
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "MacAddress", wire: "mac_address", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Role", wire: "role", type: "*ServerDataRole", optional: true}
+      components.IpmiSession:
+        fields:
+          - {name: "Data", wire: "data", type: "*IpmiSessionData", optional: true}
+      components.IpmiSessionAttributes:
+        fields:
+          - {name: "IpmiAddress", wire: "ipmi_address", type: "*string", optional: true, doc: "eb50f1b0"}
+          - {name: "IpmiPassword", wire: "ipmi_password", type: "*string", optional: true, doc: "c60b2314"}
+          - {name: "IpmiURL", wire: "ipmi_url", type: "*string", optional: true, doc: "0ee442a4"}
+          - {name: "IpmiUsername", wire: "ipmi_username", type: "*string", optional: true, doc: "ab81d4b5"}
+      components.IpmiSessionData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*IpmiSessionAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*IpmiSessionType", optional: true}
+      components.IpmiSessionType:
+        enum: ["ipmi_sessions"]
+      components.IpmiStatus:
+        enum: ["Intermittent", "Normal", "Unavailable"]
+      components.Limits:
+        fields:
+          - {name: "BareMetal", wire: "bare_metal", type: "*int64", optional: true}
+          - {name: "BareMetalGpu", wire: "bare_metal_gpu", type: "*int64", optional: true}
+          - {name: "BgpSessionPerIP", wire: "bgp_session_per_ip", type: "*int64", optional: true}
+          - {name: "BlockStorage", wire: "block_storage", type: "*int64", optional: true}
+          - {name: "Database", wire: "database", type: "*int64", optional: true}
+          - {name: "ElasticIP", wire: "elastic_ip", type: "*int64", optional: true}
+          - {name: "Filesystem", wire: "filesystem", type: "*int64", optional: true}
+          - {name: "PublicNetwork", wire: "public_network", type: "*int64", optional: true}
+          - {name: "VirtualMachine", wire: "virtual_machine", type: "*int64", optional: true}
+          - {name: "VirtualMachineGpu", wire: "virtual_machine_gpu", type: "*int64", optional: true}
+          - {name: "VirtualNetwork", wire: "virtual_network", type: "*int64", optional: true}
+      components.OperatingSystem:
+        fields:
+          - {name: "Distro", wire: "distro", type: "*Distro", optional: true}
+          - {name: "Features", wire: "features", type: "*ServerDataFeatures", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "0e6f2309"}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true, doc: "a62f594d"}
+          - {name: "Version", wire: "version", type: "*string", optional: true, doc: "efa49a94"}
+      components.OutOfBandConnection:
+        fields:
+          - {name: "Data", wire: "data", type: "*OutOfBandConnectionData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*OutOfBandConnectionMeta", optional: true}
+      components.OutOfBandConnectionAttributes:
+        fields:
+          - {name: "AccessIP", wire: "access_ip", type: "*string", optional: true}
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "Credentials", wire: "credentials", type: "*OutOfBandConnectionCredentials", optional: true, doc: "98375f0b"}
+          - {name: "Port", wire: "port", type: "*string", optional: true}
+          - {name: "SSHKey", wire: "ssh_key", type: "*SSHKey", optional: true}
+          - {name: "ServerID", wire: "server_id", type: "*string", optional: true}
+          - {name: "Status", wire: "status", type: "*string", optional: true}
+          - {name: "Username", wire: "username", type: "*string", optional: true}
+      components.OutOfBandConnectionCredentials:
+        doc: "e98547b0"
+        fields:
+          - {name: "Password", wire: "password", type: "*string", optional: true}
+          - {name: "User", wire: "user", type: "*string", optional: true}
+      components.OutOfBandConnectionData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*OutOfBandConnectionAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.OutOfBandConnectionMeta:
+      components.PaginationMeta:
+        fields:
+          - {name: "Stats", wire: "stats", type: "*Stats", optional: true}
+      components.ProjectInclude:
+        fields:
+          - {name: "BandwidthAlert", wire: "bandwidth_alert", type: "*bool", optional: true}
+          - {name: "Billing", wire: "billing", type: "*Billing", optional: true}
+          - {name: "BillingMethod", wire: "billing_method", type: "*string", optional: true}
+          - {name: "BillingType", wire: "billing_type", type: "*string", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "Environment", wire: "environment", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "ProvisioningType", wire: "provisioning_type", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Stats", wire: "stats", type: "*ProjectIncludeStats", optional: true}
+      components.ProjectIncludeStats:
+        fields:
+          - {name: "Databases", wire: "databases", type: "*int64", optional: true}
+          - {name: "IPAddresses", wire: "ip_addresses", type: "*int64", optional: true}
+          - {name: "Prefixes", wire: "prefixes", type: "*int64", optional: true}
+          - {name: "Servers", wire: "servers", type: "*int64", optional: true}
+          - {name: "Storages", wire: "storages", type: "*int64", optional: true}
+          - {name: "VirtualMachines", wire: "virtual_machines", type: "*int64", optional: true}
+          - {name: "Vlans", wire: "vlans", type: "*int64", optional: true}
+      components.SSHKey:
+        fields:
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "Fingerprint", wire: "fingerprint", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+      components.Server:
+        fields:
+          - {name: "Data", wire: "data", type: "*ServerData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*ServerMeta", optional: true}
+      components.ServerAction:
+        fields:
+          - {name: "Data", wire: "data", type: "*ServerActionData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*ServerActionMeta", optional: true}
+      components.ServerActionAttributes:
+        fields:
+          - {name: "Status", wire: "status", type: "*string", optional: true}
+      components.ServerActionData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*ServerActionAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*ServerActionType", optional: true}
+      components.ServerActionMeta:
+      components.ServerActionType:
+        enum: ["actions"]
+      components.ServerData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*ServerDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.ServerDataAttributes:
+        fields:
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "Hostname", wire: "hostname", type: "*string", optional: true}
+          - {name: "Interfaces", wire: "interfaces", type: "[]Interfaces", optional: true}
+          - {name: "IpmiStatus", wire: "ipmi_status", type: "*IpmiStatus", optional: true}
+          - {name: "Label", wire: "label", type: "*string", optional: true, doc: "fa1bd70d"}
+          - {name: "Locked", wire: "locked", type: "*bool", optional: true}
+          - {name: "OperatingSystem", wire: "operating_system", type: "*OperatingSystem", optional: true}
+          - {name: "Plan", wire: "plan", type: "*ServerDataPlan", optional: true}
+          - {name: "Price", wire: "price", type: "*float64", optional: true}
+          - {name: "PrimaryIpv4", wire: "primary_ipv4", type: "*string", optional: true}
+          - {name: "PrimaryIpv6", wire: "primary_ipv6", type: "*string", optional: true}
+          - {name: "Project", wire: "project", type: "*ProjectInclude", optional: true}
+          - {name: "PublicNetwork", wire: "public_network", type: "*ServerDataPublicNetwork", optional: true, doc: "7d7f0932"}
+          - {name: "PublicNetworkEligible", wire: "public_network_eligible", type: "*bool", optional: true, doc: "bdd4826f"}
+          - {name: "Region", wire: "region", type: "*ServerRegionResourceData", optional: true}
+          - {name: "RescueAllowed", wire: "rescue_allowed", type: "*bool", optional: true}
+          - {name: "Role", wire: "role", type: "*string", optional: true, doc: "ceda5ad9"}
+          - {name: "ScheduledDeletionAt", wire: "scheduled_deletion_at", type: "*string", optional: true}
+          - {name: "Site", wire: "site", type: "*string", optional: true}
+          - {name: "Specs", wire: "specs", type: "*ServerDataSpecs", optional: true}
+          - {name: "Status", wire: "status", type: "*ServerDataStatus", optional: true, doc: "ec3af91c"}
+          - {name: "Tags", wire: "tags", type: "[]ServerDataTags", optional: true}
+          - {name: "Team", wire: "team", type: "*TeamInclude", optional: true}
+      components.ServerDataFeatures:
+        fields:
+          - {name: "Raid", wire: "raid", type: "*bool", optional: true}
+          - {name: "SSHKeys", wire: "ssh_keys", type: "*bool", optional: true}
+          - {name: "UserData", wire: "user_data", type: "*bool", optional: true}
+      components.ServerDataPlan:
+        fields:
+          - {name: "Billing", wire: "billing", type: "*string", optional: true, doc: "cf783e20"}
+          - {name: "ID", wire: "id", type: "*string", optional: true, doc: "97d84660"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "f6c410e6"}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true, doc: "c76023de"}
+      components.ServerDataPublicNetwork:
+        doc: "572ce969"
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Ipv4", wire: "ipv4", type: "*string", optional: true}
+          - {name: "Ipv6", wire: "ipv6", type: "*string", optional: true}
+      components.ServerDataRole:
+        enum: ["external", "internal", "ipmi", "unknown"]
+      components.ServerDataSpecs:
+        fields:
+          - {name: "CPU", wire: "cpu", type: "*string", optional: true, doc: "0bc9f4a8"}
+          - {name: "Disk", wire: "disk", type: "*string", optional: true, doc: "68f22fae"}
+          - {name: "Gpu", wire: "gpu", type: "*string", optional: true, doc: "bc9939c6"}
+          - {name: "Nic", wire: "nic", type: "*string", optional: true, doc: "ca638448"}
+          - {name: "RAM", wire: "ram", type: "*string", optional: true, doc: "acafc17c"}
+      components.ServerDataStatus:
+        doc: "ae74e4c0"
+        enum: ["deploying", "disk_erasing", "failed_deployment", "off", "on", "rescue_mode", "unknown"]
+      components.ServerDataTags:
+        fields:
+          - {name: "Color", wire: "color", type: "*string", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.ServerMeta:
+      components.ServerRegionResourceData:
+        fields:
+          - {name: "City", wire: "city", type: "*string", optional: true}
+          - {name: "Country", wire: "country", type: "*string", optional: true}
+          - {name: "Site", wire: "site", type: "*Site", optional: true}
+      components.ServerRescue:
+        fields:
+          - {name: "Meta", wire: "meta", type: "*ServerRescueMeta", optional: true}
+      components.ServerRescueMeta:
+      components.ServerScheduleDeletion:
+        fields:
+          - {name: "Data", wire: "data", type: "*ServerScheduleDeletionData", optional: true}
+      components.ServerScheduleDeletionAttributes:
+        fields:
+          - {name: "ScheduledDeletionAt", wire: "scheduled_deletion_at", type: "*string", optional: true}
+          - {name: "ServerID", wire: "server_id", type: "*string", optional: true}
+      components.ServerScheduleDeletionData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*ServerScheduleDeletionAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*ServerScheduleDeletionType", optional: true}
+      components.ServerScheduleDeletionType:
+        enum: ["schedule_deletion"]
+      components.Servers:
+        fields:
+          - {name: "Data", wire: "data", type: "[]ServerData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*PaginationMeta", optional: true}
+      components.Site:
+        fields:
+          - {name: "Facility", wire: "facility", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "RackID", wire: "rack_id", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+      components.Stats:
+        fields:
+          - {name: "Total", wire: "total", type: "*Total", optional: true}
+      components.TeamInclude:
+        fields:
+          - {name: "Address", wire: "address", type: "*string", optional: true}
+          - {name: "Currency", wire: "currency", type: "*Currency", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "FeatureFlags", wire: "feature_flags", type: "[]string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Limits", wire: "limits", type: "*Limits", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Status", wire: "status", type: "*string", optional: true}
+      components.Total:
+        fields:
+          - {name: "Count", wire: "count", type: "*int64", optional: true, doc: "892c1421"}
+      operations.CreateIpmiSessionResponse:
+        fields:
+          - {name: "IpmiSession", type: "*components.IpmiSession", optional: true, doc: "09de135b"}
+      operations.CreateServerActionAction:
+        doc: "1e6d7b61"
+        enum: ["power_off", "power_on", "reboot"]
+      operations.CreateServerActionResponse:
+        fields:
+          - {name: "ServerAction", type: "*components.ServerAction", optional: true, doc: "09de135b"}
+      operations.CreateServerActionServersAttributes:
+        fields:
+          - {name: "Action", wire: "action", type: "CreateServerActionAction", doc: "cd25a59f"}
+      operations.CreateServerActionServersData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*CreateServerActionServersAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "CreateServerActionServersType"}
+      operations.CreateServerActionServersRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "CreateServerActionServersData"}
+      operations.CreateServerActionServersType:
+        enum: ["actions"]
+      operations.CreateServerBilling:
+        doc: "207b2f2e"
+        enum: ["hourly", "monthly", "yearly"]
+      operations.CreateServerDiskLayout:
+        fields:
+          - {name: "Count", wire: "count", type: "int64"}
+          - {name: "Filesystem", wire: "filesystem", type: "*CreateServerFilesystem", optional: true}
+          - {name: "MountPoint", wire: "mount_point", type: "*string", optional: true}
+          - {name: "RaidLevel", wire: "raid_level", type: "*CreateServerRaidLevel", optional: true}
+          - {name: "Role", wire: "role", type: "CreateServerServersRole"}
+      operations.CreateServerFilesystem:
+        enum: ["ext4", "xfs"]
+      operations.CreateServerOperatingSystem:
+        doc: "fdcf25e4"
+        enum: ["centos_7_4_x64", "centos_8_x64", "debian_10", "debian_11", "debian_12", "ipxe", "rhel8", "rockylinux_8", "ubuntu22_ml_in_a_box", "ubuntu24_ml_in_a_box", "ubuntu_20_04_x64_lts", "ubuntu_22_04_x64_lts", "ubuntu_24_04_x64_lts", "windows_2022_std", "windows_server_2019_std_v1"]
+      operations.CreateServerOutOfBandResponse:
+        fields:
+          - {name: "OutOfBandConnection", type: "*components.OutOfBandConnection", optional: true, doc: "09de135b"}
+      operations.CreateServerOutOfBandServersAttributes:
+        fields:
+          - {name: "SSHKeyID", wire: "ssh_key_id", type: "string", doc: "98f0328f"}
+      operations.CreateServerOutOfBandServersData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*CreateServerOutOfBandServersAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "CreateServerOutOfBandServersType"}
+      operations.CreateServerOutOfBandServersRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "CreateServerOutOfBandServersData"}
+      operations.CreateServerOutOfBandServersType:
+        enum: ["out_of_band"]
+      operations.CreateServerPlan:
+        doc: "300886f5"
+        enum: ["c2-large-x86", "c2-medium-x86", "c2-small-x86", "c3-large-x86", "c3-medium-x86", "c3-small-x86", "c3-xlarge-x86", "g3-gh200", "g3-large-x86", "g3-medium-x86", "g3-small-x86", "g3-xlarge-x86", "g4-rtx6kpro-large", "m3-large-x86", "m4-metal-large", "m4-metal-small", "rs4-metal-xlarge", "s2-small-x86", "s3-large-x86"]
+      operations.CreateServerRaid:
+        doc: "3430342c"
+        enum: ["raid-0", "raid-1"]
+      operations.CreateServerRaidLevel:
+        enum: ["raid-0", "raid-1"]
+      operations.CreateServerReinstallResponse:
+      operations.CreateServerReinstallServersAttributes:
+        fields:
+          - {name: "DiskLayout", wire: "disk_layout", type: "[]CreateServerReinstallServersDiskLayout", optional: true}
+          - {name: "Hostname", wire: "hostname", type: "*string", optional: true, doc: "41be8acf"}
+          - {name: "Ipxe", wire: "ipxe", type: "*string", optional: true, doc: "fadd5457"}
+          - {name: "OperatingSystem", wire: "operating_system", type: "*CreateServerReinstallServersOperatingSystem", optional: true, doc: "20138a4e"}
+          - {name: "PersistentNetboot", wire: "persistent_netboot", type: "*bool", optional: true, doc: "ffca1d5f"}
+          - {name: "PublicNetwork", wire: "public_network", type: "*bool", optional: true, doc: "a705fde7"}
+          - {name: "PublicNetworkID", wire: "public_network_id", type: "*string", optional: true, doc: "cd6c033b"}
+          - {name: "Raid", wire: "raid", type: "*CreateServerReinstallServersRaid", optional: true, doc: "f2c6f5c2"}
+          - {name: "SSHKeys", wire: "ssh_keys", type: "[]string", optional: true, doc: "e7d4f653"}
+          - {name: "UserData", wire: "user_data", type: "*string", optional: true, doc: "9d2d7e48"}
+      operations.CreateServerReinstallServersData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*CreateServerReinstallServersAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "CreateServerReinstallServersType"}
+      operations.CreateServerReinstallServersDiskLayout:
+        fields:
+          - {name: "Count", wire: "count", type: "int64"}
+          - {name: "Filesystem", wire: "filesystem", type: "*CreateServerReinstallServersFilesystem", optional: true}
+          - {name: "MountPoint", wire: "mount_point", type: "*string", optional: true}
+          - {name: "RaidLevel", wire: "raid_level", type: "*CreateServerReinstallServersRaidLevel", optional: true}
+          - {name: "Role", wire: "role", type: "CreateServerReinstallServersRole"}
+      operations.CreateServerReinstallServersFilesystem:
+        enum: ["ext4", "xfs"]
+      operations.CreateServerReinstallServersOperatingSystem:
+        doc: "9b6a568e"
+        enum: ["centos_7_4_x64", "centos_8_x64", "debian_10", "debian_11", "debian_12", "ipxe", "rhel8", "rockylinux_8", "ubuntu22_ml_in_a_box", "ubuntu24_ml_in_a_box", "ubuntu_20_04_x64_lts", "ubuntu_22_04_x64_lts", "ubuntu_24_04_x64_lts", "windows_2022_std", "windows_server_2019_std_v1"]
+      operations.CreateServerReinstallServersRaid:
+        doc: "ae73c2c8"
+        enum: ["raid-0", "raid-1"]
+      operations.CreateServerReinstallServersRaidLevel:
+        enum: ["raid-0", "raid-1"]
+      operations.CreateServerReinstallServersRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "CreateServerReinstallServersData"}
+      operations.CreateServerReinstallServersRole:
+        enum: ["os", "raw", "storage"]
+      operations.CreateServerReinstallServersType:
+        enum: ["reinstalls"]
+      operations.CreateServerResponse:
+        fields:
+          - {name: "Server", type: "*components.Server", optional: true, doc: "09de135b"}
+      operations.CreateServerServersAttributes:
+        fields:
+          - {name: "BgpReady", wire: "bgp_ready", type: "*bool", optional: true, doc: "13159bfc"}
+          - {name: "Billing", wire: "billing", type: "*CreateServerBilling", optional: true, doc: "64f8fe85"}
+          - {name: "DiskLayout", wire: "disk_layout", type: "[]CreateServerDiskLayout", optional: true}
+          - {name: "Hostname", wire: "hostname", type: "string", doc: "34d56b5c"}
+          - {name: "Ipxe", wire: "ipxe", type: "*string", optional: true, doc: "ba3179df"}
+          - {name: "OperatingSystem", wire: "operating_system", type: "CreateServerOperatingSystem", doc: "90601318"}
+          - {name: "PersistentNetboot", wire: "persistent_netboot", type: "*bool", optional: true, doc: "ffca1d5f"}
+          - {name: "Plan", wire: "plan", type: "CreateServerPlan", doc: "d5c61e12"}
+          - {name: "Project", wire: "project", type: "string", doc: "f855f31f"}
+          - {name: "Raid", wire: "raid", type: "*CreateServerRaid", optional: true, doc: "f2c6f5c2"}
+          - {name: "SSHKeys", wire: "ssh_keys", type: "[]string", optional: true, doc: "cb759b5d"}
+          - {name: "Site", wire: "site", type: "CreateServerSite", doc: "1fc71af8"}
+          - {name: "UserData", wire: "user_data", type: "*string", optional: true, doc: "78299b0e"}
+      operations.CreateServerServersData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*CreateServerServersAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "CreateServerServersType"}
+      operations.CreateServerServersRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "*CreateServerServersData", optional: true}
+      operations.CreateServerServersRole:
+        enum: ["os", "raw", "storage"]
+      operations.CreateServerServersType:
+        enum: ["servers"]
+      operations.CreateServerSite:
+        doc: "3e43a70f"
+        enum: ["ASH", "BUE", "CHI", "DAL", "FRA", "LAX", "LON", "MEX", "MEX2", "MIA", "MIA2", "NYC", "SAO", "SAO2", "SGP", "SYD", "TYO", "TYO2"]
+      operations.DestroyServerResponse:
+      operations.GetServerDeployConfigResponse:
+        fields:
+          - {name: "DeployConfig", type: "*components.DeployConfig", optional: true, doc: "6d8303b0"}
+      operations.GetServerOutOfBandResponse:
+        fields:
+          - {name: "OutOfBandConnection", type: "*components.OutOfBandConnection", optional: true, doc: "6d8303b0"}
+      operations.GetServerResponse:
+        fields:
+          - {name: "Server", type: "*components.Server", optional: true, doc: "6d8303b0"}
+      operations.GetServersRequest:
+        fields:
+          - {name: "ExtraFieldsServers", wire: "extra_fields[servers]", type: "*string", optional: true, doc: "359d7aad"}
+          - {name: "FilterCreatedAtGte", wire: "filter[created_at_gte]", type: "*string", optional: true, doc: "baf96d38"}
+          - {name: "FilterCreatedAtLte", wire: "filter[created_at_lte]", type: "*string", optional: true, doc: "91d19eb3"}
+          - {name: "FilterDiskEql", wire: "filter[disk][eql]", type: "*int64", optional: true, doc: "8f27e90e"}
+          - {name: "FilterDiskGte", wire: "filter[disk][gte]", type: "*int64", optional: true, doc: "ede7cf54"}
+          - {name: "FilterDiskLte", wire: "filter[disk][lte]", type: "*int64", optional: true, doc: "9bf87e01"}
+          - {name: "FilterGpu", wire: "filter[gpu]", type: "*bool", optional: true, doc: "d15cf75d"}
+          - {name: "FilterHostname", wire: "filter[hostname]", type: "*string", optional: true, doc: "5e802199"}
+          - {name: "FilterLabel", wire: "filter[label]", type: "*string", optional: true, doc: "59719708"}
+          - {name: "FilterPlan", wire: "filter[plan]", type: "*string", optional: true, doc: "5c73284b"}
+          - {name: "FilterProject", wire: "filter[project]", type: "*string", optional: true, doc: "42805174"}
+          - {name: "FilterRAMEql", wire: "filter[ram][eql]", type: "*int64", optional: true, doc: "6dd062cd"}
+          - {name: "FilterRAMGte", wire: "filter[ram][gte]", type: "*int64", optional: true, doc: "9f67fa90"}
+          - {name: "FilterRAMLte", wire: "filter[ram][lte]", type: "*int64", optional: true, doc: "b703c6b1"}
+          - {name: "FilterRegion", wire: "filter[region]", type: "*string", optional: true, doc: "ef1716a7"}
+          - {name: "FilterStatus", wire: "filter[status]", type: "*string", optional: true, doc: "7e957454"}
+          - {name: "FilterTags", wire: "filter[tags]", type: "*string", optional: true, doc: "31c6f859"}
+          - {name: "PageNumber", wire: "page[number]", type: "*int64", optional: true, default: "1", doc: "52d4faa2"}
+          - {name: "PageSize", wire: "page[size]", type: "*int64", optional: true, default: "20", doc: "5cd3806e"}
+          - {name: "StatsTotal", wire: "stats[total]", type: "*string", optional: true, doc: "186835ea"}
+      operations.GetServersResponse:
+        fields:
+          - {name: "Servers", type: "*components.Servers", optional: true, doc: "6d8303b0"}
+      operations.ServerExitRescueModeResponse:
+        fields:
+          - {name: "ServerRescue", type: "*components.ServerRescue", optional: true, doc: "6d8303b0"}
+      operations.ServerLockResponse:
+        fields:
+          - {name: "Server", type: "*components.Server", optional: true, doc: "6d8303b0"}
+      operations.ServerScheduleDeletionResponse:
+        fields:
+          - {name: "ServerScheduleDeletion", type: "*components.ServerScheduleDeletion", optional: true, doc: "09de135b"}
+      operations.ServerStartRescueModeResponse:
+        fields:
+          - {name: "ServerRescue", type: "*components.ServerRescue", optional: true, doc: "09de135b"}
+      operations.ServerUnlockResponse:
+        fields:
+          - {name: "Server", type: "*components.Server", optional: true, doc: "6d8303b0"}
+      operations.ServerUnscheduleDeletionResponse:
+      operations.UpdateServerDeployConfigResponse:
+        fields:
+          - {name: "DeployConfig", type: "*components.DeployConfig", optional: true, doc: "6d8303b0"}
+      operations.UpdateServerDeployConfigServersAttributes:
+        fields:
+          - {name: "DiskLayout", wire: "disk_layout", type: "[]UpdateServerDeployConfigServersDiskLayout", optional: true}
+          - {name: "Hostname", wire: "hostname", type: "*string", optional: true}
+          - {name: "IpxeURL", wire: "ipxe_url", type: "*string", optional: true, doc: "3842ea22"}
+          - {name: "OperatingSystem", wire: "operating_system", type: "*UpdateServerDeployConfigServersOperatingSystem", optional: true}
+          - {name: "PersistentNetboot", wire: "persistent_netboot", type: "*bool", optional: true, doc: "ffca1d5f"}
+          - {name: "PublicNetwork", wire: "public_network", type: "*bool", optional: true, doc: "c7f66f2f"}
+          - {name: "PublicNetworkID", wire: "public_network_id", type: "*string", optional: true, doc: "c0148c92"}
+          - {name: "Raid", wire: "raid", type: "*UpdateServerDeployConfigServersRaid", optional: true, doc: "f2c6f5c2"}
+          - {name: "SSHKeys", wire: "ssh_keys", type: "[]string", optional: true}
+          - {name: "UserData", wire: "user_data", type: "*string", optional: true, doc: "5d0721ab"}
+      operations.UpdateServerDeployConfigServersDiskLayout:
+        fields:
+          - {name: "Count", wire: "count", type: "int64"}
+          - {name: "Filesystem", wire: "filesystem", type: "*UpdateServerDeployConfigServersFilesystem", optional: true}
+          - {name: "MountPoint", wire: "mount_point", type: "*string", optional: true}
+          - {name: "RaidLevel", wire: "raid_level", type: "*UpdateServerDeployConfigServersRaidLevel", optional: true}
+          - {name: "Role", wire: "role", type: "UpdateServerDeployConfigServersRole"}
+      operations.UpdateServerDeployConfigServersFilesystem:
+        enum: ["ext4", "xfs"]
+      operations.UpdateServerDeployConfigServersOperatingSystem:
+        enum: ["centos_7_4_x64", "centos_8_x64", "debian_10", "debian_11", "debian_12", "ipxe", "rhel8", "rockylinux_8", "ubuntu22_ml_in_a_box", "ubuntu24_ml_in_a_box", "ubuntu_20_04_x64_lts", "ubuntu_22_04_x64_lts", "ubuntu_24_04_x64_lts", "windows_2022_std", "windows_server_2019_std_v1"]
+      operations.UpdateServerDeployConfigServersRaid:
+        doc: "d56e112c"
+        enum: ["raid-0", "raid-1"]
+      operations.UpdateServerDeployConfigServersRaidLevel:
+        enum: ["raid-0", "raid-1"]
+      operations.UpdateServerDeployConfigServersRequestBody:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*UpdateServerDeployConfigServersAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "UpdateServerDeployConfigServersType"}
+      operations.UpdateServerDeployConfigServersRole:
+        enum: ["os", "raw", "storage"]
+      operations.UpdateServerDeployConfigServersType:
+        enum: ["deploy_config"]
+      operations.UpdateServerResponse:
+        fields:
+          - {name: "Server", type: "*components.Server", optional: true, doc: "6d8303b0"}
+      operations.UpdateServerServersAttributes:
+        fields:
+          - {name: "Billing", wire: "billing", type: "*UpdateServerServersBilling", optional: true, doc: "64f8fe85"}
+          - {name: "Hostname", wire: "hostname", type: "*string", optional: true}
+          - {name: "Project", wire: "project", type: "*string", optional: true, doc: "f6a8788a"}
+          - {name: "Tags", wire: "tags", type: "[]string", optional: true, doc: "b88bd5c0"}
+      operations.UpdateServerServersBilling:
+        doc: "c8c45f41"
+        enum: ["hourly", "monthly", "yearly"]
+      operations.UpdateServerServersData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*UpdateServerServersAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*UpdateServerServersType", optional: true}
+      operations.UpdateServerServersRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "*UpdateServerServersData", optional: true}
+      operations.UpdateServerServersType:
+        enum: ["servers"]
+  Tags:
+    methods:
+      Create: {signature: "(context.Context, operations.CreateTagTagsRequestBody, ...operations.Option) (*operations.CreateTagResponse, error)"}
+      Delete: {signature: "(context.Context, string, ...operations.Option) (*operations.DestroyTagResponse, error)"}
+      List: {signature: "(context.Context, ...operations.Option) (*operations.GetTagsResponse, error)"}
+      Update: {signature: "(context.Context, string, operations.UpdateTagTagsRequestBody, ...operations.Option) (*operations.UpdateTagResponse, error)"}
+    models:
+      components.Currency:
+        fields:
+          - {name: "Code", wire: "code", type: "*string", optional: true}
+          - {name: "CurrencyID", wire: "currency_id", type: "*int64", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.CustomTag:
+        fields:
+          - {name: "Data", wire: "data", type: "*CustomTagData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*CustomTagMeta", optional: true}
+      components.CustomTagData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*CustomTagDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*CustomTagDataType", optional: true}
+      components.CustomTagDataAttributes:
+        fields:
+          - {name: "Color", wire: "color", type: "*string", optional: true, doc: "0ae280e2"}
+          - {name: "Description", wire: "description", type: "*string", optional: true, doc: "fc142109"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "a849a268"}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true, doc: "3b29f510"}
+          - {name: "Team", wire: "team", type: "*TeamInclude", optional: true}
+      components.CustomTagDataType:
+        enum: ["tags"]
+      components.CustomTagMeta:
+      components.CustomTags:
+        fields:
+          - {name: "Data", wire: "data", type: "[]CustomTagData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*CustomTagsMeta", optional: true}
+      components.CustomTagsMeta:
+      components.Limits:
+        fields:
+          - {name: "BareMetal", wire: "bare_metal", type: "*int64", optional: true}
+          - {name: "BareMetalGpu", wire: "bare_metal_gpu", type: "*int64", optional: true}
+          - {name: "BgpSessionPerIP", wire: "bgp_session_per_ip", type: "*int64", optional: true}
+          - {name: "BlockStorage", wire: "block_storage", type: "*int64", optional: true}
+          - {name: "Database", wire: "database", type: "*int64", optional: true}
+          - {name: "ElasticIP", wire: "elastic_ip", type: "*int64", optional: true}
+          - {name: "Filesystem", wire: "filesystem", type: "*int64", optional: true}
+          - {name: "PublicNetwork", wire: "public_network", type: "*int64", optional: true}
+          - {name: "VirtualMachine", wire: "virtual_machine", type: "*int64", optional: true}
+          - {name: "VirtualMachineGpu", wire: "virtual_machine_gpu", type: "*int64", optional: true}
+          - {name: "VirtualNetwork", wire: "virtual_network", type: "*int64", optional: true}
+      components.TeamInclude:
+        fields:
+          - {name: "Address", wire: "address", type: "*string", optional: true}
+          - {name: "Currency", wire: "currency", type: "*Currency", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "FeatureFlags", wire: "feature_flags", type: "[]string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Limits", wire: "limits", type: "*Limits", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Status", wire: "status", type: "*string", optional: true}
+      operations.CreateTagResponse:
+        fields:
+          - {name: "CustomTag", type: "*components.CustomTag", optional: true, doc: "09de135b"}
+      operations.CreateTagTagsAttributes:
+        fields:
+          - {name: "Color", wire: "color", type: "string", doc: "0ae280e2"}
+          - {name: "Description", wire: "description", type: "*string", optional: true, doc: "fc142109"}
+          - {name: "Name", wire: "name", type: "string", doc: "a849a268"}
+      operations.CreateTagTagsData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*CreateTagTagsAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "*CreateTagTagsType", optional: true}
+      operations.CreateTagTagsRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "*CreateTagTagsData", optional: true}
+      operations.CreateTagTagsType:
+        enum: ["tags"]
+      operations.DestroyTagResponse:
+      operations.GetTagsResponse:
+        fields:
+          - {name: "CustomTags", type: "*components.CustomTags", optional: true, doc: "6d8303b0"}
+      operations.UpdateTagResponse:
+        fields:
+          - {name: "CustomTag", type: "*components.CustomTag", optional: true, doc: "6d8303b0"}
+      operations.UpdateTagTagsAttributes:
+        fields:
+          - {name: "Color", wire: "color", type: "*string", optional: true, doc: "0ae280e2"}
+          - {name: "Description", wire: "description", type: "*string", optional: true, doc: "fc142109"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "a849a268"}
+      operations.UpdateTagTagsData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*UpdateTagTagsAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*UpdateTagTagsType", optional: true}
+      operations.UpdateTagTagsRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "*UpdateTagTagsData", optional: true}
+      operations.UpdateTagTagsType:
+        enum: ["tags"]
+  TeamMembers:
+    methods:
+      Delete: {signature: "(context.Context, string, ...operations.Option) (*operations.DestroyTeamMemberResponse, error)"}
+      PostTeamMembers: {signature: "(context.Context, operations.PostTeamMembersTeamMembersRequestBody, ...operations.Option) (*operations.PostTeamMembersResponse, error)"}
+    models:
+      components.Membership:
+        fields:
+          - {name: "Data", wire: "data", type: "*MembershipData", optional: true}
+      components.MembershipAttributes:
+        fields:
+          - {name: "CreatedAt", wire: "created_at", type: "*time.Time", optional: true}
+          - {name: "Email", wire: "email", type: "*string", optional: true}
+          - {name: "FirstName", wire: "first_name", type: "*string", optional: true}
+          - {name: "LastLoginAt", wire: "last_login_at", type: "*time.Time", optional: true}
+          - {name: "LastName", wire: "last_name", type: "*string", optional: true}
+          - {name: "MfaEnabled", wire: "mfa_enabled", type: "*bool", optional: true}
+          - {name: "Role", wire: "role", type: "*MembershipRole", optional: true}
+          - {name: "UpdatedAt", wire: "updated_at", type: "*time.Time", optional: true}
+      components.MembershipData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*MembershipAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+      components.MembershipRole:
+        enum: ["administrator", "billing", "collaborator", "owner"]
+      operations.DestroyTeamMemberResponse:
+      operations.PostTeamMembersResponse:
+        fields:
+          - {name: "Membership", type: "*components.Membership", optional: true, doc: "09de135b"}
+      operations.PostTeamMembersRole:
+        enum: ["administrator", "billing", "collaborator", "owner"]
+      operations.PostTeamMembersTeamMembersAttributes:
+        fields:
+          - {name: "Email", wire: "email", type: "string"}
+          - {name: "FirstName", wire: "first_name", type: "*string", optional: true}
+          - {name: "LastName", wire: "last_name", type: "*string", optional: true}
+          - {name: "Role", wire: "role", type: "PostTeamMembersRole"}
+      operations.PostTeamMembersTeamMembersData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*PostTeamMembersTeamMembersAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "PostTeamMembersTeamMembersType"}
+      operations.PostTeamMembersTeamMembersRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "PostTeamMembersTeamMembersData"}
+      operations.PostTeamMembersTeamMembersType:
+        enum: ["memberships"]
+  Teams.Members:
+    methods:
+      GetTeamMembers: {signature: "(context.Context, *int64, *int64, *string, ...operations.Option) (*operations.GetTeamMembersResponse, error)"}
+    models:
+      components.PaginationMeta:
+        fields:
+          - {name: "Stats", wire: "stats", type: "*Stats", optional: true}
+      components.Stats:
+        fields:
+          - {name: "Total", wire: "total", type: "*Total", optional: true}
+      components.TeamMembers:
+        fields:
+          - {name: "Data", wire: "data", type: "[]TeamMembersData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*PaginationMeta", optional: true}
+      components.TeamMembersAttributes:
+        fields:
+          - {name: "CreatedAt", wire: "created_at", type: "*time.Time", optional: true}
+          - {name: "Email", wire: "email", type: "*string", optional: true}
+          - {name: "FirstName", wire: "first_name", type: "*string", optional: true}
+          - {name: "LastLoginAt", wire: "last_login_at", type: "*time.Time", optional: true}
+          - {name: "LastName", wire: "last_name", type: "*string", optional: true}
+          - {name: "MfaEnabled", wire: "mfa_enabled", type: "*bool", optional: true}
+          - {name: "Role", wire: "role", type: "*TeamMembersRole", optional: true}
+          - {name: "UpdatedAt", wire: "updated_at", type: "*time.Time", optional: true}
+      components.TeamMembersData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*TeamMembersAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.TeamMembersRole:
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.Total:
+        fields:
+          - {name: "Count", wire: "count", type: "*int64", optional: true, doc: "892c1421"}
+      operations.GetTeamMembersResponse:
+        fields:
+          - {name: "TeamMembers", type: "*components.TeamMembers", optional: true, doc: "6d8303b0"}
+  UserData:
+    methods:
+      Create: {signature: "(context.Context, string, operations.PostProjectUserDataUserDataRequestBody, ...operations.Option) (*operations.PostProjectUserDataResponse, error)", deprecated: true}
+      CreateNew: {signature: "(context.Context, operations.PostUserDataUserDataRequestBody, ...operations.Option) (*operations.PostUserDataResponse, error)"}
+      Delete: {signature: "(context.Context, string, ...operations.Option) (*operations.DeleteUserDataResponse, error)"}
+      DeleteProjectUserData: {signature: "(context.Context, string, string, ...operations.Option) (*operations.DeleteProjectUserDataResponse, error)", deprecated: true}
+      GetProjectUserData: {signature: "(context.Context, string, string, *string, ...operations.Option) (*operations.GetProjectUserDataResponse, error)", deprecated: true}
+      GetProjectUsersData: {signature: "(context.Context, string, *string, ...operations.Option) (*operations.GetProjectUsersDataResponse, error)", deprecated: true}
+      List: {signature: "(context.Context, operations.GetUsersDataRequest, ...operations.Option) (*operations.GetUsersDataResponse, error)"}
+      Retrieve: {signature: "(context.Context, string, *string, ...operations.Option) (*operations.GetUserDataResponse, error)"}
+      Update: {signature: "(context.Context, string, *operations.PatchUserDataUserDataRequestBody, ...operations.Option) (*operations.PatchUserDataResponse, error)"}
+      UpdateForProject: {signature: "(context.Context, string, string, *operations.PutProjectUserDataUserDataRequestBody, ...operations.Option) (*operations.PutProjectUserDataResponse, error)", deprecated: true}
+    models:
+      components.Billing:
+        fields:
+          - {name: "Method", wire: "method", type: "*string", optional: true}
+          - {name: "SubscriptionID", wire: "subscription_id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.PaginationMeta:
+        fields:
+          - {name: "Stats", wire: "stats", type: "*Stats", optional: true}
+      components.ProjectInclude:
+        fields:
+          - {name: "BandwidthAlert", wire: "bandwidth_alert", type: "*bool", optional: true}
+          - {name: "Billing", wire: "billing", type: "*Billing", optional: true}
+          - {name: "BillingMethod", wire: "billing_method", type: "*string", optional: true}
+          - {name: "BillingType", wire: "billing_type", type: "*string", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "Environment", wire: "environment", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "ProvisioningType", wire: "provisioning_type", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Stats", wire: "stats", type: "*ProjectIncludeStats", optional: true}
+      components.ProjectIncludeStats:
+        fields:
+          - {name: "Databases", wire: "databases", type: "*int64", optional: true}
+          - {name: "IPAddresses", wire: "ip_addresses", type: "*int64", optional: true}
+          - {name: "Prefixes", wire: "prefixes", type: "*int64", optional: true}
+          - {name: "Servers", wire: "servers", type: "*int64", optional: true}
+          - {name: "Storages", wire: "storages", type: "*int64", optional: true}
+          - {name: "VirtualMachines", wire: "virtual_machines", type: "*int64", optional: true}
+          - {name: "Vlans", wire: "vlans", type: "*int64", optional: true}
+      components.Stats:
+        fields:
+          - {name: "Total", wire: "total", type: "*Total", optional: true}
+      components.Total:
+        fields:
+          - {name: "Count", wire: "count", type: "*int64", optional: true, doc: "892c1421"}
+      components.UserData:
+        fields:
+          - {name: "Data", wire: "data", type: "[]UserDataProperties", optional: true}
+          - {name: "Meta", wire: "meta", type: "*PaginationMeta", optional: true}
+      components.UserDataObject:
+        fields:
+          - {name: "Data", wire: "data", type: "*UserDataProperties", optional: true}
+          - {name: "Meta", wire: "meta", type: "*UserDataObjectMeta", optional: true}
+      components.UserDataObjectMeta:
+      components.UserDataProperties:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*UserDataPropertiesAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "UserDataPropertiesType"}
+      components.UserDataPropertiesAttributes:
+        fields:
+          - {name: "Content", wire: "content", type: "*string", optional: true, doc: "ced14265"}
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "DecodedContent", wire: "decoded_content", type: "*string", optional: true, doc: "1bb07bd3"}
+          - {name: "Description", wire: "description", type: "*string", optional: true, doc: "beda2ad0"}
+          - {name: "Project", wire: "project", type: "*ProjectInclude", optional: true}
+          - {name: "UpdatedAt", wire: "updated_at", type: "*string", optional: true}
+      components.UserDataPropertiesType:
+        enum: ["user_data"]
+      operations.DeleteProjectUserDataResponse:
+      operations.DeleteUserDataResponse:
+      operations.GetProjectUserDataResponse:
+        fields:
+          - {name: "UserDataObject", type: "*components.UserDataObject", optional: true, doc: "6d8303b0"}
+      operations.GetProjectUsersDataResponse:
+        fields:
+          - {name: "UserData", type: "*components.UserData", optional: true, doc: "6d8303b0"}
+      operations.GetUserDataResponse:
+        fields:
+          - {name: "UserDataObject", type: "*components.UserDataObject", optional: true, doc: "6d8303b0"}
+      operations.GetUsersDataRequest:
+        fields:
+          - {name: "ExtraFieldsUserData", wire: "extra_fields[user_data]", type: "*string", optional: true, default: "decoded_content", doc: "2fc6c47d"}
+          - {name: "FilterProject", wire: "filter[project]", type: "*string", optional: true, doc: "b2158adf"}
+          - {name: "FilterScope", wire: "filter[scope]", type: "*string", optional: true, doc: "ab095311"}
+          - {name: "PageNumber", wire: "page[number]", type: "*int64", optional: true, default: "1", doc: "52d4faa2"}
+          - {name: "PageSize", wire: "page[size]", type: "*int64", optional: true, default: "20", doc: "5cd3806e"}
+          - {name: "StatsTotal", wire: "stats[total]", type: "*string", optional: true, doc: "186835ea"}
+      operations.GetUsersDataResponse:
+        fields:
+          - {name: "UserData", type: "*components.UserData", optional: true, doc: "6d8303b0"}
+      operations.PatchUserDataResponse:
+        fields:
+          - {name: "UserDataObject", type: "*components.UserDataObject", optional: true, doc: "6d8303b0"}
+      operations.PatchUserDataUserDataAttributes:
+        fields:
+          - {name: "Content", wire: "content", type: "*string", optional: true, doc: "d5aa3b1b"}
+          - {name: "Description", wire: "description", type: "*string", optional: true, doc: "e5cf3734"}
+      operations.PatchUserDataUserDataData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*PatchUserDataUserDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "string"}
+          - {name: "Type", wire: "type", type: "PatchUserDataUserDataType"}
+      operations.PatchUserDataUserDataRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "PatchUserDataUserDataData"}
+      operations.PatchUserDataUserDataType:
+        enum: ["user_data"]
+      operations.PostProjectUserDataResponse:
+        fields:
+          - {name: "UserDataObject", type: "*components.UserDataObject", optional: true, doc: "09de135b"}
+      operations.PostProjectUserDataUserDataAttributes:
+        fields:
+          - {name: "Content", wire: "content", type: "string", doc: "d662b28c"}
+          - {name: "Description", wire: "description", type: "string", doc: "beda2ad0"}
+      operations.PostProjectUserDataUserDataData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*PostProjectUserDataUserDataAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "PostProjectUserDataUserDataType"}
+      operations.PostProjectUserDataUserDataRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "PostProjectUserDataUserDataData"}
+      operations.PostProjectUserDataUserDataType:
+        enum: ["user_data"]
+      operations.PostUserDataResponse:
+        fields:
+          - {name: "UserDataObject", type: "*components.UserDataObject", optional: true, doc: "09de135b"}
+      operations.PostUserDataUserDataAttributes:
+        fields:
+          - {name: "Content", wire: "content", type: "string", doc: "d662b28c"}
+          - {name: "Description", wire: "description", type: "string", doc: "beda2ad0"}
+          - {name: "Project", wire: "project", type: "*string", optional: true, doc: "b2158adf"}
+      operations.PostUserDataUserDataData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*PostUserDataUserDataAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "PostUserDataUserDataType"}
+      operations.PostUserDataUserDataRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "PostUserDataUserDataData"}
+      operations.PostUserDataUserDataType:
+        enum: ["user_data"]
+      operations.PutProjectUserDataResponse:
+        fields:
+          - {name: "UserDataObject", type: "*components.UserDataObject", optional: true, doc: "6d8303b0"}
+      operations.PutProjectUserDataUserDataAttributes:
+        fields:
+          - {name: "Content", wire: "content", type: "*string", optional: true, doc: "d5aa3b1b"}
+          - {name: "Description", wire: "description", type: "*string", optional: true, doc: "e5cf3734"}
+      operations.PutProjectUserDataUserDataData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*PutProjectUserDataUserDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "string"}
+          - {name: "Type", wire: "type", type: "PutProjectUserDataUserDataType"}
+      operations.PutProjectUserDataUserDataRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "PutProjectUserDataUserDataData"}
+      operations.PutProjectUserDataUserDataType:
+        enum: ["user_data"]
+  VirtualMachines:
+    methods:
+      Create: {signature: "(context.Context, components.VirtualMachinePayload, ...operations.Option) (*operations.CreateVirtualMachineResponse, error)"}
+      CreateVirtualMachineAction: {signature: "(context.Context, string, operations.CreateVirtualMachineActionVirtualMachinesRequestBody, ...operations.Option) (*operations.CreateVirtualMachineActionResponse, error)"}
+      CreateVirtualMachineNetworkAttachment: {signature: "(context.Context, string, components.VirtualMachineNetworkAttachmentCreatePayload, ...operations.Option) (*operations.CreateVirtualMachineNetworkAttachmentResponse, error)"}
+      Delete: {signature: "(context.Context, string, ...operations.Option) (*operations.DestroyVirtualMachineResponse, error)"}
+      DestroyVirtualMachineNetworkAttachment: {signature: "(context.Context, string, string, ...operations.Option) (*operations.DestroyVirtualMachineNetworkAttachmentResponse, error)"}
+      Get: {signature: "(context.Context, string, *string, ...operations.Option) (*operations.ShowVirtualMachineResponse, error)"}
+      List: {signature: "(context.Context, operations.IndexVirtualMachineRequest, ...operations.Option) (*operations.IndexVirtualMachineResponse, error)"}
+      ListVirtualMachineNetworkAttachments: {signature: "(context.Context, string, ...operations.Option) (*operations.ListVirtualMachineNetworkAttachmentsResponse, error)"}
+      ShowVirtualMachineMetrics: {signature: "(context.Context, string, operations.Metric, *operations.Range, *bool, ...operations.Option) (*operations.ShowVirtualMachineMetricsResponse, error)"}
+      UpdateVirtualMachine: {signature: "(context.Context, string, components.VirtualMachineUpdatePayload, ...operations.Option) (*operations.UpdateVirtualMachineResponse, error)"}
+    models:
+      components.Billing:
+        fields:
+          - {name: "Method", wire: "method", type: "*string", optional: true}
+          - {name: "SubscriptionID", wire: "subscription_id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.Currency:
+        fields:
+          - {name: "Code", wire: "code", type: "*string", optional: true}
+          - {name: "CurrencyID", wire: "currency_id", type: "*int64", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.Limits:
+        fields:
+          - {name: "BareMetal", wire: "bare_metal", type: "*int64", optional: true}
+          - {name: "BareMetalGpu", wire: "bare_metal_gpu", type: "*int64", optional: true}
+          - {name: "BgpSessionPerIP", wire: "bgp_session_per_ip", type: "*int64", optional: true}
+          - {name: "BlockStorage", wire: "block_storage", type: "*int64", optional: true}
+          - {name: "Database", wire: "database", type: "*int64", optional: true}
+          - {name: "ElasticIP", wire: "elastic_ip", type: "*int64", optional: true}
+          - {name: "Filesystem", wire: "filesystem", type: "*int64", optional: true}
+          - {name: "PublicNetwork", wire: "public_network", type: "*int64", optional: true}
+          - {name: "VirtualMachine", wire: "virtual_machine", type: "*int64", optional: true}
+          - {name: "VirtualMachineGpu", wire: "virtual_machine_gpu", type: "*int64", optional: true}
+          - {name: "VirtualNetwork", wire: "virtual_network", type: "*int64", optional: true}
+      components.Metric:
+        enum: ["cpu", "disk", "memory", "network"]
+      components.PaginationMeta:
+        fields:
+          - {name: "Stats", wire: "stats", type: "*Stats", optional: true}
+      components.Points:
+        fields:
+          - {name: "Timestamp", wire: "timestamp", type: "*time.Time", optional: true, doc: "3eca287d"}
+          - {name: "Value", wire: "value", type: "*float64", optional: true, doc: "bce86d79"}
+      components.ProjectInclude:
+        fields:
+          - {name: "BandwidthAlert", wire: "bandwidth_alert", type: "*bool", optional: true}
+          - {name: "Billing", wire: "billing", type: "*Billing", optional: true}
+          - {name: "BillingMethod", wire: "billing_method", type: "*string", optional: true}
+          - {name: "BillingType", wire: "billing_type", type: "*string", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "Environment", wire: "environment", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "ProvisioningType", wire: "provisioning_type", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Stats", wire: "stats", type: "*ProjectIncludeStats", optional: true}
+      components.ProjectIncludeStats:
+        fields:
+          - {name: "Databases", wire: "databases", type: "*int64", optional: true}
+          - {name: "IPAddresses", wire: "ip_addresses", type: "*int64", optional: true}
+          - {name: "Prefixes", wire: "prefixes", type: "*int64", optional: true}
+          - {name: "Servers", wire: "servers", type: "*int64", optional: true}
+          - {name: "Storages", wire: "storages", type: "*int64", optional: true}
+          - {name: "VirtualMachines", wire: "virtual_machines", type: "*int64", optional: true}
+          - {name: "Vlans", wire: "vlans", type: "*int64", optional: true}
+      components.Range:
+        enum: ["15m", "1h", "24h", "5m"]
+      components.Stats:
+        fields:
+          - {name: "Total", wire: "total", type: "*Total", optional: true}
+      components.TeamInclude:
+        fields:
+          - {name: "Address", wire: "address", type: "*string", optional: true}
+          - {name: "Currency", wire: "currency", type: "*Currency", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "FeatureFlags", wire: "feature_flags", type: "[]string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Limits", wire: "limits", type: "*Limits", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Status", wire: "status", type: "*string", optional: true}
+      components.Total:
+        fields:
+          - {name: "Count", wire: "count", type: "*int64", optional: true, doc: "892c1421"}
+      components.Unit:
+        doc: "e5f59b43"
+        enum: ["bytes_per_second", "percent"]
+      components.VirtualMachine:
+        fields:
+          - {name: "Data", wire: "data", type: "*VirtualMachineAttributes", optional: true}
+          - {name: "Meta", wire: "meta", type: "*VirtualMachineMeta", optional: true}
+      components.VirtualMachineAttributes:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*VirtualMachineAttributesAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*VirtualMachineAttributesType", optional: true}
+      components.VirtualMachineAttributesAttributes:
+        fields:
+          - {name: "Billing", wire: "billing", type: "*string", optional: true}
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "Credentials", wire: "credentials", type: "*VirtualMachineAttributesCredentials", optional: true, doc: "79270dd3"}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "OperatingSystem", wire: "operating_system", type: "*VirtualMachineAttributesOperatingSystem", optional: true, doc: "b7f3fa66"}
+          - {name: "PendingRestart", wire: "pending_restart", type: "*bool", optional: true, doc: "3dd4819b"}
+          - {name: "Plan", wire: "plan", type: "*VirtualMachineAttributesPlan", optional: true}
+          - {name: "PrimaryIpv4", wire: "primary_ipv4", type: "*string", optional: true}
+          - {name: "Project", wire: "project", type: "*ProjectInclude", optional: true}
+          - {name: "Site", wire: "site", type: "*string", optional: true}
+          - {name: "Specs", wire: "specs", type: "*VirtualMachineAttributesSpecs", optional: true}
+          - {name: "Status", wire: "status", type: "*string", optional: true, doc: "e05e6061"}
+          - {name: "Tags", wire: "tags", type: "[]VirtualMachineAttributesTags", optional: true}
+          - {name: "Team", wire: "team", type: "*TeamInclude", optional: true}
+          - {name: "UserData", wire: "user_data", type: "*string", optional: true, doc: "60030e58"}
+      components.VirtualMachineAttributesCredentials:
+        doc: "e1f6e6f1"
+        fields:
+          - {name: "Host", wire: "host", type: "*string", optional: true}
+          - {name: "Password", wire: "password", type: "*string", optional: true}
+          - {name: "SSHKeys", wire: "ssh_keys", type: "[]VirtualMachineAttributesSSHKeys", optional: true}
+          - {name: "Username", wire: "username", type: "*string", optional: true, doc: "ff3ea41a"}
+      components.VirtualMachineAttributesDistro:
+        doc: "d1281074"
+        fields:
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "1e58f405"}
+          - {name: "Series", wire: "series", type: "*string", optional: true, doc: "c9fce3eb"}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true, doc: "914acbad"}
+      components.VirtualMachineAttributesFeatures:
+        doc: "c0abe792"
+        fields:
+          - {name: "Raid", wire: "raid", type: "*bool", optional: true, doc: "cb4c3f4c"}
+          - {name: "Rescue", wire: "rescue", type: "*bool", optional: true, doc: "43dbb840"}
+          - {name: "SSHKeys", wire: "ssh_keys", type: "*bool", optional: true, doc: "2ac4f8f4"}
+          - {name: "UserData", wire: "user_data", type: "*bool", optional: true, doc: "04385407"}
+          - {name: "Workflow", wire: "workflow", type: "*bool", optional: true, doc: "d6f6f7fb"}
+      components.VirtualMachineAttributesOperatingSystem:
+        doc: "cff6909c"
+        fields:
+          - {name: "Distro", wire: "distro", type: "*VirtualMachineAttributesDistro", optional: true, doc: "6a864e11"}
+          - {name: "Features", wire: "features", type: "*VirtualMachineAttributesFeatures", optional: true, doc: "cb7e42fd"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "e251d0fe"}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true, doc: "1773c983"}
+          - {name: "Version", wire: "version", type: "*string", optional: true, doc: "c2068596"}
+      components.VirtualMachineAttributesPlan:
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+      components.VirtualMachineAttributesSSHKeys:
+        fields:
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "Fingerprint", wire: "fingerprint", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "PublicKey", wire: "public_key", type: "*string", optional: true}
+          - {name: "UpdatedAt", wire: "updated_at", type: "*string", optional: true}
+      components.VirtualMachineAttributesSpecs:
+        fields:
+          - {name: "Gpu", wire: "gpu", type: "*string", optional: true}
+          - {name: "Nic", wire: "nic", type: "*string", optional: true}
+          - {name: "RAM", wire: "ram", type: "*string", optional: true}
+          - {name: "Storage", wire: "storage", type: "*string", optional: true}
+          - {name: "Vcpu", wire: "vcpu", type: "*int64", optional: true}
+      components.VirtualMachineAttributesTags:
+        fields:
+          - {name: "Color", wire: "color", type: "*string", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.VirtualMachineAttributesType:
+        enum: ["virtual_machines"]
+      components.VirtualMachineMeta:
+      components.VirtualMachineMetrics:
+        fields:
+          - {name: "Metric", wire: "metric", type: "*Metric", optional: true}
+          - {name: "Points", wire: "points", type: "[]Points", optional: true}
+          - {name: "Range", wire: "range", type: "*Range", optional: true}
+          - {name: "Step", wire: "step", type: "*string", optional: true, doc: "d5c0a0d8"}
+          - {name: "Unit", wire: "unit", type: "*Unit", optional: true, doc: "e5f59b43"}
+      components.VirtualMachineNetworkAttachmentCreatePayload:
+        fields:
+          - {name: "Data", wire: "data", type: "VirtualMachineNetworkAttachmentCreatePayloadData"}
+      components.VirtualMachineNetworkAttachmentCreatePayloadAttributes:
+        fields:
+          - {name: "VirtualNetworkID", wire: "virtual_network_id", type: "string", doc: "a3f3477b"}
+      components.VirtualMachineNetworkAttachmentCreatePayloadData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "VirtualMachineNetworkAttachmentCreatePayloadAttributes"}
+          - {name: "Type", wire: "type", type: "VirtualMachineNetworkAttachmentCreatePayloadType"}
+      components.VirtualMachineNetworkAttachmentCreatePayloadType:
+        enum: ["virtual_machine_network_attachments"]
+      components.VirtualMachineNetworkAttachmentResource:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*VirtualMachineNetworkAttachmentResourceAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true, doc: "fcd87e30"}
+          - {name: "Type", wire: "type", type: "*VirtualMachineNetworkAttachmentResourceType", optional: true}
+      components.VirtualMachineNetworkAttachmentResourceAttributes:
+        fields:
+          - {name: "PendingRestart", wire: "pending_restart", type: "*bool", optional: true, doc: "32f18754"}
+          - {name: "Vid", wire: "vid", type: "*int64", optional: true, doc: "138fb34c"}
+          - {name: "VirtualNetworkID", wire: "virtual_network_id", type: "*string", optional: true, doc: "11508689"}
+      components.VirtualMachineNetworkAttachmentResourceType:
+        enum: ["virtual_machine_network_attachments"]
+      components.VirtualMachineNetworkAttachments:
+        fields:
+          - {name: "Data", wire: "data", type: "[]VirtualMachineNetworkAttachmentResource", optional: true}
+      components.VirtualMachinePayload:
+        fields:
+          - {name: "Data", wire: "data", type: "*VirtualMachinePayloadData", optional: true}
+      components.VirtualMachinePayloadAttributes:
+        fields:
+          - {name: "Billing", wire: "billing", type: "*VirtualMachinePayloadBilling", optional: true, doc: "866f42bf"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, default: "my-vm"}
+          - {name: "OperatingSystem", wire: "operating_system", type: "*string", optional: true, doc: "a693e30e"}
+          - {name: "Plan", wire: "plan", type: "*string", optional: true, doc: "668b675e"}
+          - {name: "Project", wire: "project", type: "*string", optional: true, default: "my-project"}
+          - {name: "SSHKeys", wire: "ssh_keys", type: "[]string", optional: true}
+          - {name: "Site", wire: "site", type: "*string", optional: true, default: "DAL", doc: "ec37f334"}
+          - {name: "Tags", wire: "tags", type: "[]string", optional: true, doc: "09b8f04a"}
+          - {name: "UserData", wire: "user_data", type: "*VirtualMachinePayloadUserData", optional: true, doc: "3733d195"}
+      components.VirtualMachinePayloadBilling:
+        doc: "aea1ae2f"
+        enum: ["hourly", "monthly", "yearly"]
+      components.VirtualMachinePayloadData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*VirtualMachinePayloadAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "*VirtualMachinePayloadType", optional: true}
+      components.VirtualMachinePayloadType:
+        enum: ["virtual_machines"]
+      components.VirtualMachinePayloadUserData:
+        doc: "f9a5658b"
+        fields:
+          - {name: "Integer", type: "*int64", optional: true}
+          - {name: "Str", type: "*string", optional: true}
+          - {name: "Type", type: "VirtualMachinePayloadUserDataType"}
+      components.VirtualMachinePayloadUserDataType:
+        enum: ["integer", "str"]
+      components.VirtualMachineUpdatePayload:
+        fields:
+          - {name: "Data", wire: "data", type: "VirtualMachineUpdatePayloadData"}
+      components.VirtualMachineUpdatePayloadAttributes:
+        fields:
+          - {name: "Billing", wire: "billing", type: "*VirtualMachineUpdatePayloadBilling", optional: true, doc: "e287eff8"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "51ced643"}
+          - {name: "Plan", wire: "plan", type: "*string", optional: true, doc: "2b084285"}
+          - {name: "Tags", wire: "tags", type: "[]string", optional: true, doc: "0fb5cc8c"}
+      components.VirtualMachineUpdatePayloadBilling:
+        doc: "5113d24f"
+        enum: ["hourly", "monthly", "yearly"]
+      components.VirtualMachineUpdatePayloadData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "VirtualMachineUpdatePayloadAttributes"}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "VirtualMachineUpdatePayloadType"}
+      components.VirtualMachineUpdatePayloadType:
+        enum: ["virtual_machines"]
+      components.VirtualMachines:
+        fields:
+          - {name: "Data", wire: "data", type: "[]VirtualMachineAttributes", optional: true}
+          - {name: "Meta", wire: "meta", type: "*PaginationMeta", optional: true}
+      operations.CreateVirtualMachineActionResponse:
+      operations.CreateVirtualMachineActionVirtualMachinesAction:
+        doc: "d23f2ee8"
+        enum: ["power_off", "power_on", "reboot"]
+      operations.CreateVirtualMachineActionVirtualMachinesAttributes:
+        fields:
+          - {name: "Action", wire: "action", type: "CreateVirtualMachineActionVirtualMachinesAction", doc: "91189ef6"}
+      operations.CreateVirtualMachineActionVirtualMachinesRequestBody:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "CreateVirtualMachineActionVirtualMachinesAttributes"}
+          - {name: "ID", wire: "id", type: "string"}
+          - {name: "Type", wire: "type", type: "CreateVirtualMachineActionVirtualMachinesType"}
+      operations.CreateVirtualMachineActionVirtualMachinesType:
+        enum: ["virtual_machines"]
+      operations.CreateVirtualMachineNetworkAttachmentMeta:
+        fields:
+          - {name: "Status", wire: "status", type: "*string", optional: true}
+      operations.CreateVirtualMachineNetworkAttachmentResponse:
+        fields:
+          - {name: "Object", type: "*CreateVirtualMachineNetworkAttachmentResponseBody", optional: true, doc: "41d09a60"}
+      operations.CreateVirtualMachineNetworkAttachmentResponseBody:
+        doc: "5d30f68d"
+        fields:
+          - {name: "Meta", wire: "meta", type: "*CreateVirtualMachineNetworkAttachmentMeta", optional: true}
+      operations.CreateVirtualMachineResponse:
+        fields:
+          - {name: "VirtualMachine", type: "*components.VirtualMachine", optional: true, doc: "09de135b"}
+      operations.DestroyVirtualMachineNetworkAttachmentMeta:
+        fields:
+          - {name: "Status", wire: "status", type: "*string", optional: true}
+      operations.DestroyVirtualMachineNetworkAttachmentResponse:
+        fields:
+          - {name: "Object", type: "*DestroyVirtualMachineNetworkAttachmentResponseBody", optional: true, doc: "41d09a60"}
+      operations.DestroyVirtualMachineNetworkAttachmentResponseBody:
+        doc: "a3715145"
+        fields:
+          - {name: "Meta", wire: "meta", type: "*DestroyVirtualMachineNetworkAttachmentMeta", optional: true}
+      operations.DestroyVirtualMachineResponse:
+      operations.IndexVirtualMachineRequest:
+        fields:
+          - {name: "ExtraFieldsVirtualMachines", wire: "extra_fields[virtual_machines]", type: "*string", optional: true, doc: "202e8713"}
+          - {name: "FilterProject", wire: "filter[project]", type: "*string", optional: true, doc: "42805174"}
+          - {name: "FilterTags", wire: "filter[tags]", type: "*string", optional: true, doc: "b48e5c50"}
+          - {name: "PageNumber", wire: "page[number]", type: "*int64", optional: true, default: "1", doc: "52d4faa2"}
+          - {name: "PageSize", wire: "page[size]", type: "*int64", optional: true, default: "20", doc: "5cd3806e"}
+          - {name: "Sort", wire: "sort", type: "*string", optional: true, doc: "86abf616"}
+          - {name: "StatsTotal", wire: "stats[total]", type: "*string", optional: true, doc: "186835ea"}
+      operations.IndexVirtualMachineResponse:
+        fields:
+          - {name: "VirtualMachines", type: "*components.VirtualMachines", optional: true, doc: "6d8303b0"}
+      operations.ListVirtualMachineNetworkAttachmentsResponse:
+        fields:
+          - {name: "VirtualMachineNetworkAttachments", type: "*components.VirtualMachineNetworkAttachments", optional: true, doc: "6d8303b0"}
+      operations.Metric:
+        enum: ["cpu", "disk", "memory", "network"]
+      operations.Range:
+        enum: ["15m", "1h", "24h", "5m"]
+      operations.ShowVirtualMachineMetricsResponse:
+        fields:
+          - {name: "VirtualMachineMetrics", type: "*components.VirtualMachineMetrics", optional: true, doc: "6d8303b0"}
+      operations.ShowVirtualMachineResponse:
+        fields:
+          - {name: "VirtualMachine", type: "*components.VirtualMachine", optional: true, doc: "6d8303b0"}
+      operations.UpdateVirtualMachineResponse:
+        fields:
+          - {name: "VirtualMachine", type: "*components.VirtualMachine", optional: true, doc: "6d8303b0"}
+  VirtualNetworks:
+    methods:
+      Delete: {signature: "(context.Context, string, ...operations.Option) (*operations.DestroyVirtualNetworkResponse, error)"}
+    models:
+      operations.DestroyVirtualNetworkResponse:
