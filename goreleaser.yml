@@ -53,6 +53,11 @@ signs:
       - "--detach-sign"
       - "${artifact}"
 release:
+  # The release notes are authored by release-drafter and published by a human;
+  # goreleaser only attaches the build artifacts. keep-existing is already the
+  # default — made explicit so a goreleaser upgrade cannot silently start
+  # rewriting the notes.
+  mode: keep-existing
   extra_files:
     - glob: 'terraform-registry-manifest.json'
       name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'

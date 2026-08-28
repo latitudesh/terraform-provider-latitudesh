@@ -1,28 +1,33 @@
 name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
-template: |
-  # What's Changed
 
-  $CHANGES
-
-  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+# Each merged PR lands in one category by label. The autolabeler below maps the
+# repo's conventional-commit PR titles to those labels, so neither humans nor
+# the scaffold agent have to remember to label anything by hand.
+change-template: '- $TITLE (#$NUMBER) — @$AUTHOR'
+change-title-escapes: '\<*_&'
 
 categories:
-  - title: 'Breaking'
+  - title: '🚨 Breaking'
     label: 'type: breaking'
-  - title: 'New'
+  - title: '✨ New'
     label: 'type: feature'
-  - title: 'Bug Fixes'
+  - title: '🐛 Bug Fixes'
     label: 'type: bug'
-  - title: 'Maintenance'
-    label: 'type: maintenance'
-  - title: 'Documentation'
+  - title: '🧰 Maintenance'
+    labels:
+      - 'type: maintenance'
+      - 'type: security'
+  - title: '📚 Documentation'
     label: 'type: docs'
-  - title: 'Other changes'
-  - title: 'Dependency Updates'
+  - title: '⬆️ Dependencies'
     label: 'type: dependencies'
     collapse-after: 5
+  - title: 'Other changes'
 
+# The next version is resolved from the labels of every PR accumulated in the
+# draft, and the highest bump wins: one breaking PR in the batch makes the whole
+# release a major. Unlabeled PRs default to patch.
 version-resolver:
   major:
     labels:
@@ -37,47 +42,57 @@ version-resolver:
       - 'type: docs'
       - 'type: dependencies'
       - 'type: security'
+  default: patch
 
-exclude-labels:
-  - 'skip-changelog'
-
-# Derive the category labels from the conventional-commit prefix in the PR title.
-# The categories and version-resolver above are driven entirely by labels, so
-# without this they depend on someone remembering to apply one by hand — and a PR
-# that slips through lands in "Other changes" and never influences the version
-# bump. The prefix already carries the information, so read it from there.
-#
-# Note that every matching rule is applied, not just the first, so these have to be
-# mutually exclusive. That is why the bug and maintenance rules explicitly exclude a
-# `deps` scope: this repo writes dependency bumps as `fix(deps):` / `chore(deps):`,
-# which would otherwise be categorised twice.
-#
-# Autolabeling does not work on pull requests from forks, because the token is
-# read-only there. Supporting those needs the `pull_request_target` event that sits
-# commented out in the workflow — a separate security decision. Until then, label
-# fork PRs by hand.
+# PR titles follow conventional commits in this repo — derive the label from the
+# title so the version resolver always has something to work with. The scaffold
+# workflow also applies `type: feature` itself; these rules are the safety net
+# for human PRs.
 autolabeler:
-  # Breaking changes are marked with `!` in the prefix (`feat(api)!: ...`), so they
-  # do not depend on anyone remembering the label either. A `feat!:` title
-  # deliberately picks up both labels: `breaking` wins the version bump, and the
-  # Breaking category is listed first.
   - label: 'type: breaking'
-    title: ['/^\w+(\([^)]+\))?!:/']
-
+    title:
+      - '/^[a-z]+(\(.+\))?!:/'
   - label: 'type: feature'
-    title: ['/^feat(\([^)]+\))?!?:/']
-
-  - label: 'type: dependencies'
-    title: ['/^\w+\(deps(-dev)?\)!?:/']
-    branch: ['/^dependabot\//']
-
+    title:
+      - '/^feat/i'
   - label: 'type: bug'
-    title: ['/^fix(?!\(deps)(\([^)]+\))?!?:/']
-
+    title:
+      - '/^fix(?!\(deps\))/i'
   - label: 'type: docs'
-    title: ['/^docs(\([^)]+\))?!?:/']
-
-  # `test` is the second most common prefix in this repo's history and had no
-  # category at all before.
+    title:
+      - '/^docs/i'
+  - label: 'type: dependencies'
+    title:
+      - '/^(chore|fix|build)\(deps\)/i'
+    branch:
+      - '/^dependabot\//'
   - label: 'type: maintenance'
-    title: ['/^(chore|refactor|test|ci|build|style|perf)(?!\(deps)(\([^)]+\))?!?:/']
+    title:
+      - '/^(ci|refactor|test|style)/i'
+      - '/^chore(?!\(deps\))/i'
+
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  ## Install / upgrade
+
+  ```hcl
+  terraform {
+    required_providers {
+      latitudesh = {
+        source  = "latitudesh/latitudesh"
+        version = "$RESOLVED_VERSION"
+      }
+    }
+  }
+  ```
+
+  Published to the [Terraform Registry](https://registry.terraform.io/providers/latitudesh/latitudesh/$RESOLVED_VERSION).
+
+  ## Contributors
+
+  $CONTRIBUTORS
+
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
