@@ -7,6 +7,91 @@ version: 1
 sdk_module: github.com/latitudesh/latitudesh-go-sdk
 sdk_version: v1.19.12
 groups:
+  Billing:
+    methods:
+      ListUsage: {signature: "(context.Context, string, []string, *string, ...operations.Option) (*operations.GetBillingUsageResponse, error)"}
+    models:
+      components.BillingUsage:
+        fields:
+          - {name: "Data", wire: "data", type: "*BillingUsageData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*BillingUsageMeta", optional: true}
+      components.BillingUsageAttributes:
+        fields:
+          - {name: "Amount", wire: "amount", type: "*float64", optional: true, doc: "aeca7c85"}
+          - {name: "AvailableCreditBalance", wire: "available_credit_balance", type: "*int64", optional: true, doc: "00767e7c"}
+          - {name: "Period", wire: "period", type: "*Period", optional: true, doc: "b057d4ba"}
+          - {name: "Price", wire: "price", type: "*float64", optional: true, doc: "a4d1817c"}
+          - {name: "Products", wire: "products", type: "[]Products", optional: true}
+          - {name: "Project", wire: "project", type: "*BillingUsageProject", optional: true, doc: "6d8fef8f"}
+          - {name: "Threshold", wire: "threshold", type: "*float64", optional: true, doc: "dabaf91a"}
+      components.BillingUsageData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*BillingUsageAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.BillingUsageMeta:
+      components.BillingUsageProject:
+        doc: "70d5e28f"
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+      components.BillingUsageServers:
+        fields:
+          - {name: "Hostname", wire: "hostname", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Plan", wire: "plan", type: "*string", optional: true}
+          - {name: "Tags", wire: "tags", type: "[]string", optional: true}
+      components.BillingUsageType:
+        doc: "325c015c"
+        enum: ["amount", "percent"]
+      components.BillingUsageUnit:
+        enum: ["GB", "hour", "minute", "quantity"]
+      components.Bucket:
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Location", wire: "location", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.Discounts:
+        fields:
+          - {name: "Description", wire: "description", type: "string", doc: "005f52ec"}
+          - {name: "Type", wire: "type", type: "BillingUsageType", doc: "fd45f837"}
+          - {name: "Value", wire: "value", type: "float32", doc: "4fafaeab"}
+      components.Metadata:
+        fields:
+          - {name: "BillingUnitDivisor", wire: "billing_unit_divisor", type: "*int64", optional: true, doc: "62ca7e35"}
+          - {name: "Bucket", wire: "bucket", type: "*Bucket", optional: true}
+          - {name: "Servers", wire: "servers", type: "[]BillingUsageServers", optional: true}
+      components.Period:
+        doc: "1f6b6f2e"
+        fields:
+          - {name: "End", wire: "end", type: "*time.Time", optional: true}
+          - {name: "Start", wire: "start", type: "*time.Time", optional: true}
+      components.Products:
+        fields:
+          - {name: "Amount", wire: "amount", type: "*float64", optional: true, doc: "29f8b6b0"}
+          - {name: "AmountWithoutDiscount", wire: "amount_without_discount", type: "*int64", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "Discountable", wire: "discountable", type: "*bool", optional: true}
+          - {name: "Discounts", wire: "discounts", type: "[]Discounts", optional: true}
+          - {name: "End", wire: "end", type: "*time.Time", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Metadata", wire: "metadata", type: "*Metadata", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Price", wire: "price", type: "*float64", optional: true, doc: "d07a30a7"}
+          - {name: "Proration", wire: "proration", type: "*bool", optional: true}
+          - {name: "Quantity", wire: "quantity", type: "*float64", optional: true}
+          - {name: "Resource", wire: "resource", type: "*string", optional: true}
+          - {name: "Start", wire: "start", type: "*time.Time", optional: true}
+          - {name: "Unit", wire: "unit", type: "*BillingUsageUnit", optional: true}
+          - {name: "UnitAmount", wire: "unit_amount", type: "*float64", optional: true, doc: "f78877cd"}
+          - {name: "UnitPrice", wire: "unit_price", type: "*float64", optional: true, doc: "8e46b7cc"}
+          - {name: "UsageType", wire: "usage_type", type: "*UsageType", optional: true}
+      components.UsageType:
+        enum: ["licensed", "metered"]
+      operations.GetBillingUsageResponse:
+        fields:
+          - {name: "BillingUsage", type: "*components.BillingUsage", optional: true, doc: "6d8303b0"}
   ElasticIps:
     methods:
       CreateElasticIP: {signature: "(context.Context, components.CreateElasticIP, ...operations.Option) (*operations.CreateElasticIPResponse, error)"}
