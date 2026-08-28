@@ -68,7 +68,7 @@ autolabeler:
       - '/^dependabot\//'
   - label: 'type: maintenance'
     title:
-      - '/^(ci|refactor|test|style)/i'
+      - '/^(ci|refactor|test|style|build|perf)/i'
       - '/^chore(?!\(deps\))/i'
 
 template: |
