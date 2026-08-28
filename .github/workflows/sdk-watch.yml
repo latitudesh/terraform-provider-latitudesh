@@ -797,7 +797,7 @@ jobs:
           if [ -z "$reuse_pr" ]; then
             git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
               add -- latitudesh sdk-coverage.yaml sdk-fields.lock.yaml templates examples docs
-            git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
+            git -c core.hooksPath=/dev/null -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
               commit -m "${prefix}(coverage): reconcile field drift on SDK group ${GROUP}"
             git -c core.hooksPath=/dev/null push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/${branch}"
           fi
