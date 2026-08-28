@@ -1,5 +1,5 @@
 ---
-prompt-version: 1
+prompt-version: 2
 ---
 
 # Map field drift on covered latitudesh-go-sdk service group(s)
@@ -114,8 +114,9 @@ resource — name it in the handoff and in `notes:` under `{{GROUP}}` in
   `*_test.go` (offline tier at minimum — plain `go test ./latitudesh` must stay
   green, no TF_ACC, no token).
 - Never add a `go:generate` directive, never reach the network, never write a
-  token or key anywhere, never hand-edit `docs/` — edit the template and let the
-  gate regenerate.
+  token or key anywhere, never hand-edit `docs/` — schema and template changes
+  reach `docs/` only through `go generate ./...`, which you run yourself (see
+  Finish).
 
 ## Finish: lock, handoff, gate
 
@@ -124,9 +125,13 @@ resource — name it in the handoff and in `notes:` under `{{GROUP}}` in
    The lock's git diff is the record of what this PR accepted — every deliberate
    omission must also be explained in `notes:` under its group in
    `sdk-coverage.yaml`. The gate verifies the lock changed nowhere else.
-2. **Write the handoff block below to `/tmp/drift-handoff.md` as soon as your
+2. Regenerate the docs after any schema or template change:
+   `go generate ./...`. Changed schema descriptions rewrite tracked files under
+   `docs/` — those regenerated files belong in your change, and the gate fails
+   if generation still produces something you did not keep.
+3. **Write the handoff block below to `/tmp/drift-handoff.md` as soon as your
    first edit builds, and keep it current.**
-3. Run the gate and fix what it reports:
+4. Run the gate and fix what it reports:
 
 ```
 scripts/scaffold-validate.sh --mode drift --group {{GROUP}}
