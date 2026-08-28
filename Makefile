@@ -36,6 +36,15 @@ coverage-report:
 coverage-check:
 	go run ./cmd/sdkcoverage check
 
+# Field-level drift on covered groups, against the committed sdk-fields.lock.yaml.
+# drift-report shows it; fields-sync accepts it — run the sync in the PR that maps
+# (or deliberately omits) the change, and let the lock diff be reviewed there.
+drift-report:
+	go run ./cmd/sdkcoverage drift -format text
+
+fields-sync:
+	go run ./cmd/sdkcoverage fields -write
+
 # Validate generated scaffolding against the same offline gate the pipeline runs
 # before opening a draft PR. KINDS is what the coverage report requested for the
 # group — the gate fails any requested kind that was not delivered.

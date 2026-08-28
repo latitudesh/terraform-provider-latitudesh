@@ -35,6 +35,35 @@ func SuggestTypeName(groupName, providerTypeName string) string {
 	return providerTypeName + "_" + snake
 }
 
+// SuggestAttributeName proposes the Terraform attribute name a reviewer would
+// expect for an SDK model field. Advisory only, like SuggestTypeName: the real
+// mapping is many-to-many (Region.Site.Slug feeds both site and region), so
+// the suggestion seeds the drift report, never a check.
+//
+// The wire name is authoritative when there is one — Speakeasy already emits
+// snake_case json names, which is exactly Terraform's convention. Bracketed
+// query-parameter names flatten (filter[ram][eql] -> ram_eql), except the
+// pagination and metadata families, which are provider-internal and suggest
+// nothing. Untagged fields fall back to the Go name via splitWords.
+func SuggestAttributeName(f FieldShape) string {
+	wire := f.Wire
+	switch {
+	case wire == "":
+		words := splitWords(f.Name)
+		for i, w := range words {
+			words[i] = strings.ToLower(w)
+		}
+		return strings.Join(words, "_")
+	case strings.HasPrefix(wire, "page[") || strings.HasPrefix(wire, "stats[") || strings.HasPrefix(wire, "extra_fields["):
+		return ""
+	case strings.HasPrefix(wire, "filter[") && strings.HasSuffix(wire, "]"):
+		inner := wire[len("filter[") : len(wire)-1]
+		return strings.ReplaceAll(inner, "][", "_")
+	default:
+		return wire
+	}
+}
+
 // splitWords breaks a CamelCase/PascalCase identifier into words, keeping runs of
 // uppercase letters together as a single acronym: "APIKeys" -> ["API", "Keys"],
 // "IPAddresses" -> ["IP", "Addresses"], "VpnSessions" -> ["Vpn", "Sessions"].
