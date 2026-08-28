@@ -672,6 +672,14 @@ jobs:
             echo "DRIFT_JSON_EOF"
           } >> "$GITHUB_OUTPUT"
 
+      # The agent's Write tool can reach .git and the runner home, and git
+      # config is a code-execution surface (hooks, core.fsmonitor,
+      # credential.helper, insteadOf URL rewrites). Snapshot the repo-local
+      # config now, restore it wholesale before any write token exists.
+      - name: Snapshot clean git metadata
+        if: steps.select.outputs.has_work == 'true'
+        run: cp .git/config "$RUNNER_TEMP/clean-git-config"
+
       - name: Run the drift-fix agent
         id: agent
         if: steps.select.outputs.has_work == 'true'
@@ -738,6 +746,19 @@ jobs:
           set -euo pipefail
           bash scripts/scaffold-validate.sh --mode drift --group "$GROUP" --base HEAD
 
+      # Undo any agent tampering with git's code-execution surfaces before the
+      # write token exists: hooks emptied, repo-local config restored from the
+      # pre-agent snapshot. The finalize step additionally ignores global and
+      # system git config, which the agent's unrestricted Write could also
+      # have planted.
+      - name: Restore clean git metadata
+        if: steps.select.outputs.has_work == 'true'
+        run: |
+          set -euo pipefail
+          rm -rf .git/hooks
+          mkdir .git/hooks
+          cp "$RUNNER_TEMP/clean-git-config" .git/config
+
       - name: Mint the installation token
         id: app
         if: steps.select.outputs.has_work == 'true'
@@ -759,11 +780,18 @@ jobs:
           EXEC_FILE: ${{ steps.agent.outputs.execution_file }}
           APP_TOKEN: ${{ steps.app.outputs.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # Global/system git config are agent-reachable files too — ignore
+          # them entirely in this token-bearing step. Repo-local config was
+          # restored from the pre-agent snapshot a few steps up.
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_SYSTEM: /dev/null
         run: |
           # This step holds the WRITE token, so it runs nothing the tree can
           # extend: no go (a package initializer in agent-written code would
-          # execute with the token in reach), and git only with hooks disabled
-          # on the token-bearing pushes. jq/sed/gh/awk only read data.
+          # execute with the token in reach), and git only with its
+          # code-execution surfaces neutralized — hooks dir emptied and config
+          # restored above, hooksPath overridden again on commit and push as a
+          # second layer. jq/sed/gh/awk only read data.
           set -euo pipefail
           slug=$(printf '%s' "$GROUP" | tr '[:upper:]' '[:lower:]' | tr '.,' '--')
           branch="drift/${slug}-${{ github.run_id }}"
@@ -1249,6 +1277,14 @@ jobs:
             echo "SCAFFOLD_NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
 
+      # The agent's Write tool can reach .git and the runner home, and git
+      # config is a code-execution surface (hooks, core.fsmonitor,
+      # credential.helper, insteadOf URL rewrites). Snapshot the repo-local
+      # config now, restore it wholesale before any write token exists.
+      - name: Snapshot clean git metadata
+        if: steps.select.outputs.has_work == 'true'
+        run: cp .git/config "$RUNNER_TEMP/clean-git-config"
+
       - name: Run the scaffolding agent
         id: agent
         if: steps.select.outputs.has_work == 'true'
@@ -1357,6 +1393,19 @@ jobs:
           echo "covered_after=$(echo "$after" | jq -r '.counts.covered')" >> "$GITHUB_OUTPUT"
           echo "pending_after=$(echo "$after" | jq -r '.counts.pending')" >> "$GITHUB_OUTPUT"
 
+      # Undo any agent tampering with git's code-execution surfaces before the
+      # write token exists: hooks emptied, repo-local config restored from the
+      # pre-agent snapshot. The finalize step additionally ignores global and
+      # system git config, which the agent's unrestricted Write could also
+      # have planted.
+      - name: Restore clean git metadata
+        if: steps.select.outputs.has_work == 'true'
+        run: |
+          set -euo pipefail
+          rm -rf .git/hooks
+          mkdir .git/hooks
+          cp "$RUNNER_TEMP/clean-git-config" .git/config
+
       - name: Mint the installation token
         id: app
         if: steps.select.outputs.has_work == 'true'
@@ -1383,12 +1432,18 @@ jobs:
           EXEC_FILE: ${{ steps.agent.outputs.execution_file }}
           APP_TOKEN: ${{ steps.app.outputs.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # Global/system git config are agent-reachable files too — ignore
+          # them entirely in this token-bearing step. Repo-local config was
+          # restored from the pre-agent snapshot a few steps up.
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_SYSTEM: /dev/null
         run: |
           # This step holds the WRITE token, so it runs nothing the tree can
           # extend: no go (a package initializer in agent-written code would
-          # execute with the token in reach), and git only with hooks disabled
-          # (an agent-planted .git/hooks/pre-push would otherwise run here and
-          # see the token in the push URL). jq/sed/gh/awk only read data.
+          # execute with the token in reach), and git only with its
+          # code-execution surfaces neutralized — hooks dir emptied and config
+          # restored above, hooksPath overridden again on commit and push as a
+          # second layer. jq/sed/gh/awk only read data.
           set -euo pipefail
           short="${TF_NAME#latitudesh_}"
           branch="scaffold/${short}-${{ github.run_id }}"
@@ -1424,7 +1479,7 @@ jobs:
             # seeded by the tokenless step above.)
             git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
               add -- latitudesh sdk-coverage.yaml sdk-fields.lock.yaml templates examples docs
-            git -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
+            git -c core.hooksPath=/dev/null -c user.name="$GIT_BOT_NAME" -c user.email="$GIT_BOT_EMAIL" \
               commit -m "feat(${short}): scaffold ${TF_NAME} from SDK group ${GROUP}"
             git -c core.hooksPath=/dev/null push "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/${branch}"
           fi
