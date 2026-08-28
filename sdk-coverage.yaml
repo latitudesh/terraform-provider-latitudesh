@@ -69,6 +69,21 @@ sdk_module: github.com/latitudesh/latitudesh-go-sdk
 groups:
   # ---------------------------------------------------------------- covered ---
 
+  BaselinesPreview:
+    implemented_by: [latitudesh_baselines_preview]
+    notes: >-
+      Preview: gated behind the team-level `baselines_api` feature flag and the
+      SDK warns its shape may change before general availability. CR-D only (no
+      update method), so every resource attribute other than id/created_at
+      requires replacement. `bios` (expected BIOS settings) is not exposed:
+      both CreateBaselineBios and components.Bios are generated as empty
+      structs with no fields, so there is currently no typed way to set or read
+      individual settings through this SDK version. All four methods
+      (CreateBaseline, DestroyBaseline, GetBaseline, GetBaselines) are mapped;
+      GetBaselines has no filter parameters and BaselinesMeta/BaselineMeta are
+      empty, so the data source's name lookup lists and filters in memory with
+      no pagination to follow.
+
   ElasticIps:
     implemented_by: [latitudesh_elastic_ip]
 

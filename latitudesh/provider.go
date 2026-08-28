@@ -182,6 +182,7 @@ func (p *latitudeshProvider) Resources(ctx context.Context) []func() resource.Re
 		NewMemberResource,
 		NewFirewallResource,
 		NewFirewallAssignmentResource,
+		NewBaselinesPreviewResource,
 	}
 }
 
@@ -192,6 +193,7 @@ func (p *latitudeshProvider) DataSources(ctx context.Context) []func() datasourc
 		NewRoleDataSource,
 		NewSSHKeyDataSource,
 		NewTagDataSource,
+		NewBaselinesPreviewDataSource,
 	}
 }
 

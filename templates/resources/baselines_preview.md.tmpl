@@ -1,0 +1,28 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+~> **Preview.** Available only to teams with the `baselines_api` feature flag. The shape of this resource may change before general availability.
+
+A baseline records the configuration you expect your servers to be delivered with: target (all servers, a custom set, or specific platforms), operating system, SSH keys, user data, and disk layout. When a baseline targets platforms, the disk layout is validated server-side against the smallest of the selected platforms.
+
+There is no update endpoint for baselines: any change to this resource replaces it.
+
+## Example usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+The `latitudesh_baselines_preview` resource can be imported by specifying the baseline ID:
+
+```sh
+terraform import latitudesh_baselines_preview.ubuntu_default <BASELINE_ID>
+```
