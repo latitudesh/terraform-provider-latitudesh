@@ -23,9 +23,10 @@ import (
 // would block every bump on a product decision its author was never asked to make.
 // Those groups surface in the report instead (`make coverage-report`).
 //
-// It is also blind to changes *within* an already-covered group: only group and
-// method names are parsed, never model fields or signatures. A new field on an
-// existing resource is invisible here.
+// Changes *within* an already-covered group — model fields, types, enums,
+// method signatures — are deliberately not this test's job: only group and
+// method names are parsed here. That is TestProviderSDKFieldDrift's beat,
+// against sdk-fields.lock.yaml.
 func TestProviderSDKCoverage(t *testing.T) {
 	sdkDir, err := sdkcoverage.PinnedModuleDir(sdkcoverage.SDKModulePath)
 	if err != nil {
