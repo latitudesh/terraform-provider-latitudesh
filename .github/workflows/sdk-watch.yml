@@ -878,15 +878,25 @@ jobs:
           # This PR's example, inlined so you can adjust names and values before
           # applying. It is gate-enforced to be self-contained; it may declare
           # helper resources it depends on, and apply creates those too.
-          cat > main.tf <<'EXAMPLE'
+          cat > main.tf <<'TF_EXAMPLE_EOF_9f3a'
           MANUAL_EOF
             # The example ships inline in the snippet — the reviewer should see and
             # tweak the HCL they are about to apply without opening the diff. Body
             # build runs after the scaffold commit, so this is byte-identical to
-            # the file on the branch.
-            cat "examples/$TF_NAME.tf"
+            # the file on the branch. A line equal to the terminator would end the
+            # reviewer's paste early and feed the remaining HCL to their shell —
+            # unreachable for real HCL, kept impossible anyway.
+            if grep -qxF 'TF_EXAMPLE_EOF_9f3a' "examples/$TF_NAME.tf"; then
+              # >&2: stdout is redirected into pr-body.md inside this group — an
+              # error printed there would be buried in the half-written body.
+              echo "examples/$TF_NAME.tf contains the snippet's heredoc terminator line" >&2
+              exit 1
+            fi
+            # awk, not cat: it terminates the final record even when the file lacks
+            # a trailing newline, so the terminator always sits on its own line.
+            awk '{ print }' "examples/$TF_NAME.tf"
             cat <<'MANUAL_EOF'
-          EXAMPLE
+          TF_EXAMPLE_EOF_9f3a
 
           terraform plan     # dev_overrides active: no init needed; expect the overrides warning
           terraform apply
