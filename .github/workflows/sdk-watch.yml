@@ -830,7 +830,7 @@ jobs:
             # inner heredocs must reach the reviewer verbatim); the three
             # run-specific values are spliced by sed. The inner terminators are
             # EOF, which never collides with MANUAL_EOF.
-            cat <<'MANUAL_EOF' | sed -e "s|__BRANCH__|$branch|g" -e "s|__REPO__|$GH_REPO|g" -e "s|__EXAMPLE__|examples/$TF_NAME.tf|g"
+            cat <<'MANUAL_EOF' | sed -e "s|__BRANCH__|$branch|g" -e "s|__REPO__|$GH_REPO|g"
           The agent's acceptance tests run against a local mock — nothing in this PR touched the real API. The snippets below build this branch and exercise the resource end-to-end against the real API. Credentials are separate blocks so you can paste them independently.
 
           **1. Token:**
@@ -875,9 +875,18 @@ jobs:
             project = "$LATITUDESH_PROJECT"
           }
           EOF
-          cp "$workdir/provider/__EXAMPLE__" main.tf
-          # The example is gate-enforced to be self-contained; note it may declare
-          # helper resources it depends on, and apply will create those too.
+          # This PR's example, inlined so you can adjust names and values before
+          # applying. It is gate-enforced to be self-contained; it may declare
+          # helper resources it depends on, and apply creates those too.
+          cat > main.tf <<'EXAMPLE'
+          MANUAL_EOF
+            # The example ships inline in the snippet — the reviewer should see and
+            # tweak the HCL they are about to apply without opening the diff. Body
+            # build runs after the scaffold commit, so this is byte-identical to
+            # the file on the branch.
+            cat "examples/$TF_NAME.tf"
+            cat <<'MANUAL_EOF'
+          EXAMPLE
 
           terraform plan     # dev_overrides active: no init needed; expect the overrides warning
           terraform apply
