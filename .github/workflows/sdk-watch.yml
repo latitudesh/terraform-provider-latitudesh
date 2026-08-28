@@ -374,6 +374,14 @@ jobs:
         with:
           go-version-file: "go.mod"
 
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          # The gate validates the scaffolded example standalone with a plain
+          # `terraform validate`; the wrapper shim would capture its stdout into
+          # step outputs and get in the way of that direct CLI usage.
+          terraform_wrapper: false
+
       - name: Download coverage report
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -384,6 +392,52 @@ jobs:
           # agent spend, and unfixably, since the agent cannot delete files.
           path: ${{ runner.temp }}/sdk-coverage
 
+      # A scaffold PR that is OPEN but still DRAFT at the start of a run is an
+      # orphan: runs are serialized by the concurrency group, and a live
+      # finalize only holds a draft for the seconds between create and ready.
+      # Its tree passed the gate and its body was written by the attempt that
+      # pushed it — finishing its lifecycle is just marking it ready. Without
+      # this, a run that died between labeling and `gh pr ready` would strand
+      # the PR in draft forever: the select step below sees the group as
+      # claimed and never routes back to it.
+      - name: Find orphaned scaffold drafts
+        id: orphans
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          numbers=$(gh pr list --label scaffold --state open --json number,isDraft \
+            --jq '[.[] | select(.isDraft) | .number] | map(tostring) | join(" ")')
+          echo "numbers=$numbers" >> "$GITHUB_OUTPUT"
+          if [ -n "$numbers" ]; then
+            echo "::notice::orphaned draft scaffold PR(s) to adopt: $numbers"
+          else
+            echo "no orphaned drafts"
+          fi
+
+      - name: Mint a token to adopt orphans
+        id: adopt_app
+        if: steps.orphans.outputs.numbers != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.SDK_WATCH_CLIENT_ID }}
+          private-key: ${{ secrets.SDK_WATCH_APP_PRIVATE_KEY }}
+
+      - name: Adopt orphaned scaffold drafts
+        if: steps.orphans.outputs.numbers != ''
+        env:
+          # The app token, not the default one: a ready_for_review event fired
+          # by the default GITHUB_TOKEN would not trigger test.yml, and the
+          # adopted PR would sit ready with no checks.
+          GH_TOKEN: ${{ steps.adopt_app.outputs.token }}
+          NUMBERS: ${{ steps.orphans.outputs.numbers }}
+        run: |
+          set -euo pipefail
+          for n in $NUMBERS; do
+            gh pr ready "$n"
+            echo "adopted scaffold PR #$n — marked ready for review"
+          done
+
       - name: Select the group to scaffold
         id: select
         env:
@@ -391,12 +445,14 @@ jobs:
           OVERRIDE: ${{ github.event.inputs.group }}
         run: |
           set -euo pipefail
-          # Groups already claimed by an open scaffold PR are never re-picked;
-          # groups whose scaffold PR closed without merging are parked until
-          # sdk-coverage.yaml records a ceiling+rationale for them (or a human
-          # retries explicitly via the `group` input, which is the whole point
-          # of letting the override bypass the parked list — but never an open
-          # claim, which would double-scaffold).
+          # Groups already claimed by an open scaffold PR are never re-picked
+          # (any claimed PR still in draft was adopted — marked ready — by the
+          # step above before this list is taken); groups whose scaffold PR
+          # closed without merging are parked until sdk-coverage.yaml records a
+          # ceiling+rationale for them (or a human retries explicitly via the
+          # `group` input, which is the whole point of letting the override
+          # bypass the parked list — but never an open claim, which would
+          # double-scaffold).
           claimed=$(gh pr list --label scaffold --state open --json labels \
             --jq '[.[].labels[].name | select(startswith("scaffold:")) | ltrimstr("scaffold:")] | unique | .[]')
           parked=$(gh pr list --label scaffold --state closed --limit 100 --json labels,mergedAt \
