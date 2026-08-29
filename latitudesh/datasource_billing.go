@@ -2,6 +2,8 @@ package latitudesh
 
 import (
 	"context"
+	"sort"
+	"strconv"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -207,9 +209,21 @@ func billingProjectInfoValue(ctx context.Context, p *components.BillingUsageProj
 	return types.ObjectValueFrom(ctx, billingProjectInfoObjectType.AttrTypes, model)
 }
 
+// billingDiscountSortKey yields a stable ordering key for a discount. Discounts
+// carry no identifier, so identity is the combination of their fields.
+func billingDiscountSortKey(d components.Discounts) string {
+	return d.Description + "\x00" + string(d.Type) + "\x00" + strconv.FormatFloat(float64(d.Value), 'f', -1, 32)
+}
+
 func billingDiscountsValue(ctx context.Context, discounts []components.Discounts) (types.List, diag.Diagnostics) {
-	models := make([]BillingDiscountModel, 0, len(discounts))
-	for _, d := range discounts {
+	sorted := make([]components.Discounts, len(discounts))
+	copy(sorted, discounts)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return billingDiscountSortKey(sorted[i]) < billingDiscountSortKey(sorted[j])
+	})
+
+	models := make([]BillingDiscountModel, 0, len(sorted))
+	for _, d := range sorted {
 		models = append(models, BillingDiscountModel{
 			Description: types.StringValue(d.Description),
 			Type:        types.StringValue(string(d.Type)),
@@ -231,11 +245,28 @@ func billingBucketValue(ctx context.Context, b *components.Bucket) (types.Object
 	return types.ObjectValueFrom(ctx, billingBucketObjectType.AttrTypes, model)
 }
 
+// billingServerSortKey yields a stable ordering key for a server line, keyed on
+// its identifier first and falling back to hostname/plan.
+func billingServerSortKey(s components.BillingUsageServers) string {
+	return derefString(s.ID) + "\x00" + derefString(s.Hostname) + "\x00" + derefString(s.Plan)
+}
+
 func billingServersValue(ctx context.Context, servers []components.BillingUsageServers) (types.List, diag.Diagnostics) {
 	var diags diag.Diagnostics
-	models := make([]BillingServerModel, 0, len(servers))
-	for _, s := range servers {
-		tags, d := types.ListValueFrom(ctx, types.StringType, s.Tags)
+
+	sorted := make([]components.BillingUsageServers, len(servers))
+	copy(sorted, servers)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return billingServerSortKey(sorted[i]) < billingServerSortKey(sorted[j])
+	})
+
+	models := make([]BillingServerModel, 0, len(sorted))
+	for _, s := range sorted {
+		// Tags have no meaningful order; sort them so equivalent sets do not churn.
+		tagValues := append([]string(nil), s.Tags...)
+		sort.Strings(tagValues)
+
+		tags, d := types.ListValueFrom(ctx, types.StringType, tagValues)
 		diags.Append(d...)
 		models = append(models, BillingServerModel{
 			ID:       types.StringPointerValue(s.ID),
@@ -272,10 +303,28 @@ func billingMetadataValue(ctx context.Context, m *components.Metadata) (types.Ob
 	return obj, diags
 }
 
+// billingProductSortKey yields a stable ordering key for a product line, keyed
+// on its identifier first and falling back to resource/name/window start so that
+// distinct lines for the same product remain deterministically ordered.
+func billingProductSortKey(p components.Products) string {
+	start := ""
+	if p.Start != nil {
+		start = p.Start.Format(time.RFC3339Nano)
+	}
+	return derefString(p.ID) + "\x00" + derefString(p.Resource) + "\x00" + derefString(p.Name) + "\x00" + start
+}
+
 func billingProductsValue(ctx context.Context, products []components.Products) (types.List, diag.Diagnostics) {
 	var diags diag.Diagnostics
-	models := make([]BillingProductModel, 0, len(products))
-	for _, p := range products {
+
+	sorted := make([]components.Products, len(products))
+	copy(sorted, products)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return billingProductSortKey(sorted[i]) < billingProductSortKey(sorted[j])
+	})
+
+	models := make([]BillingProductModel, 0, len(sorted))
+	for _, p := range sorted {
 		discounts, d := billingDiscountsValue(ctx, p.Discounts)
 		diags.Append(d...)
 

@@ -176,6 +176,87 @@ func TestBillingProductsValueMapping(t *testing.T) {
 	}
 }
 
+// TestBillingCollectionsStableOrder proves the products, discounts, and nested
+// server collections are ordered deterministically regardless of the order the
+// API returns them in, so equivalent reads do not churn Terraform state or
+// shift indexed outputs (mirrors TestBuildInterfacesList_StableOrderRegardlessOfInput).
+func TestBillingCollectionsStableOrder(t *testing.T) {
+	ctx := context.Background()
+
+	discounts := []components.Discounts{
+		{Description: "loyalty", Type: "percent", Value: 10},
+		{Description: "promo", Type: "fixed", Value: 5},
+		{Description: "anniversary", Type: "percent", Value: 20},
+	}
+	servers := []components.BillingUsageServers{
+		{ID: strPtr("srv_3"), Hostname: strPtr("web-03"), Plan: strPtr("c2"), Tags: []string{"web", "prod"}},
+		{ID: strPtr("srv_1"), Hostname: strPtr("web-01"), Plan: strPtr("c2")},
+		{ID: strPtr("srv_2"), Hostname: strPtr("web-02"), Plan: strPtr("c2")},
+	}
+	products := []components.Products{
+		{ID: strPtr("prod_3"), Resource: strPtr("bandwidth"), Name: strPtr("Bandwidth")},
+		{
+			ID:        strPtr("prod_1"),
+			Resource:  strPtr("servers"),
+			Name:      strPtr("Server usage"),
+			Discounts: discounts,
+			Metadata:  &components.Metadata{Servers: servers},
+		},
+		{ID: strPtr("prod_2"), Resource: strPtr("object_storage"), Name: strPtr("Storage")},
+	}
+
+	// Reverse every collection so the reversed input differs at each level, not
+	// just at the top-level product order.
+	reversedProducts := make([]components.Products, len(products))
+	for i, p := range products {
+		p.Discounts = reverseDiscounts(p.Discounts)
+		if p.Metadata != nil {
+			p.Metadata = &components.Metadata{Servers: reverseServers(p.Metadata.Servers)}
+		}
+		reversedProducts[len(products)-1-i] = p
+	}
+
+	forward, diags := billingProductsValue(ctx, products)
+	if diags.HasError() {
+		t.Fatalf("forward build: %v", diags)
+	}
+	reversed, diags := billingProductsValue(ctx, reversedProducts)
+	if diags.HasError() {
+		t.Fatalf("reversed build: %v", diags)
+	}
+	if !forward.Equal(reversed) {
+		t.Fatalf("billing collections ordering is not stable across input orders:\n forward=%s\nreversed=%s", forward, reversed)
+	}
+
+	// The deterministic order is keyed on identity, so products come out sorted
+	// by id regardless of input order.
+	var got []BillingProductModel
+	if d := forward.ElementsAs(ctx, &got, false); d.HasError() {
+		t.Fatalf("ElementsAs: %v", d)
+	}
+	for i, wantID := range []string{"prod_1", "prod_2", "prod_3"} {
+		if got[i].ID.ValueString() != wantID {
+			t.Fatalf("product %d id = %q, want %q", i, got[i].ID.ValueString(), wantID)
+		}
+	}
+}
+
+func reverseDiscounts(in []components.Discounts) []components.Discounts {
+	out := make([]components.Discounts, len(in))
+	for i := range in {
+		out[len(in)-1-i] = in[i]
+	}
+	return out
+}
+
+func reverseServers(in []components.BillingUsageServers) []components.BillingUsageServers {
+	out := make([]components.BillingUsageServers, len(in))
+	for i := range in {
+		out[len(in)-1-i] = in[i]
+	}
+	return out
+}
+
 // TestBillingProductsValueEmptyNeverNull guards the "always a list, never
 // null" guarantee (mirrors planDrivesValue) so a config that iterates
 // `products` never fails on a null iteratee for a report with no usage yet.
