@@ -1,0 +1,20 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Retrieve a [block storage](https://www.latitude.sh/) volume by `id`, or by `name` scoped to a `project`.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+`project` falls back to the provider-level `project` when unset, and is only used (and only returned) for a `name` lookup — it is ignored, and left null, when looking up by `id`.
+
+> **Note:** `region` is never populated from the API (the read endpoint has no such field); it is always null on this data source.
+
+{{ .SchemaMarkdown | trimspace }}

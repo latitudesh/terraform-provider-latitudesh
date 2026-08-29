@@ -184,10 +184,18 @@ groups:
       generated resource to lack update support it could have had.
 
   BlockStorage:
+    implemented_by: [latitudesh_block_storage]
     notes: >-
       Methods are HTTP-verb prefixed (PostStorageVolumes, DeleteStorageVolumes) and
       DeleteStorageVolumes deletes a single volume despite the plural. The API has
       no volume update, so the CR-D shape is real and not a spec gap.
+      PostStorageVolumesMount is not mapped: it is a separate mount/allow-list
+      lifecycle (add an NQN initiator to a volume), analogous to firewall
+      assignments, and is out of scope for this resource/data source pair. The
+      response shape (VolumeDataAttributes) also has no `region` field, so the
+      volume's region cannot be read back from the API after creation; the
+      resource schema keeps `region` as a plain Required+RequiresReplace
+      attribute that is never refreshed from state.
 
   FilesystemStorage:
     notes: >-

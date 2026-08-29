@@ -1,0 +1,53 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Adds a persistent [block storage](https://www.latitude.sh/) volume to a project. The API has no volume update endpoint, so changing any input attribute (`name`, `project`, `region`, `size_in_gb`) replaces the resource.
+
+## Example usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+> **Note:** `region` is not returned by the volume read API, so it is never refreshed from state — it always reflects whatever was last applied in configuration. Getting it wrong does not surface as drift; it only shows up as a replace if you later change it.
+
+> **Note:** Mounting the volume to a client (adding an NVMe initiator to its allow list) is a separate API lifecycle (`PostStorageVolumesMount`) that this resource does not manage; see `initiators` for the current allow list.
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+You can import a block storage resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_block_storage` resource can be imported by specifying the volume ID:
+
+```sh
+terraform import latitudesh_block_storage.example <VOLUME_ID>
+```
+
+> **Note:** Because `region` cannot be read back from the API, your configuration must already declare the volume's actual region before importing — the imported state cannot supply it, and Terraform will otherwise plan to replace the resource on the next apply.
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration.
+
+```hcl
+import {
+  to = latitudesh_block_storage.example
+  id = "<VOLUME_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_block_storage.tf
+```
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.
