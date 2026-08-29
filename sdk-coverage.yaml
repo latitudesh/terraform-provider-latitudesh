@@ -83,7 +83,21 @@ groups:
 
   Firewalls.Assignments:
     implemented_by: [latitudesh_firewall_assignment]
-    notes: Only Create lives here; the read and delete paths are on the parent group.
+    notes: >-
+      Only Create lives here; the read and delete paths are on the parent group.
+      v1.19.17 reshaped the Create response body (components.FirewallServer):
+      id/type/attributes moved under a nested data envelope, attributes gained
+      server/virtual_machine and dropped server_id, and FirewallServerType's
+      enum value renamed firewall_servers -> firewall_assignments. None of it
+      is mapped: the resource never reads the Create response body (it always
+      re-derives the assignment ID via a follow-up ListAssignments call, see
+      findAssignmentByServerAndFirewall), so the reshape closes with a lock
+      sync and no code change. The response now separately surfacing a
+      virtual_machine target (components.FirewallServerVirtualMachine)
+      mirrors operations.CreateFirewallAssignmentFirewallsAssignmentsAttributes.VirtualMachineID,
+      which already existed pre-drift and which this resource still only
+      exposes as server_id — assigning a firewall to a virtual machine isn't
+      wired up. Flagged for the reviewer as a possible follow-up, not built here.
 
   Plans:
     implemented_by: [latitudesh_plan]
@@ -118,6 +132,69 @@ groups:
       latitudesh_server_reinstall action, for reinstalling without changing
       desired state. The remaining actions (RunAction, rescue mode, IPMI,
       out-of-band, scheduled deletion) are deliberately not exposed.
+
+      v1.19.17 drift closure (lock synced 2026-08-29): mapped
+      components.ServerDataAttributes.legacy_network -> new Computed
+      legacy_network, .features -> new Computed features (list), and
+      components.DeployConfigAttributes.ipxe_url -> new Computed ipxe_url on
+      latitudesh_server, all straightforward read-only refreshes.
+
+      Deliberately left unmapped:
+      - components.Credentials / components.ServerDataAttributes.credentials /
+        components.ServerDataSSHKeys: "latest provisioning credentials,
+        lazy loaded" per the SDK doc — only populated when the GET is called
+        with extra_fields[servers]=credentials, which readServer never
+        requests. Surfacing root passwords is a deliberate product decision
+        (sensitive attribute, cache/rotation semantics), not a mechanical
+        field mapping — flagged for the reviewer as a possible follow-up.
+      - components.DeployConfigAttributes.ipxe (raw, as opposed to ipxe_url):
+        the resource's existing ipxe attribute is Optional-only (no
+        Computed), so refreshing it from the deploy config would require
+        flipping it to Optional+Computed — a schema/plan-modifier call this
+        PR does not make. Flagged for the reviewer.
+      - components.ServerDataFeatures.accelerate/rescue/workflow: these live
+        on components.OperatingSystem.Features, a nested struct this
+        provider has never mapped into any attribute (OS capability
+        metadata, not server config); unaffected by this drift.
+      - components.DeployConfig.meta / components.DeployConfigData.type /
+        components.DeployConfigMeta / components.DeployConfigType: JSON:API
+        envelope additions on the deploy-config GET response, no business
+        data.
+      - components.DeployConfigFilesystem "xfs" enum value removed /
+        operations.UpdateServerDeployConfigServersFilesystem "xfs" removed:
+        filesystem is API-managed and intentionally not in the disk_layout
+        schema (see its MarkdownDescription), so no coercion site exists to
+        update.
+      - operations.UpdateServerDeployConfigServers* (RequestBody reshaped:
+        attributes/type -> data; Attributes gained ipxe; Filesystem enum):
+        Servers.UpdateDeployConfig is never called anywhere in this
+        provider — disk_layout/ipxe/raid changes go through Servers.Reinstall
+        instead — so the whole request-body reshape is dead surface for us.
+      - operations.GetServersRequest.sort: no server list/data source exists
+        to take a sort parameter.
+      - operations.CreateServerServersAttributes.public_network /
+        .public_network_id (new, both **Preview**, gated to teams with
+        public networks enabled), plus the already-unmapped (pre-existing,
+        only doc_changed here) components.ServerDataAttributes.public_network
+        / components.ServerDataPublicNetwork read-back, and the matching
+        doc_changed rows on CreateServerReinstallServersAttributes.public_network
+        and UpdateServerDeployConfigServersAttributes.public_network(_id):
+        attaching a server to a public network is a coherent small feature
+        (create-time attribute(s) + a read-back nested object), but deciding
+        its plan-modifier shape (does changing public_network_id force a
+        replace, or does it go through Reinstall like disk_layout/ipxe?) is
+        exactly the kind of API-behavior judgment this task defers to a
+        human. Not built here; flagged for the reviewer as a candidate
+        follow-up once someone can verify attach/detach semantics against
+        the live API.
+      - components.ServerDataAttributes.status doc_changed (now documented
+        as an open set, not a closed enum) and the paired breaking
+        field_type_changed (*ServerDataStatus -> *string): already handled
+        correctly pre-drift — readServer and waitForServerStatus both do
+        string(*attrs.Status) and compare status by plain string equality,
+        never switching over the old named type, so both continue to
+        compile and behave identically. No code change; verified by
+        `go build`.
 
   Tags:
     implemented_by: [latitudesh_tag]
