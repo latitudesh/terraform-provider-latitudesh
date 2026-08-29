@@ -69,6 +69,9 @@ sdk_module: github.com/latitudesh/latitudesh-go-sdk
 groups:
   # ---------------------------------------------------------------- covered ---
 
+  Billing:
+    implemented_by: [latitudesh_billing]
+
   ElasticIps:
     implemented_by: [latitudesh_elastic_ip]
 
