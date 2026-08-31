@@ -1624,19 +1624,19 @@ jobs:
           export LATITUDESH_AUTH_TOKEN="<your-api-token>"
           ```
 
-          **2. Test project** (ID or slug; used as the provider-level default — harmless for resources that do not take a project):
+          **2. Test project** (ID or slug; fills the example's `project` variable and the provider-level default):
 
           ```bash
-          export LATITUDESH_PROJECT="<test-project-id-or-slug>"
+          export TF_VAR_project="<test-project-id-or-slug>"
           ```
 
-          **3. Build this branch and apply the example:**
+          **3. Build this branch and apply the example.** `make build` drops the provider binary at the repo root — don't `make install`. `dev_overrides` is active, so there is no `terraform init` and `plan`/`apply` print an overrides warning. The example is inlined below so you can tweak names and values before applying; the gate enforces it self-contained, so any helper resources it declares are created on apply too.
 
           ```bash
           workdir=$(mktemp -d)
           git clone --depth 1 --branch __BRANCH__ \
             https://github.com/__REPO__.git "$workdir/provider"
-          make -C "$workdir/provider" build   # binary lands at the repo root — do NOT `make install`
+          make -C "$workdir/provider" build
 
           cat > "$workdir/dev.tfrc" <<EOF
           provider_installation {
@@ -1657,12 +1657,9 @@ jobs:
           }
 
           provider "latitudesh" {
-            project = "$LATITUDESH_PROJECT"
+            project = "$TF_VAR_project"
           }
           EOF
-          # This PR's example, inlined so you can adjust names and values before
-          # applying. It is gate-enforced to be self-contained; it may declare
-          # helper resources it depends on, and apply creates those too.
           cat > main.tf <<'TF_EXAMPLE_EOF_9f3a'
           MANUAL_EOF
             # The example ships inline in the snippet — the reviewer should see and
@@ -1683,7 +1680,7 @@ jobs:
             cat <<'MANUAL_EOF'
           TF_EXAMPLE_EOF_9f3a
 
-          terraform plan     # dev_overrides active: no init needed; expect the overrides warning
+          terraform plan
           terraform apply
           terraform state show "$(terraform state list | head -1)"
           terraform destroy
