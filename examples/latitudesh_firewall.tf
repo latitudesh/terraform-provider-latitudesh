@@ -2,7 +2,7 @@
 resource "latitudesh_firewall" "web_firewall" {
   name    = "Web Server Firewall"
   project = latitudesh_project.project.id
-  
+
   # SSH Access
   rules {
     from     = "ANY"
@@ -10,7 +10,7 @@ resource "latitudesh_firewall" "web_firewall" {
     port     = "22"
     protocol = "TCP"
   }
-  
+
   # HTTP Access
   rules {
     from     = "ANY"
@@ -18,7 +18,7 @@ resource "latitudesh_firewall" "web_firewall" {
     port     = "80"
     protocol = "TCP"
   }
-  
+
   # HTTPS Access
   rules {
     from     = "ANY"

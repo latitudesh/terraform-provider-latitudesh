@@ -1,4 +1,4 @@
-resource "latitudesh_ssh_key" "ssh_key" {
+resource "latitudesh_ssh_key" "bastion_key" {
   name       = "bastion-key"
   public_key = "ssh-ed25519 AAAA..." # Your public key
 }
@@ -10,7 +10,7 @@ resource "latitudesh_virtual_machine" "bastion" {
   plan             = "vm-small" # VM plan slug or ID
   operating_system = "ubuntu_24_04_x64_lts"
   project          = latitudesh_project.project.id # ID or slug
-  ssh_keys         = [latitudesh_ssh_key.ssh_key.id]
+  ssh_keys         = [latitudesh_ssh_key.bastion_key.id]
 }
 
 # The public entry point for SSH tunnelling / VPN.
