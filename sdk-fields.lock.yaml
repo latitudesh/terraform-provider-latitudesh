@@ -5,7 +5,7 @@
 # See CONTRIBUTING.md, "Field drift".
 version: 1
 sdk_module: github.com/latitudesh/latitudesh-go-sdk
-sdk_version: v1.19.12
+sdk_version: v1.19.17
 groups:
   Billing:
     methods:
@@ -446,15 +446,31 @@ groups:
     models:
       components.FirewallServer:
         fields:
-          - {name: "Attributes", wire: "attributes", type: "*FirewallServerAttributes", optional: true}
-          - {name: "ID", wire: "id", type: "*string", optional: true}
-          - {name: "Type", wire: "type", type: "*FirewallServerType", optional: true}
+          - {name: "Data", wire: "data", type: "*FirewallServerData", optional: true}
       components.FirewallServerAttributes:
         fields:
           - {name: "FirewallID", wire: "firewall_id", type: "*string", optional: true}
-          - {name: "ServerID", wire: "server_id", type: "*string", optional: true}
+          - {name: "Server", wire: "server", type: "*FirewallServerServer", optional: true, doc: "b1e30418"}
+          - {name: "VirtualMachine", wire: "virtual_machine", type: "*FirewallServerVirtualMachine", optional: true, doc: "6c1c1971"}
+      components.FirewallServerData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*FirewallServerAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*FirewallServerType", optional: true}
+      components.FirewallServerServer:
+        doc: "dd1b40fb"
+        fields:
+          - {name: "Hostname", wire: "hostname", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "PrimaryIpv4", wire: "primary_ipv4", type: "*string", optional: true}
       components.FirewallServerType:
-        enum: ["firewall_servers"]
+        enum: ["firewall_assignments"]
+      components.FirewallServerVirtualMachine:
+        doc: "c341b6cf"
+        fields:
+          - {name: "Hostname", wire: "hostname", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "PrimaryIpv4", wire: "primary_ipv4", type: "*string", optional: true}
       operations.CreateFirewallAssignmentFirewallsAssignmentsAttributes:
         fields:
           - {name: "ServerID", wire: "server_id", type: "*string", optional: true, doc: "ba9fef2b"}
@@ -1467,6 +1483,13 @@ groups:
           - {name: "Method", wire: "method", type: "*string", optional: true}
           - {name: "SubscriptionID", wire: "subscription_id", type: "*string", optional: true}
           - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.Credentials:
+        doc: "0b037999"
+        fields:
+          - {name: "ExpiresAt", wire: "expires_at", type: "*time.Time", optional: true}
+          - {name: "Password", wire: "password", type: "*string", optional: true}
+          - {name: "SSHKeys", wire: "ssh_keys", type: "[]ServerDataSSHKeys", optional: true}
+          - {name: "Username", wire: "username", type: "*string", optional: true}
       components.Currency:
         fields:
           - {name: "Code", wire: "code", type: "*string", optional: true}
@@ -1476,10 +1499,13 @@ groups:
       components.DeployConfig:
         fields:
           - {name: "Data", wire: "data", type: "*DeployConfigData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*DeployConfigMeta", optional: true}
       components.DeployConfigAttributes:
         fields:
           - {name: "DiskLayout", wire: "disk_layout", type: "[]DiskLayout", optional: true}
           - {name: "Hostname", wire: "hostname", type: "*string", optional: true}
+          - {name: "Ipxe", wire: "ipxe", type: "*string", optional: true}
+          - {name: "IpxeURL", wire: "ipxe_url", type: "*string", optional: true}
           - {name: "OperatingSystem", wire: "operating_system", type: "*string", optional: true}
           - {name: "PersistentNetboot", wire: "persistent_netboot", type: "*bool", optional: true, doc: "ffca1d5f"}
           - {name: "PublicNetwork", wire: "public_network", type: "*bool", optional: true}
@@ -1491,12 +1517,16 @@ groups:
         fields:
           - {name: "Attributes", wire: "attributes", type: "*DeployConfigAttributes", optional: true}
           - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*DeployConfigType", optional: true}
       components.DeployConfigFilesystem:
-        enum: ["ext4", "xfs"]
+        enum: ["ext4"]
+      components.DeployConfigMeta:
       components.DeployConfigRaidLevel:
         enum: ["raid-0", "raid-1"]
       components.DeployConfigRole:
         enum: ["os", "raw", "storage"]
+      components.DeployConfigType:
+        enum: ["deploy_config"]
       components.DiskLayout:
         fields:
           - {name: "Count", wire: "count", type: "int64"}
@@ -1635,10 +1665,13 @@ groups:
       components.ServerDataAttributes:
         fields:
           - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "Credentials", wire: "credentials", type: "*Credentials", optional: true, doc: "f839bfc0"}
+          - {name: "Features", wire: "features", type: "[]string", optional: true, doc: "183b851e"}
           - {name: "Hostname", wire: "hostname", type: "*string", optional: true}
           - {name: "Interfaces", wire: "interfaces", type: "[]Interfaces", optional: true}
           - {name: "IpmiStatus", wire: "ipmi_status", type: "*IpmiStatus", optional: true}
           - {name: "Label", wire: "label", type: "*string", optional: true, doc: "fa1bd70d"}
+          - {name: "LegacyNetwork", wire: "legacy_network", type: "*bool", optional: true, doc: "c94809df"}
           - {name: "Locked", wire: "locked", type: "*bool", optional: true}
           - {name: "OperatingSystem", wire: "operating_system", type: "*OperatingSystem", optional: true}
           - {name: "Plan", wire: "plan", type: "*ServerDataPlan", optional: true}
@@ -1646,7 +1679,7 @@ groups:
           - {name: "PrimaryIpv4", wire: "primary_ipv4", type: "*string", optional: true}
           - {name: "PrimaryIpv6", wire: "primary_ipv6", type: "*string", optional: true}
           - {name: "Project", wire: "project", type: "*ProjectInclude", optional: true}
-          - {name: "PublicNetwork", wire: "public_network", type: "*ServerDataPublicNetwork", optional: true, doc: "7d7f0932"}
+          - {name: "PublicNetwork", wire: "public_network", type: "*ServerDataPublicNetwork", optional: true, doc: "1e4647ca"}
           - {name: "PublicNetworkEligible", wire: "public_network_eligible", type: "*bool", optional: true, doc: "bdd4826f"}
           - {name: "Region", wire: "region", type: "*ServerRegionResourceData", optional: true}
           - {name: "RescueAllowed", wire: "rescue_allowed", type: "*bool", optional: true}
@@ -1654,14 +1687,17 @@ groups:
           - {name: "ScheduledDeletionAt", wire: "scheduled_deletion_at", type: "*string", optional: true}
           - {name: "Site", wire: "site", type: "*string", optional: true}
           - {name: "Specs", wire: "specs", type: "*ServerDataSpecs", optional: true}
-          - {name: "Status", wire: "status", type: "*ServerDataStatus", optional: true, doc: "ec3af91c"}
+          - {name: "Status", wire: "status", type: "*string", optional: true, doc: "7f88b376"}
           - {name: "Tags", wire: "tags", type: "[]ServerDataTags", optional: true}
           - {name: "Team", wire: "team", type: "*TeamInclude", optional: true}
       components.ServerDataFeatures:
         fields:
+          - {name: "Accelerate", wire: "accelerate", type: "*bool", optional: true}
           - {name: "Raid", wire: "raid", type: "*bool", optional: true}
+          - {name: "Rescue", wire: "rescue", type: "*bool", optional: true}
           - {name: "SSHKeys", wire: "ssh_keys", type: "*bool", optional: true}
           - {name: "UserData", wire: "user_data", type: "*bool", optional: true}
+          - {name: "Workflow", wire: "workflow", type: "*bool", optional: true}
       components.ServerDataPlan:
         fields:
           - {name: "Billing", wire: "billing", type: "*string", optional: true, doc: "cf783e20"}
@@ -1669,13 +1705,23 @@ groups:
           - {name: "Name", wire: "name", type: "*string", optional: true, doc: "f6c410e6"}
           - {name: "Slug", wire: "slug", type: "*string", optional: true, doc: "c76023de"}
       components.ServerDataPublicNetwork:
-        doc: "572ce969"
+        doc: "52213d23"
         fields:
           - {name: "ID", wire: "id", type: "*string", optional: true}
           - {name: "Ipv4", wire: "ipv4", type: "*string", optional: true}
           - {name: "Ipv6", wire: "ipv6", type: "*string", optional: true}
       components.ServerDataRole:
         enum: ["external", "internal", "ipmi", "unknown"]
+      components.ServerDataSSHKeys:
+        fields:
+          - {name: "CreatedAt", wire: "created_at", type: "*time.Time", optional: true}
+          - {name: "Fingerprint", wire: "fingerprint", type: "*string", optional: true}
+          - {name: "GroupID", wire: "group_id", type: "*int64", optional: true}
+          - {name: "ID", wire: "id", type: "*int64", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "PublicKey", wire: "public_key", type: "*string", optional: true}
+          - {name: "UpdatedAt", wire: "updated_at", type: "*time.Time", optional: true}
+          - {name: "UserID", wire: "user_id", type: "*string", optional: true}
       components.ServerDataSpecs:
         fields:
           - {name: "CPU", wire: "cpu", type: "*string", optional: true, doc: "0bc9f4a8"}
@@ -1683,9 +1729,6 @@ groups:
           - {name: "Gpu", wire: "gpu", type: "*string", optional: true, doc: "bc9939c6"}
           - {name: "Nic", wire: "nic", type: "*string", optional: true, doc: "ca638448"}
           - {name: "RAM", wire: "ram", type: "*string", optional: true, doc: "acafc17c"}
-      components.ServerDataStatus:
-        doc: "ae74e4c0"
-        enum: ["deploying", "disk_erasing", "failed_deployment", "off", "on", "rescue_mode", "unknown"]
       components.ServerDataTags:
         fields:
           - {name: "Color", wire: "color", type: "*string", optional: true}
@@ -1811,7 +1854,7 @@ groups:
           - {name: "Ipxe", wire: "ipxe", type: "*string", optional: true, doc: "fadd5457"}
           - {name: "OperatingSystem", wire: "operating_system", type: "*CreateServerReinstallServersOperatingSystem", optional: true, doc: "20138a4e"}
           - {name: "PersistentNetboot", wire: "persistent_netboot", type: "*bool", optional: true, doc: "ffca1d5f"}
-          - {name: "PublicNetwork", wire: "public_network", type: "*bool", optional: true, doc: "a705fde7"}
+          - {name: "PublicNetwork", wire: "public_network", type: "*bool", optional: true, doc: "401703ef"}
           - {name: "PublicNetworkID", wire: "public_network_id", type: "*string", optional: true, doc: "cd6c033b"}
           - {name: "Raid", wire: "raid", type: "*CreateServerReinstallServersRaid", optional: true, doc: "f2c6f5c2"}
           - {name: "SSHKeys", wire: "ssh_keys", type: "[]string", optional: true, doc: "e7d4f653"}
@@ -1858,6 +1901,8 @@ groups:
           - {name: "PersistentNetboot", wire: "persistent_netboot", type: "*bool", optional: true, doc: "ffca1d5f"}
           - {name: "Plan", wire: "plan", type: "CreateServerPlan", doc: "d5c61e12"}
           - {name: "Project", wire: "project", type: "string", doc: "f855f31f"}
+          - {name: "PublicNetwork", wire: "public_network", type: "*bool", optional: true, doc: "ee4f7d57"}
+          - {name: "PublicNetworkID", wire: "public_network_id", type: "*string", optional: true, doc: "80aff7c9"}
           - {name: "Raid", wire: "raid", type: "*CreateServerRaid", optional: true, doc: "f2c6f5c2"}
           - {name: "SSHKeys", wire: "ssh_keys", type: "[]string", optional: true, doc: "cb759b5d"}
           - {name: "Site", wire: "site", type: "CreateServerSite", doc: "1fc71af8"}
@@ -1907,6 +1952,7 @@ groups:
           - {name: "FilterTags", wire: "filter[tags]", type: "*string", optional: true, doc: "31c6f859"}
           - {name: "PageNumber", wire: "page[number]", type: "*int64", optional: true, default: "1", doc: "52d4faa2"}
           - {name: "PageSize", wire: "page[size]", type: "*int64", optional: true, default: "20", doc: "5cd3806e"}
+          - {name: "Sort", wire: "sort", type: "*string", optional: true, doc: "330979b7"}
           - {name: "StatsTotal", wire: "stats[total]", type: "*string", optional: true, doc: "186835ea"}
       operations.GetServersResponse:
         fields:
@@ -1934,14 +1980,20 @@ groups:
         fields:
           - {name: "DiskLayout", wire: "disk_layout", type: "[]UpdateServerDeployConfigServersDiskLayout", optional: true}
           - {name: "Hostname", wire: "hostname", type: "*string", optional: true}
+          - {name: "Ipxe", wire: "ipxe", type: "*string", optional: true, doc: "f162e5a1"}
           - {name: "IpxeURL", wire: "ipxe_url", type: "*string", optional: true, doc: "3842ea22"}
           - {name: "OperatingSystem", wire: "operating_system", type: "*UpdateServerDeployConfigServersOperatingSystem", optional: true}
           - {name: "PersistentNetboot", wire: "persistent_netboot", type: "*bool", optional: true, doc: "ffca1d5f"}
-          - {name: "PublicNetwork", wire: "public_network", type: "*bool", optional: true, doc: "c7f66f2f"}
-          - {name: "PublicNetworkID", wire: "public_network_id", type: "*string", optional: true, doc: "c0148c92"}
+          - {name: "PublicNetwork", wire: "public_network", type: "*bool", optional: true, doc: "e74b8d1a"}
+          - {name: "PublicNetworkID", wire: "public_network_id", type: "*string", optional: true, doc: "8b44be43"}
           - {name: "Raid", wire: "raid", type: "*UpdateServerDeployConfigServersRaid", optional: true, doc: "f2c6f5c2"}
           - {name: "SSHKeys", wire: "ssh_keys", type: "[]string", optional: true}
           - {name: "UserData", wire: "user_data", type: "*string", optional: true, doc: "5d0721ab"}
+      operations.UpdateServerDeployConfigServersData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*UpdateServerDeployConfigServersAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "UpdateServerDeployConfigServersType"}
       operations.UpdateServerDeployConfigServersDiskLayout:
         fields:
           - {name: "Count", wire: "count", type: "int64"}
@@ -1950,7 +2002,7 @@ groups:
           - {name: "RaidLevel", wire: "raid_level", type: "*UpdateServerDeployConfigServersRaidLevel", optional: true}
           - {name: "Role", wire: "role", type: "UpdateServerDeployConfigServersRole"}
       operations.UpdateServerDeployConfigServersFilesystem:
-        enum: ["ext4", "xfs"]
+        enum: ["ext4"]
       operations.UpdateServerDeployConfigServersOperatingSystem:
         enum: ["centos_7_4_x64", "centos_8_x64", "debian_10", "debian_11", "debian_12", "ipxe", "rhel8", "rockylinux_8", "ubuntu22_ml_in_a_box", "ubuntu24_ml_in_a_box", "ubuntu_20_04_x64_lts", "ubuntu_22_04_x64_lts", "ubuntu_24_04_x64_lts", "windows_2022_std", "windows_server_2019_std_v1"]
       operations.UpdateServerDeployConfigServersRaid:
@@ -1960,8 +2012,7 @@ groups:
         enum: ["raid-0", "raid-1"]
       operations.UpdateServerDeployConfigServersRequestBody:
         fields:
-          - {name: "Attributes", wire: "attributes", type: "*UpdateServerDeployConfigServersAttributes", optional: true}
-          - {name: "Type", wire: "type", type: "UpdateServerDeployConfigServersType"}
+          - {name: "Data", wire: "data", type: "UpdateServerDeployConfigServersData"}
       operations.UpdateServerDeployConfigServersRole:
         enum: ["os", "raw", "storage"]
       operations.UpdateServerDeployConfigServersType:

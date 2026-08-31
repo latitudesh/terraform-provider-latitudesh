@@ -6,11 +6,65 @@ import (
 	"os"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
+	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 )
 
 const testFirewallName = "test-firewall-assignment"
+
+// TestPopulateAssignmentData_TargetSides covers the server XOR virtual_machine
+// contract of the assignments API: the present side must land in its
+// attribute and the absent side must end null (never unknown, never stale).
+func TestPopulateAssignmentData_TargetSides(t *testing.T) {
+	t.Parallel()
+
+	r := &FirewallAssignmentResource{}
+	firewallID := "fw_test"
+
+	t.Run("server target", func(t *testing.T) {
+		serverID := "sv_test"
+		data := FirewallAssignmentResourceModel{
+			// The unconfigured side arrives unknown from the create plan.
+			VirtualMachineID: types.StringUnknown(),
+		}
+		r.populateAssignmentData(&data, &components.FirewallAssignmentData{
+			Attributes: &components.FirewallAssignmentDataAttributes{
+				FirewallID: &firewallID,
+				Server:     &components.FirewallAssignmentDataServer{ID: &serverID},
+			},
+		})
+		if data.ServerID.ValueString() != serverID {
+			t.Fatalf("expected server_id %q, got %v", serverID, data.ServerID)
+		}
+		if !data.VirtualMachineID.IsNull() {
+			t.Fatalf("expected virtual_machine_id null, got %v", data.VirtualMachineID)
+		}
+		if data.FirewallID.ValueString() != firewallID {
+			t.Fatalf("expected firewall_id %q, got %v", firewallID, data.FirewallID)
+		}
+	})
+
+	t.Run("virtual machine target", func(t *testing.T) {
+		vmID := "vm_test"
+		data := FirewallAssignmentResourceModel{
+			ServerID: types.StringUnknown(),
+		}
+		r.populateAssignmentData(&data, &components.FirewallAssignmentData{
+			Attributes: &components.FirewallAssignmentDataAttributes{
+				FirewallID:     &firewallID,
+				VirtualMachine: &components.FirewallAssignmentDataVirtualMachine{ID: &vmID},
+			},
+		})
+		if data.VirtualMachineID.ValueString() != vmID {
+			t.Fatalf("expected virtual_machine_id %q, got %v", vmID, data.VirtualMachineID)
+		}
+		if !data.ServerID.IsNull() {
+			t.Fatalf("expected server_id null, got %v", data.ServerID)
+		}
+	})
+}
 
 func TestAccLatitudeFirewallAssignment_Basic(t *testing.T) {
 	if os.Getenv("TF_ACC") == "" {

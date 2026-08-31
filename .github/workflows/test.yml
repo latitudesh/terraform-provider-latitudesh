@@ -131,6 +131,28 @@ jobs:
             git diff --stat -- docs/
             exit 1
           fi
+      -
+        # examples/ is one loose Terraform module, and docs pages embed these
+        # files verbatim via tffile. Nothing validated them against the real
+        # schema before, which is how a block-syntax `timeouts {`, a duplicate
+        # resource and two dangling references sat in published docs. Validating
+        # with the provider built from this branch (via dev_overrides, no
+        # `terraform init`) forces every example to match the schema the PR
+        # actually ships.
+        name: Validate examples against the built provider
+        run: |
+          go build -o "$RUNNER_TEMP/terraform-provider-latitudesh" .
+          cat > "$RUNNER_TEMP/dev.tfrc" <<EOF
+          provider_installation {
+            dev_overrides {
+              "latitudesh/latitudesh" = "$RUNNER_TEMP"
+            }
+            direct {}
+          }
+          EOF
+          terraform fmt -check -recursive examples/
+          cd examples
+          TF_CLI_CONFIG_FILE="$RUNNER_TEMP/dev.tfrc" terraform validate
 
   e2e:
     runs-on: ubuntu-latest

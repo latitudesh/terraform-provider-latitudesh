@@ -1,3 +1,3 @@
 data "latitudesh_role" "role" {
-    name = "collaborator"
+  name = "collaborator"
 }

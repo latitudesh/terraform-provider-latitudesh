@@ -80,6 +80,8 @@ type ServerResourceModel struct {
 	PrimaryIpv4              types.String      `tfsdk:"primary_ipv4"`
 	PrimaryIpv6              types.String      `tfsdk:"primary_ipv6"`
 	Status                   types.String      `tfsdk:"status"`
+	LegacyNetwork            types.Bool        `tfsdk:"legacy_network"`
+	Features                 types.List        `tfsdk:"features"`
 	Locked                   types.Bool        `tfsdk:"locked"`
 	CreatedAt                types.String      `tfsdk:"created_at"`
 	Region                   types.String      `tfsdk:"region"`
@@ -285,6 +287,21 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			"status": schema.StringAttribute{
 				MarkdownDescription: "Server power status",
 				Computed:            true,
+			},
+			"legacy_network": schema.BoolAttribute{
+				MarkdownDescription: "Whether the server is attached to a legacy network.",
+				Computed:            true,
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"features": schema.ListAttribute{
+				MarkdownDescription: "Feature slugs supported by the server hardware (e.g. `direct_remote_access`), sorted alphabetically.",
+				ElementType:         types.StringType,
+				Computed:            true,
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"locked": schema.BoolAttribute{
 				MarkdownDescription: "Lock/unlock the server. A locked server cannot be deleted or updated.",
@@ -1033,6 +1050,27 @@ func inPlaceFieldsChanged(planned, current *ServerResourceModel) bool {
 	return false
 }
 
+func optionalBool(ptr *bool) types.Bool {
+	if ptr == nil {
+		return types.BoolNull()
+	}
+	return types.BoolValue(*ptr)
+}
+
+// buildFeaturesList converts the server hardware feature slugs (e.g.
+// direct_remote_access) reported by the API into a known Terraform list, empty
+// rather than null when the API reports none. The slugs are sorted into a
+// canonical order: the attribute is an order-sensitive list promised across
+// applies by UseStateForUnknown, so raw API order flipping between reads would
+// fail the apply with "inconsistent result" — the same failure mode
+// buildInterfacesList sorts against.
+func buildFeaturesList(ctx context.Context, features []string) (types.List, diag.Diagnostics) {
+	sorted := make([]string, len(features))
+	copy(sorted, features)
+	slices.Sort(sorted)
+	return types.ListValueFrom(ctx, types.StringType, sorted)
+}
+
 func lockActionFor(planned, current types.Bool) string {
 	// Null/unknown planned means "no opinion" — never act on it.
 	if planned.IsNull() || planned.IsUnknown() {
@@ -1367,6 +1405,14 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 			data.Locked = types.BoolValue(*attrs.Locked)
 		}
 
+		data.LegacyNetwork = optionalBool(attrs.LegacyNetwork)
+
+		featuresList, convertDiags := buildFeaturesList(ctx, attrs.Features)
+		diags.Append(convertDiags...)
+		if !convertDiags.HasError() {
+			data.Features = featuresList
+		}
+
 		if attrs.CreatedAt != nil && *attrs.CreatedAt != "" {
 			if data.CreatedAt.IsNull() || data.CreatedAt.IsUnknown() || data.CreatedAt.ValueString() == "" {
 				data.CreatedAt = types.StringValue(*attrs.CreatedAt)
@@ -1435,6 +1481,16 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 
 	// Read deploy config to get SSH keys, user data, raid, and ipxe
 	r.readDeployConfig(ctx, data, diags)
+
+	// These computed attributes must leave the read known: the attributes
+	// block above can bail out early without touching them, and an unknown
+	// left in state fails the apply.
+	if data.LegacyNetwork.IsUnknown() {
+		data.LegacyNetwork = types.BoolNull()
+	}
+	if data.Features.IsUnknown() {
+		data.Features = types.ListNull(types.StringType)
+	}
 
 	// Populate user_data_content_hash on the first known read (Create-time or
 	// when state was previously null). On refresh of an already-applied server

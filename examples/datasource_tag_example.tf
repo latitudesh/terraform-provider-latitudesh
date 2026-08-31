@@ -24,10 +24,10 @@ output "tag_slug" {
 
 # Use the tag in a server resource
 resource "latitudesh_server" "example" {
-  hostname     = "example-server"
-  project      = "my-project"
-  plan         = "c2-small-x86"
-  site         = "ASH"
+  hostname         = "example-server"
+  project          = "my-project"
+  plan             = "c2-small-x86"
+  site             = "ASH"
   operating_system = "ubuntu_22_04_x64_lts"
 
   # Reference the tag by ID from the datasource

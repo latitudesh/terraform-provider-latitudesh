@@ -1,5 +1,5 @@
 resource "latitudesh_elastic_ip" "example" {
-  server_id = var.elastic_ip_server_id
+  server_id = latitudesh_server.server.id
 }
 
 output "elastic_ip_address" {
