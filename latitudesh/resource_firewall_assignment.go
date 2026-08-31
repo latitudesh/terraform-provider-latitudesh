@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -19,6 +21,7 @@ import (
 
 var _ resource.Resource = &FirewallAssignmentResource{}
 var _ resource.ResourceWithImportState = &FirewallAssignmentResource{}
+var _ resource.ResourceWithConfigValidators = &FirewallAssignmentResource{}
 
 func NewFirewallAssignmentResource() resource.Resource {
 	return &FirewallAssignmentResource{}
@@ -29,9 +32,10 @@ type FirewallAssignmentResource struct {
 }
 
 type FirewallAssignmentResourceModel struct {
-	ID         types.String `tfsdk:"id"`
-	FirewallID types.String `tfsdk:"firewall_id"`
-	ServerID   types.String `tfsdk:"server_id"`
+	ID               types.String `tfsdk:"id"`
+	FirewallID       types.String `tfsdk:"firewall_id"`
+	ServerID         types.String `tfsdk:"server_id"`
+	VirtualMachineID types.String `tfsdk:"virtual_machine_id"`
 }
 
 func (r *FirewallAssignmentResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -40,7 +44,7 @@ func (r *FirewallAssignmentResource) Metadata(ctx context.Context, req resource.
 
 func (r *FirewallAssignmentResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Firewall Assignment resource",
+		MarkdownDescription: "Firewall Assignment resource. Assigns a firewall to a server or to a virtual machine — set exactly one of `server_id` or `virtual_machine_id`.",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -59,7 +63,15 @@ func (r *FirewallAssignmentResource) Schema(ctx context.Context, req resource.Sc
 				},
 			},
 			"server_id": schema.StringAttribute{
-				MarkdownDescription: "The ID of the server to assign the firewall to",
+				MarkdownDescription: "The ID of the server to assign the firewall to. Exactly one of `server_id` or `virtual_machine_id` must be set.",
+				Optional:            true,
+				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"virtual_machine_id": schema.StringAttribute{
+				MarkdownDescription: "The ID of the virtual machine to assign the firewall to. Exactly one of `server_id` or `virtual_machine_id` must be set. A virtual machine can be assigned to at most one firewall.",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
@@ -67,6 +79,18 @@ func (r *FirewallAssignmentResource) Schema(ctx context.Context, req resource.Sc
 				},
 			},
 		},
+	}
+}
+
+// ConfigValidators enforces the API contract "provide exactly one of server_id
+// or virtual_machine_id" at plan time. Unknown values (e.g. references to
+// resources not yet created) are skipped here and re-checked in Create.
+func (r *FirewallAssignmentResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		resourcevalidator.ExactlyOneOf(
+			path.MatchRoot("server_id"),
+			path.MatchRoot("virtual_machine_id"),
+		),
 	}
 }
 
@@ -91,6 +115,7 @@ func (r *FirewallAssignmentResource) Create(ctx context.Context, req resource.Cr
 
 	firewallID := data.FirewallID.ValueString()
 	serverID := data.ServerID.ValueString()
+	virtualMachineID := data.VirtualMachineID.ValueString()
 
 	// Validate that we have the required IDs
 	if firewallID == "" {
@@ -98,23 +123,33 @@ func (r *FirewallAssignmentResource) Create(ctx context.Context, req resource.Cr
 		return
 	}
 
-	if serverID == "" {
-		resp.Diagnostics.AddError("Configuration Error", "server_id is required but was empty.")
+	// ConfigValidators already enforces this on known config values; this
+	// re-check covers values that were unknown at plan time.
+	if (serverID == "") == (virtualMachineID == "") {
+		resp.Diagnostics.AddError("Configuration Error", "Exactly one of server_id or virtual_machine_id must be set.")
 		return
+	}
+
+	attributes := &operations.CreateFirewallAssignmentFirewallsAssignmentsAttributes{}
+	targetDesc := ""
+	if serverID != "" {
+		attributes.ServerID = &serverID
+		targetDesc = "server " + serverID
+	} else {
+		attributes.VirtualMachineID = &virtualMachineID
+		targetDesc = "virtual machine " + virtualMachineID
 	}
 
 	createRequest := operations.CreateFirewallAssignmentFirewallsAssignmentsRequestBody{
 		Data: operations.CreateFirewallAssignmentFirewallsAssignmentsData{
-			Type: operations.CreateFirewallAssignmentFirewallsAssignmentsTypeFirewallAssignments,
-			Attributes: &operations.CreateFirewallAssignmentFirewallsAssignmentsAttributes{
-				ServerID: &serverID,
-			},
+			Type:       operations.CreateFirewallAssignmentFirewallsAssignmentsTypeFirewallAssignments,
+			Attributes: attributes,
 		},
 	}
 
 	result, err := r.client.Firewalls.Assignments.Create(ctx, firewallID, createRequest)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create firewall assignment for firewall %s and server %s, got error: %s", firewallID, serverID, err.Error()))
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create firewall assignment for firewall %s and %s, got error: %s", firewallID, targetDesc, err.Error()))
 		return
 	}
 
@@ -131,7 +166,7 @@ func (r *FirewallAssignmentResource) Create(ctx context.Context, req resource.Cr
 	}
 
 	// Always find the assignment ID through the List endpoint
-	r.findAssignmentByServerAndFirewall(ctx, &data, &resp.Diagnostics)
+	r.findAssignmentByTargetAndFirewall(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -151,10 +186,12 @@ func (r *FirewallAssignmentResource) Create(ctx context.Context, req resource.Cr
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-// Helper function to find assignment ID by filtering server_id and firewall_id
-func (r *FirewallAssignmentResource) findAssignmentByServerAndFirewall(ctx context.Context, data *FirewallAssignmentResourceModel, diags *diag.Diagnostics) {
+// Helper function to find the assignment ID by filtering the firewall's
+// assignments on the configured target (server_id or virtual_machine_id).
+func (r *FirewallAssignmentResource) findAssignmentByTargetAndFirewall(ctx context.Context, data *FirewallAssignmentResourceModel, diags *diag.Diagnostics) {
 	firewallID := data.FirewallID.ValueString()
 	serverID := data.ServerID.ValueString()
+	virtualMachineID := data.VirtualMachineID.ValueString()
 
 	// Get assignments for this firewall
 	response, err := r.client.Firewalls.ListAssignments(ctx, firewallID, nil, nil)
@@ -169,15 +206,19 @@ func (r *FirewallAssignmentResource) findAssignmentByServerAndFirewall(ctx conte
 		return
 	}
 
-	// Look for assignment with matching server ID and firewall ID
+	// Look for the assignment matching the firewall ID and the configured target
 	for _, assignment := range response.FirewallAssignments.Data {
 		if assignment.Attributes != nil && assignment.ID != nil {
 			var assignmentServerID string
+			var assignmentVirtualMachineID string
 			var assignmentFirewallID string
 
-			// Get server ID from assignment
+			// The API returns the target as server XOR virtual_machine
 			if assignment.Attributes.Server != nil && assignment.Attributes.Server.ID != nil {
 				assignmentServerID = *assignment.Attributes.Server.ID
+			}
+			if assignment.Attributes.VirtualMachine != nil && assignment.Attributes.VirtualMachine.ID != nil {
+				assignmentVirtualMachineID = *assignment.Attributes.VirtualMachine.ID
 			}
 
 			// Get firewall ID from assignment
@@ -185,8 +226,13 @@ func (r *FirewallAssignmentResource) findAssignmentByServerAndFirewall(ctx conte
 				assignmentFirewallID = *assignment.Attributes.FirewallID
 			}
 
-			// If we found a matching server ID and firewall ID, use this assignment
-			if assignmentServerID == serverID && assignmentFirewallID == firewallID {
+			if assignmentFirewallID != firewallID {
+				continue
+			}
+
+			matchesServer := serverID != "" && assignmentServerID == serverID
+			matchesVirtualMachine := virtualMachineID != "" && assignmentVirtualMachineID == virtualMachineID
+			if matchesServer || matchesVirtualMachine {
 				data.ID = types.StringValue(*assignment.ID)
 				return
 			}
@@ -194,7 +240,7 @@ func (r *FirewallAssignmentResource) findAssignmentByServerAndFirewall(ctx conte
 	}
 
 	// If we get here, we couldn't find the matching assignment
-	diags.AddError("API Error", "Assignment was created but couldn't find it in the list with matching server_id and firewall_id")
+	diags.AddError("API Error", "Assignment was created but couldn't find it in the list with matching target and firewall_id")
 }
 
 func (r *FirewallAssignmentResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -361,8 +407,19 @@ func (r *FirewallAssignmentResource) populateAssignmentData(data *FirewallAssign
 			data.FirewallID = types.StringValue(*assignment.Attributes.FirewallID)
 		}
 
+		// The API returns the target as server XOR virtual_machine. Mirror
+		// that exactly: set the present side and null the other, so the unset
+		// attribute ends the apply known (null) instead of unknown.
 		if assignment.Attributes.Server != nil && assignment.Attributes.Server.ID != nil {
 			data.ServerID = types.StringValue(*assignment.Attributes.Server.ID)
+		} else {
+			data.ServerID = types.StringNull()
+		}
+
+		if assignment.Attributes.VirtualMachine != nil && assignment.Attributes.VirtualMachine.ID != nil {
+			data.VirtualMachineID = types.StringValue(*assignment.Attributes.VirtualMachine.ID)
+		} else {
+			data.VirtualMachineID = types.StringNull()
 		}
 	}
 }

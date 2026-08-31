@@ -7,7 +7,7 @@ description: |-
 
 # {{.Name}} ({{.Type}})
 
-The firewall assignment resource allows you to assign firewalls to servers within your [Latitude.sh](https://latitude.sh/) account.
+The firewall assignment resource allows you to assign firewalls to servers or virtual machines within your [Latitude.sh](https://latitude.sh/) account. Set exactly one of `server_id` or `virtual_machine_id`.
 
 ## Example usage
 
@@ -49,6 +49,17 @@ resource "latitudesh_firewall" "web_firewall" {
 resource "latitudesh_firewall_assignment" "web_assignment" {
   firewall_id = latitudesh_firewall.web_firewall.id
   server_id   = latitudesh_server.web_server.id
+}
+```
+
+### Assigning to a virtual machine
+
+A firewall can also be assigned to a virtual machine. A virtual machine can be assigned to at most one firewall.
+
+```hcl
+resource "latitudesh_firewall_assignment" "vm_assignment" {
+  firewall_id        = latitudesh_firewall.web_firewall.id
+  virtual_machine_id = latitudesh_virtual_machine.vm.id
 }
 ```
 
