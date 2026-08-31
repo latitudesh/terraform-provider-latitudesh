@@ -46,7 +46,7 @@ The resource waits for the virtual machine to reach a running state with a prima
 ### Optional
 
 - `billing` (String) The virtual machine billing type. Accepts `hourly` and `monthly` for on-demand projects and `yearly` for reserved projects. Defaults to `monthly` (reserved projects default to `yearly`). Billing can only be upgraded in place (`hourly` -> `monthly` -> `yearly`); downgrades are not allowed.
-- `marketplace_app` (String) A marketplace app reference (slug, e.g. `openclaw`, or encoded id_hash) to preinstall on the virtual machine via cloud-init. Cannot be combined with `operating_system`; the app defines its own. Changing this forces a new resource.
+- `marketplace_app` (String) A marketplace app reference (slug, e.g. `openclaw`, or encoded id_hash) to preinstall on the virtual machine via cloud-init. Cannot be combined with `operating_system`; the app defines its own. Changing a configured value forces a new resource; removing it from the configuration does not (the app stays installed).
 - `name` (String) The virtual machine name (hostname). Defaults to `my-vm` if not set.
 - `operating_system` (String) The operating system slug for the virtual machine. If not specified, the API defaults to `ubuntu_24_04_x64_lts`. Changing this forces a new resource.
 - `project` (String) The project (ID or slug) to deploy the virtual machine into. Optional here only if `project` is set on the provider block; one of the two is required. Changing it forces a new resource.

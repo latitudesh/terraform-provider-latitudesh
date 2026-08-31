@@ -216,11 +216,17 @@ func TestVirtualMachineCreate_MarketplaceAppComputedFromAPI(t *testing.T) {
 	}
 }
 
-// TestVirtualMachineSchema_MarketplaceAppRequiresReplace: the app is installed
-// at provision time and the update API takes no marketplace_app, so changing it
-// must force a new resource instead of being silently written to state by the
-// no-op Update path.
-func TestVirtualMachineSchema_MarketplaceAppRequiresReplace(t *testing.T) {
+// TestVirtualMachineSchema_MarketplaceAppReplacement: the app is installed at
+// provision time and the update API takes no marketplace_app, so a configured
+// change must force a new resource instead of being silently written to state
+// by the no-op Update path.
+//
+// Replacement has to stay scoped to CONFIGURED changes. marketplace_app is
+// Optional+Computed, so on any plan that changes another attribute the
+// framework marks the unconfigured null as unknown; an unconditional
+// RequiresReplace would compare that unknown against a null state, call it a
+// change, and destroy a VM that merely got renamed.
+func TestVirtualMachineSchema_MarketplaceAppReplacement(t *testing.T) {
 	ctx := context.Background()
 
 	schemaResp := &resource.SchemaResponse{}
@@ -231,8 +237,8 @@ func TestVirtualMachineSchema_MarketplaceAppRequiresReplace(t *testing.T) {
 		t.Fatalf("marketplace_app is not a StringAttribute: %#v", schemaResp.Schema.Attributes["marketplace_app"])
 	}
 
-	// Simulate an update (non-null state and plan) that changes marketplace_app
-	// on an existing VM.
+	// A non-null raw state and plan mark this as an update, not a create or a
+	// destroy — the only phase where replacement is decided.
 	objType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
 	attrValues := make(map[string]tftypes.Value, len(objType.AttributeTypes))
 	for name, attrType := range objType.AttributeTypes {
@@ -240,27 +246,80 @@ func TestVirtualMachineSchema_MarketplaceAppRequiresReplace(t *testing.T) {
 	}
 	raw := tftypes.NewValue(objType, attrValues)
 
-	req := planmodifier.StringRequest{
-		Path:        path.Root("marketplace_app"),
-		ConfigValue: types.StringValue("wordpress"),
-		PlanValue:   types.StringValue("wordpress"),
-		StateValue:  types.StringValue("openclaw"),
-		State:       tfsdk.State{Raw: raw, Schema: schemaResp.Schema},
-		Plan:        tfsdk.Plan{Raw: raw, Schema: schemaResp.Schema},
+	tests := []struct {
+		name        string
+		config      types.String
+		plan        types.String
+		state       types.String
+		wantReplace bool
+	}{
+		{
+			name:        "configured slug changes",
+			config:      types.StringValue("jupyterlab"),
+			plan:        types.StringValue("jupyterlab"),
+			state:       types.StringValue("openclaw"),
+			wantReplace: true,
+		},
+		{
+			name:        "app added to an existing VM",
+			config:      types.StringValue("openclaw"),
+			plan:        types.StringValue("openclaw"),
+			state:       types.StringNull(),
+			wantReplace: true,
+		},
+		{
+			name:        "configured slug unchanged",
+			config:      types.StringValue("openclaw"),
+			plan:        types.StringValue("openclaw"),
+			state:       types.StringValue("openclaw"),
+			wantReplace: false,
+		},
+		{
+			// No app, some other attribute changed: the framework hands the plan
+			// modifier an unknown against a null state. Replacing here would
+			// destroy every VM that uses no marketplace app on any rename.
+			name:        "unconfigured and unknown against a null state",
+			config:      types.StringNull(),
+			plan:        types.StringUnknown(),
+			state:       types.StringNull(),
+			wantReplace: false,
+		},
+		{
+			// The API reported an app the configuration never asked for; dropping
+			// the attribute must not recreate the VM, the app stays installed.
+			name:        "unconfigured against an API-derived state",
+			config:      types.StringNull(),
+			plan:        types.StringValue("openclaw"),
+			state:       types.StringValue("openclaw"),
+			wantReplace: false,
+		},
 	}
 
-	var replaced bool
-	for _, m := range attr.PlanModifiers {
-		resp := &planmodifier.StringResponse{PlanValue: req.PlanValue}
-		m.PlanModifyString(ctx, req, resp)
-		if resp.Diagnostics.HasError() {
-			t.Fatalf("plan modifier returned diagnostics: %v", resp.Diagnostics.Errors())
-		}
-		if resp.RequiresReplace {
-			replaced = true
-		}
-	}
-	if !replaced {
-		t.Fatal("changing marketplace_app must force a new resource")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := planmodifier.StringRequest{
+				Path:        path.Root("marketplace_app"),
+				ConfigValue: tt.config,
+				PlanValue:   tt.plan,
+				StateValue:  tt.state,
+				State:       tfsdk.State{Raw: raw, Schema: schemaResp.Schema},
+				Plan:        tfsdk.Plan{Raw: raw, Schema: schemaResp.Schema},
+			}
+
+			var replaced bool
+			for _, m := range attr.PlanModifiers {
+				resp := &planmodifier.StringResponse{PlanValue: req.PlanValue}
+				m.PlanModifyString(ctx, req, resp)
+				if resp.Diagnostics.HasError() {
+					t.Fatalf("plan modifier returned diagnostics: %v", resp.Diagnostics.Errors())
+				}
+				if resp.RequiresReplace {
+					replaced = true
+				}
+			}
+			if replaced != tt.wantReplace {
+				t.Fatalf("RequiresReplace = %v, want %v", replaced, tt.wantReplace)
+			}
+		})
 	}
 }

@@ -123,14 +123,21 @@ func (r *VirtualMachineResource) Schema(ctx context.Context, req resource.Schema
 				},
 			},
 			"marketplace_app": schema.StringAttribute{
-				MarkdownDescription: "A marketplace app reference (slug, e.g. `openclaw`, or encoded id_hash) to preinstall on the virtual machine via cloud-init. Cannot be combined with `operating_system`; the app defines its own. Changing this forces a new resource.",
+				MarkdownDescription: "A marketplace app reference (slug, e.g. `openclaw`, or encoded id_hash) to preinstall on the virtual machine via cloud-init. Cannot be combined with `operating_system`; the app defines its own. Changing a configured value forces a new resource; removing it from the configuration does not (the app stays installed).",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
 					// The app is installed at provision time only: the update API
 					// takes no marketplace_app, so an in-place change would leave
 					// state claiming an app that was never installed.
-					stringplanmodifier.RequiresReplace(),
+					//
+					// IfConfigured, not the unconditional RequiresReplace: this
+					// attribute is Optional+Computed, so on any plan that changes
+					// something else the framework marks the unconfigured null as
+					// unknown. Comparing that unknown against a null state would
+					// read as a change, and renaming a VM that uses no marketplace
+					// app would destroy and recreate it.
+					stringplanmodifier.RequiresReplaceIfConfigured(),
 				},
 			},
 			"billing": schema.StringAttribute{
