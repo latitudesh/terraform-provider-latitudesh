@@ -256,6 +256,13 @@ groups:
       single-item read (confirmed against the routes), so import support would
       need thought — an API limitation, not a spec gap.
 
+  IPAddresses:
+    ceiling: none
+    rationale: api_constraint
+    notes: >-
+      The /ips collection is not settled enough yet to model as a data source.
+      Revisit on a later SDK bump.
+
   KubernetesClusters:
     ceiling: none
     rationale: deprecated
