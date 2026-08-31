@@ -1,0 +1,16 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+List every published [marketplace app](https://www.latitude.sh/dashboard), optionally filtered by `category`. Only published apps are visible, and the `marketplace_apps` feature must be enabled for the team. To fetch a single app by `id`, `slug`, or `name`, use the [`latitudesh_marketplace_app`](marketplace_app) data source instead.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
