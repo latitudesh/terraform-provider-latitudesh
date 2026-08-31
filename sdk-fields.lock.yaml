@@ -487,6 +487,56 @@ groups:
       operations.CreateFirewallAssignmentResponse:
         fields:
           - {name: "FirewallServer", type: "*components.FirewallServer", optional: true, doc: "09de135b"}
+  MarketplaceApps:
+    methods:
+      GetMarketplaceApp: {signature: "(context.Context, string, ...operations.Option) (*operations.GetMarketplaceAppResponse, error)"}
+      ListMarketplaceApps: {signature: "(context.Context, ...operations.Option) (*operations.ListMarketplaceAppsResponse, error)"}
+    models:
+      components.DeploymentStrategy:
+        doc: "b1f78ec7"
+        enum: ["image", "user_data"]
+      components.MarketplaceApp:
+        fields:
+          - {name: "Data", wire: "data", type: "*MarketplaceAppData", optional: true}
+      components.MarketplaceAppData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*MarketplaceAppDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*MarketplaceAppDataType", optional: true}
+      components.MarketplaceAppDataAttributes:
+        fields:
+          - {name: "AccessInstructions", wire: "access_instructions", type: "*string", optional: true}
+          - {name: "Category", wire: "category", type: "*string", optional: true}
+          - {name: "CompatiblePlans", wire: "compatible_plans", type: "[]string", optional: true}
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "DefaultOperatingSystem", wire: "default_operating_system", type: "*string", optional: true}
+          - {name: "DeploymentStrategy", wire: "deployment_strategy", type: "*DeploymentStrategy", optional: true, doc: "d07be9f6"}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "DocumentationURL", wire: "documentation_url", type: "*string", optional: true}
+          - {name: "LogoURL", wire: "logo_url", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "ShortDescription", wire: "short_description", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "SystemRequirements", wire: "system_requirements", type: "*SystemRequirements", optional: true}
+          - {name: "UpstreamURL", wire: "upstream_url", type: "*string", optional: true}
+          - {name: "Version", wire: "version", type: "*string", optional: true}
+      components.MarketplaceAppDataType:
+        enum: ["marketplace_apps"]
+      components.MarketplaceApps:
+        fields:
+          - {name: "Data", wire: "data", type: "[]MarketplaceAppData", optional: true}
+      components.SystemRequirements:
+        fields:
+          - {name: "Gpu", wire: "gpu", type: "*bool", optional: true}
+          - {name: "MemoryInGb", wire: "memory_in_gb", type: "*int64", optional: true}
+          - {name: "StorageInGb", wire: "storage_in_gb", type: "*int64", optional: true}
+          - {name: "Vcpus", wire: "vcpus", type: "*int64", optional: true}
+      operations.GetMarketplaceAppResponse:
+        fields:
+          - {name: "MarketplaceApp", type: "*components.MarketplaceApp", optional: true, doc: "6d8303b0"}
+      operations.ListMarketplaceAppsResponse:
+        fields:
+          - {name: "MarketplaceApps", type: "*components.MarketplaceApps", optional: true, doc: "6d8303b0"}
   Plans:
     methods:
       Get: {signature: "(context.Context, string, ...operations.Option) (*operations.GetPlanResponse, error)"}

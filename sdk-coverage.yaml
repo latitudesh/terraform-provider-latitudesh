@@ -99,6 +99,18 @@ groups:
       read path maps the target from
       components.FirewallAssignmentDataAttributes.Server/.VirtualMachine.
 
+  MarketplaceApps:
+    implemented_by: [latitudesh_marketplace_app]
+    notes: >-
+      Data source. Both methods are mapped: GetMarketplaceApp backs id/slug
+      lookups, ListMarketplaceApps backs name lookups (list + in-memory
+      filter, since the list call takes no filter parameters and does not
+      paginate). No methods are left unmapped. Both endpoints only return
+      published apps and require the `marketplace_apps` feature to be
+      enabled for the team, per the SDK doc comments — a team without that
+      feature enabled or with the app unpublished will see 404s the same as
+      a genuinely missing id/slug/name.
+
   Plans:
     implemented_by: [latitudesh_plan]
     notes: Data source. UpdateBandwidth is not wired up, hence the -RU- shape.
