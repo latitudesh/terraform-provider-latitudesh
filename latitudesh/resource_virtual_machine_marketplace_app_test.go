@@ -12,8 +12,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 )
@@ -209,5 +213,54 @@ func TestVirtualMachineCreate_MarketplaceAppComputedFromAPI(t *testing.T) {
 	}
 	if got := out.MarketplaceApp.ValueString(); got != echoed {
 		t.Fatalf("expected marketplace_app %q read back from the API, got %q", echoed, got)
+	}
+}
+
+// TestVirtualMachineSchema_MarketplaceAppRequiresReplace: the app is installed
+// at provision time and the update API takes no marketplace_app, so changing it
+// must force a new resource instead of being silently written to state by the
+// no-op Update path.
+func TestVirtualMachineSchema_MarketplaceAppRequiresReplace(t *testing.T) {
+	ctx := context.Background()
+
+	schemaResp := &resource.SchemaResponse{}
+	(&VirtualMachineResource{}).Schema(ctx, resource.SchemaRequest{}, schemaResp)
+
+	attr, ok := schemaResp.Schema.Attributes["marketplace_app"].(schema.StringAttribute)
+	if !ok {
+		t.Fatalf("marketplace_app is not a StringAttribute: %#v", schemaResp.Schema.Attributes["marketplace_app"])
+	}
+
+	// Simulate an update (non-null state and plan) that changes marketplace_app
+	// on an existing VM.
+	objType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+	attrValues := make(map[string]tftypes.Value, len(objType.AttributeTypes))
+	for name, attrType := range objType.AttributeTypes {
+		attrValues[name] = tftypes.NewValue(attrType, nil)
+	}
+	raw := tftypes.NewValue(objType, attrValues)
+
+	req := planmodifier.StringRequest{
+		Path:        path.Root("marketplace_app"),
+		ConfigValue: types.StringValue("wordpress"),
+		PlanValue:   types.StringValue("wordpress"),
+		StateValue:  types.StringValue("openclaw"),
+		State:       tfsdk.State{Raw: raw, Schema: schemaResp.Schema},
+		Plan:        tfsdk.Plan{Raw: raw, Schema: schemaResp.Schema},
+	}
+
+	var replaced bool
+	for _, m := range attr.PlanModifiers {
+		resp := &planmodifier.StringResponse{PlanValue: req.PlanValue}
+		m.PlanModifyString(ctx, req, resp)
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("plan modifier returned diagnostics: %v", resp.Diagnostics.Errors())
+		}
+		if resp.RequiresReplace {
+			replaced = true
+		}
+	}
+	if !replaced {
+		t.Fatal("changing marketplace_app must force a new resource")
 	}
 }

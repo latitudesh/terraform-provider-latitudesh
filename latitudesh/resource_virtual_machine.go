@@ -123,9 +123,15 @@ func (r *VirtualMachineResource) Schema(ctx context.Context, req resource.Schema
 				},
 			},
 			"marketplace_app": schema.StringAttribute{
-				MarkdownDescription: "A marketplace app reference (slug, e.g. `openclaw`, or encoded id_hash) to preinstall on the virtual machine via cloud-init. Cannot be combined with `operating_system`; the app defines its own.",
+				MarkdownDescription: "A marketplace app reference (slug, e.g. `openclaw`, or encoded id_hash) to preinstall on the virtual machine via cloud-init. Cannot be combined with `operating_system`; the app defines its own. Changing this forces a new resource.",
 				Optional:            true,
 				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					// The app is installed at provision time only: the update API
+					// takes no marketplace_app, so an in-place change would leave
+					// state claiming an app that was never installed.
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"billing": schema.StringAttribute{
 				MarkdownDescription: "The virtual machine billing type. Accepts `hourly` and `monthly` for on-demand projects and `yearly` for reserved projects. Defaults to `monthly` (reserved projects default to `yearly`). Billing can only be upgraded in place (`hourly` -> `monthly` -> `yearly`); downgrades are not allowed.",
