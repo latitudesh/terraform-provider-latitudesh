@@ -135,11 +135,13 @@ groups:
 
       v1.19.17 drift closure (lock synced 2026-08-29): mapped
       components.ServerDataAttributes.legacy_network -> new Computed
-      legacy_network, .features -> new Computed features (list), and
-      components.DeployConfigAttributes.ipxe_url -> new Computed ipxe_url on
-      latitudesh_server, all straightforward read-only refreshes.
+      legacy_network and .features -> new Computed features (list) on
+      latitudesh_server, both straightforward read-only refreshes.
 
       Deliberately left unmapped:
+      - components.DeployConfigAttributes.ipxe_url: legacy field per team
+        decision (2026-08-31) — not exposed as an attribute; the provider's
+        ipxe input remains the supported iPXE path.
       - components.Credentials / components.ServerDataAttributes.credentials /
         components.ServerDataSSHKeys: "latest provisioning credentials,
         lazy loaded" per the SDK doc — only populated when the GET is called
@@ -147,11 +149,11 @@ groups:
         requests. Surfacing root passwords is a deliberate product decision
         (sensitive attribute, cache/rotation semantics), not a mechanical
         field mapping — flagged for the reviewer as a possible follow-up.
-      - components.DeployConfigAttributes.ipxe (raw, as opposed to ipxe_url):
-        the resource's existing ipxe attribute is Optional-only (no
-        Computed), so refreshing it from the deploy config would require
-        flipping it to Optional+Computed — a schema/plan-modifier call this
-        PR does not make. Flagged for the reviewer.
+      - components.DeployConfigAttributes.ipxe (the raw script field): the
+        resource's existing ipxe attribute is Optional-only (no Computed),
+        so refreshing it from the deploy config would require flipping it
+        to Optional+Computed — a schema/plan-modifier call this PR does not
+        make. Flagged for the reviewer.
       - components.ServerDataFeatures.accelerate/rescue/workflow: these live
         on components.OperatingSystem.Features, a nested struct this
         provider has never mapped into any attribute (OS capability

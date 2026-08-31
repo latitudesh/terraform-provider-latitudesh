@@ -82,7 +82,6 @@ type ServerResourceModel struct {
 	Status                   types.String      `tfsdk:"status"`
 	LegacyNetwork            types.Bool        `tfsdk:"legacy_network"`
 	Features                 types.List        `tfsdk:"features"`
-	IpxeURL                  types.String      `tfsdk:"ipxe_url"`
 	Locked                   types.Bool        `tfsdk:"locked"`
 	CreatedAt                types.String      `tfsdk:"created_at"`
 	Region                   types.String      `tfsdk:"region"`
@@ -297,18 +296,11 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"features": schema.ListAttribute{
-				MarkdownDescription: "Feature slugs supported by the server hardware (e.g. `direct_remote_access`).",
+				MarkdownDescription: "Feature slugs supported by the server hardware (e.g. `direct_remote_access`), sorted alphabetically.",
 				ElementType:         types.StringType,
 				Computed:            true,
 				PlanModifiers: []planmodifier.List{
 					listplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"ipxe_url": schema.StringAttribute{
-				MarkdownDescription: "URL of the iPXE script currently on file for the server's deploy config, as reported by the API. Populated on read; independent of the `ipxe` attribute this resource sends on create/reinstall.",
-				Computed:            true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"locked": schema.BoolAttribute{
@@ -1067,12 +1059,16 @@ func optionalBool(ptr *bool) types.Bool {
 
 // buildFeaturesList converts the server hardware feature slugs (e.g.
 // direct_remote_access) reported by the API into a known Terraform list, empty
-// rather than null when the API reports none.
+// rather than null when the API reports none. The slugs are sorted into a
+// canonical order: the attribute is an order-sensitive list promised across
+// applies by UseStateForUnknown, so raw API order flipping between reads would
+// fail the apply with "inconsistent result" — the same failure mode
+// buildInterfacesList sorts against.
 func buildFeaturesList(ctx context.Context, features []string) (types.List, diag.Diagnostics) {
-	if features == nil {
-		features = []string{}
-	}
-	return types.ListValueFrom(ctx, types.StringType, features)
+	sorted := make([]string, len(features))
+	copy(sorted, features)
+	slices.Sort(sorted)
+	return types.ListValueFrom(ctx, types.StringType, sorted)
 }
 
 func lockActionFor(planned, current types.Bool) string {
@@ -1486,6 +1482,16 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 	// Read deploy config to get SSH keys, user data, raid, and ipxe
 	r.readDeployConfig(ctx, data, diags)
 
+	// These computed attributes must leave the read known: the attributes
+	// block above can bail out early without touching them, and an unknown
+	// left in state fails the apply.
+	if data.LegacyNetwork.IsUnknown() {
+		data.LegacyNetwork = types.BoolNull()
+	}
+	if data.Features.IsUnknown() {
+		data.Features = types.ListNull(types.StringType)
+	}
+
 	// Populate user_data_content_hash on the first known read (Create-time or
 	// when state was previously null). On refresh of an already-applied server
 	// we preserve the value stored in state so that ModifyPlan can detect
@@ -1519,8 +1525,6 @@ func (r *ServerResource) readDeployConfig(ctx context.Context, data *ServerResou
 	}
 
 	attrs := response.DeployConfig.Data.Attributes
-
-	data.IpxeURL = optionalString(attrs.IpxeURL)
 
 	// Only set SSH keys if they exist in the API response
 	if len(attrs.SSHKeys) > 0 {

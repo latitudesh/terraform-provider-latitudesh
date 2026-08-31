@@ -160,10 +160,9 @@ With the above, only `user_data` changes (ID or content) cause a reinstall. Chan
 ### Read-Only
 
 - `created_at` (String) The timestamp for when the server was created
-- `features` (List of String) Feature slugs supported by the server hardware (e.g. `direct_remote_access`).
+- `features` (List of String) Feature slugs supported by the server hardware (e.g. `direct_remote_access`), sorted alphabetically.
 - `id` (String) Server identifier
 - `interfaces` (Attributes List) List of network interfaces (see [below for nested schema](#nestedatt--interfaces))
-- `ipxe_url` (String) URL of the iPXE script currently on file for the server's deploy config, as reported by the API. Populated on read; independent of the `ipxe` attribute this resource sends on create/reinstall.
 - `legacy_network` (Boolean) Whether the server is attached to a legacy network.
 - `primary_ipv4` (String) Primary IPv4 address of the server
 - `primary_ipv6` (String) Primary IPv6 address of the server

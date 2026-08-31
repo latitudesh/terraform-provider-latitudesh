@@ -233,10 +233,13 @@ func TestBuildFeaturesList_Empty(t *testing.T) {
 	}
 }
 
+// TestBuildFeaturesList_Values feeds slugs in raw (unsorted) API order and
+// expects the canonical sorted list back, without mutating the API slice.
 func TestBuildFeaturesList_Values(t *testing.T) {
 	t.Parallel()
 
-	list, diags := buildFeaturesList(context.Background(), []string{"direct_remote_access", "accelerate"})
+	in := []string{"direct_remote_access", "accelerate"}
+	list, diags := buildFeaturesList(context.Background(), in)
 	if diags.HasError() {
 		t.Fatalf("build errored: %v", diags)
 	}
@@ -245,8 +248,32 @@ func TestBuildFeaturesList_Values(t *testing.T) {
 	if diags.HasError() {
 		t.Fatalf("elements as errored: %v", diags)
 	}
-	if len(got) != 2 || got[0] != "direct_remote_access" || got[1] != "accelerate" {
-		t.Fatalf("unexpected features list: %v", got)
+	if len(got) != 2 || got[0] != "accelerate" || got[1] != "direct_remote_access" {
+		t.Fatalf("expected canonically sorted features list, got: %v", got)
+	}
+	if in[0] != "direct_remote_access" || in[1] != "accelerate" {
+		t.Fatalf("input slice was mutated: %v", in)
+	}
+}
+
+// TestBuildFeaturesList_StableOrderRegardlessOfInput mirrors
+// TestBuildInterfacesList_StableOrderRegardlessOfInput: features is an
+// order-sensitive computed list promised across applies by UseStateForUnknown,
+// so two reads of the same set must build the same list no matter how the API
+// orders it.
+func TestBuildFeaturesList_StableOrderRegardlessOfInput(t *testing.T) {
+	t.Parallel()
+
+	forward, diags := buildFeaturesList(context.Background(), []string{"accelerate", "direct_remote_access"})
+	if diags.HasError() {
+		t.Fatalf("forward build errored: %v", diags)
+	}
+	reversed, diags := buildFeaturesList(context.Background(), []string{"direct_remote_access", "accelerate"})
+	if diags.HasError() {
+		t.Fatalf("reversed build errored: %v", diags)
+	}
+	if !forward.Equal(reversed) {
+		t.Fatalf("features ordering is not stable across input orders:\n forward=%s\nreversed=%s", forward, reversed)
 	}
 }
 
