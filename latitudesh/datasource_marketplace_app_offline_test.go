@@ -2,10 +2,62 @@ package latitudesh
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 )
+
+func TestMarketplaceAppNotFound(t *testing.T) {
+	status404 := "404"
+	status422 := "422"
+
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "ErrorObject with 404 status (typed 404 the GET endpoint returns)",
+			err:  &components.ErrorObject{Errors: []components.Errors{{Status: &status404}}},
+			want: true,
+		},
+		{
+			name: "ErrorObject without a 404 status",
+			err:  &components.ErrorObject{Errors: []components.Errors{{Status: &status422}}},
+			want: false,
+		},
+		{
+			name: "APIError with 404 status code",
+			err:  components.NewAPIError("not found", http.StatusNotFound, "", nil),
+			want: true,
+		},
+		{
+			name: "APIError with a non-404 status code",
+			err:  components.NewAPIError("boom", http.StatusInternalServerError, "", nil),
+			want: false,
+		},
+		{
+			name: "wrapped ErrorObject 404 is still detected",
+			err:  fmt.Errorf("get failed: %w", &components.ErrorObject{Errors: []components.Errors{{Status: &status404}}}),
+			want: true,
+		},
+		{
+			name: "unrelated error",
+			err:  fmt.Errorf("connection reset"),
+			want: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := marketplaceAppNotFound(tc.err); got != tc.want {
+				t.Errorf("marketplaceAppNotFound() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
 
 func TestMarketplaceAppSystemRequirementsValueNil(t *testing.T) {
 	ctx := context.Background()
