@@ -1,5 +1,5 @@
 ---
-prompt-version: 5
+prompt-version: 6
 ---
 
 # Scaffold Terraform support for a latitudesh-go-sdk service group
@@ -33,7 +33,10 @@ different task with a different review.
 - Manifest notes: {{NOTES}}
 
 Notes of `none` mean nobody has looked at this group yet — not that it is clean.
-Derive the shape from the SDK and record what you find.
+Derive the shape from the SDK and record what you find. When the notes record
+fields as deliberately unmapped (legacy, lazy-loaded, envelope-only, team
+decision), that is a standing decision: do not expose those fields, and carry
+the reason forward into your own notes.
 
 ## Turn budget
 

@@ -1,5 +1,5 @@
 ---
-prompt-version: 2
+prompt-version: 3
 ---
 
 # Map field drift on covered latitudesh-go-sdk service group(s)
@@ -43,6 +43,19 @@ mapping, that is a different task with a different review.
 Every row is yours to close, one way or the other: map it, or deliberately omit
 it and say why. `breaking: true` rows are failing `TestProviderSDKFieldDrift`
 on this branch right now — the gate stays red until you resolve them.
+
+## Standing decisions bind you
+
+Before closing any row, read `notes:` under `{{GROUP}}` in `sdk-coverage.yaml`.
+A field those notes record as deliberately unmapped — "legacy", "lazy-loaded",
+"envelope only", "not exposed by team decision" — is a standing decision, not a
+suggestion: close its rows by lock sync alone, carry the recorded reason
+forward, and do not map the field or soften the note. Example: the Servers
+notes mark `components.DeployConfigAttributes.ipxe_url` as legacy — no drift on
+that field ever becomes an attribute. Reopen a standing decision only when the
+drift row itself invalidates the recorded reason (the field's semantics
+changed, not just its shape), and then flag it in the handoff instead of
+deciding yourself.
 
 ## Turn budget
 
