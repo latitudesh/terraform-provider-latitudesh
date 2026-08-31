@@ -85,6 +85,15 @@ groups:
     implemented_by: [latitudesh_firewall_assignment]
     notes: Only Create lives here; the read and delete paths are on the parent group.
 
+  IPAddresses:
+    implemented_by: [latitudesh_ip_address]
+    notes: >-
+      Data source only, both Get and List backed by the same
+      latitudesh_ip_address type (lookup by id, address, or server_id). Get
+      and List both require extra_fields[ip_addresses]=region,server to
+      populate the region/assignment attributes; this is passed on every
+      request.
+
   Plans:
     implemented_by: [latitudesh_plan]
     notes: Data source. UpdateBandwidth is not wired up, hence the -RU- shape.

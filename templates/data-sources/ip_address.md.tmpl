@@ -1,0 +1,16 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Retrieve a management, additional, or elastic [IP address](https://docs.latitude.sh/reference/get-ips) by `id`, exact `address`, or the `server_id` it is assigned to. Exactly one of these must be set. `server_id` errors if the server has more than one IP assigned (e.g. a management IP plus an additional IP) — use `address` to disambiguate in that case.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
