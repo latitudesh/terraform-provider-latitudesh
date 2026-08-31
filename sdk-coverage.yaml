@@ -148,6 +148,45 @@ groups:
 
   # --------------------------------------------------------------- excluded ---
 
+  BaselinesPreview:
+    ceiling: none
+    rationale: product_decision
+    notes: >-
+      Baselines is still under active development and its preview API is not
+      stable, so scaffolding against it now would only churn. Revisit once the
+      product ships.
+
+  BlockStorage:
+    ceiling: none
+    rationale: product_decision
+    notes: >-
+      Volume creation is paused on the platform right now, so a scaffolded
+      resource nobody can apply would only add review load. Revisit when creation
+      reopens. Shape context for that day: methods are HTTP-verb prefixed
+      (PostStorageVolumes, DeleteStorageVolumes), DeleteStorageVolumes deletes a
+      single volume despite the plural, and the API has no volume update, so the
+      CR-D shape is real and not a spec gap.
+
+  FilesystemStorage:
+    ceiling: none
+    rationale: product_decision
+    notes: >-
+      Filesystem storage is gated — a customer has to request access before it
+      can be created — so it is not a general Terraform surface yet. Revisit if it
+      becomes generally available. Shape context: the API genuinely has no
+      single-item read (confirmed against the routes), so import support would
+      need thought — an API limitation, not a spec gap.
+
+  KubernetesClusters:
+    ceiling: none
+    rationale: deprecated
+    notes: >-
+      Managed Kubernetes is being deprecated, so we are not adding Terraform
+      support for it. Shape context: kubeconfig retrieval and available-version
+      listing would each likely want their own data source, and
+      GET /kubernetes_clusters/plans exists in the API but is absent from the
+      spec, so the SDK has no method for it.
+
   Projects.SSHKeys:
     ceiling: none
     rationale: deprecated
@@ -182,23 +221,6 @@ groups:
       sub-resource, a metrics endpoint, and a bucket-exists check. Scoped
       previously as PD-6063 and paused pending storage-team spec fixes. Expect the
       generated resource to lack update support it could have had.
-
-  BlockStorage:
-    notes: >-
-      Methods are HTTP-verb prefixed (PostStorageVolumes, DeleteStorageVolumes) and
-      DeleteStorageVolumes deletes a single volume despite the plural. The API has
-      no volume update, so the CR-D shape is real and not a spec gap.
-
-  FilesystemStorage:
-    notes: >-
-      The API genuinely has no single-item read (confirmed against the routes), so
-      import support needs thought — an API limitation, not a spec gap.
-
-  KubernetesClusters:
-    notes: >-
-      Kubeconfig retrieval and available-version listing would likely want data
-      sources of their own. GET /kubernetes_clusters/plans exists in the API but is
-      absent from the spec, so the SDK has no method for it.
 
   VirtualMachineBackups:
     notes: >-
