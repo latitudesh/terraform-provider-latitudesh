@@ -75,6 +75,10 @@ groups:
   ElasticIps:
     implemented_by: [latitudesh_elastic_ip]
 
+  Events:
+    implemented_by: [latitudesh_event]
+    notes: Data source only. List is the group's only method; nothing is unmapped.
+
   Firewalls:
     implemented_by: [latitudesh_firewall, latitudesh_firewall_assignment]
     notes: >-

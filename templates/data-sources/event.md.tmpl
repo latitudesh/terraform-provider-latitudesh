@@ -1,0 +1,25 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+List account activity events (actions performed by users on your account), optionally filtered by author, project, target, action, or a creation-date range.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+Pagination is not followed automatically: `page_size` (API default 20) and
+`page_number` (API default 1) control which single page of results is
+returned. `total_count` reports the total number of events matching the
+filters across all pages, which callers can use to decide whether to request
+another page.
+
+`id` identifies this query (a hash of the filters and page requested), not an
+individual event.
+
+{{ .SchemaMarkdown | trimspace }}

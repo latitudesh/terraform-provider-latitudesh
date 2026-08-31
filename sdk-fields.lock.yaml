@@ -286,6 +286,76 @@ groups:
       operations.UpdateElasticIPResponse:
         fields:
           - {name: "ElasticIP", type: "*components.ElasticIP", optional: true, doc: "41d09a60"}
+  Events:
+    methods:
+      List: {signature: "(context.Context, operations.GetEventsRequest, ...operations.Option) (*operations.GetEventsResponse, error)"}
+    models:
+      components.Author:
+        fields:
+          - {name: "Email", wire: "email", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.EventData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*EventDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*EventDataType", optional: true}
+      components.EventDataAttributes:
+        fields:
+          - {name: "Action", wire: "action", type: "*string", optional: true}
+          - {name: "Author", wire: "author", type: "*Author", optional: true}
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "Project", wire: "project", type: "*EventDataProject", optional: true}
+          - {name: "Properties", wire: "properties", type: "*Properties", optional: true, doc: "3dd40b65"}
+          - {name: "Target", wire: "target", type: "*Target", optional: true}
+          - {name: "Team", wire: "team", type: "*EventDataTeam", optional: true}
+      components.EventDataProject:
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+      components.EventDataTeam:
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.EventDataType:
+        enum: ["events"]
+      components.Events:
+        fields:
+          - {name: "Data", wire: "data", type: "[]EventData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*PaginationMeta", optional: true}
+      components.PaginationMeta:
+        fields:
+          - {name: "Stats", wire: "stats", type: "*Stats", optional: true}
+      components.Properties:
+        doc: "b29b8c71"
+      components.Stats:
+        fields:
+          - {name: "Total", wire: "total", type: "*Total", optional: true}
+      components.Target:
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.Total:
+        fields:
+          - {name: "Count", wire: "count", type: "*int64", optional: true, doc: "892c1421"}
+      operations.GetEventsRequest:
+        fields:
+          - {name: "FilterAction", wire: "filter[action]", type: "*string", optional: true, doc: "d2a05979"}
+          - {name: "FilterAuthor", wire: "filter[author]", type: "*string", optional: true, doc: "45bb260d"}
+          - {name: "FilterCreatedAt", wire: "filter[created_at]", type: "[]string", doc: "f63f6b64"}
+          - {name: "FilterCreatedAtGte", wire: "filter[created_at][gte]", type: "*string", optional: true, doc: "58c782be"}
+          - {name: "FilterCreatedAtLte", wire: "filter[created_at][lte]", type: "*string", optional: true, doc: "0d95a19f"}
+          - {name: "FilterProject", wire: "filter[project]", type: "*string", optional: true, doc: "d3c667b4"}
+          - {name: "FilterTargetID", wire: "filter[target_id]", type: "*string", optional: true, doc: "233079c6"}
+          - {name: "FilterTargetName", wire: "filter[target_name]", type: "[]string", doc: "265d7299"}
+          - {name: "PageNumber", wire: "page[number]", type: "*int64", optional: true, default: "1", doc: "52d4faa2"}
+          - {name: "PageSize", wire: "page[size]", type: "*int64", optional: true, default: "20", doc: "5cd3806e"}
+          - {name: "Sort", wire: "sort", type: "*string", optional: true, doc: "4e923ef8"}
+          - {name: "StatsTotal", wire: "stats[total]", type: "*string", optional: true, doc: "186835ea"}
+      operations.GetEventsResponse:
+        fields:
+          - {name: "Events", type: "*components.Events", optional: true, doc: "6d8303b0"}
   Firewalls:
     methods:
       Create: {signature: "(context.Context, operations.CreateFirewallFirewallsRequestBody, ...operations.Option) (*operations.CreateFirewallResponse, error)"}
