@@ -217,7 +217,10 @@ groups:
     implemented_by: [latitudesh_virtual_machine]
     notes: >-
       Network attachments and metrics are not exposed. Note the update method is
-      UpdateVirtualMachine, not Update.
+      UpdateVirtualMachine, not Update. marketplace_app is exposed as a
+      slug-only string attribute (mirroring how operating_system exposes only
+      Slug); the nested name/version fields on
+      VirtualMachineAttributesMarketplaceApp are deliberately not surfaced.
 
   VirtualNetworks:
     implemented_by: [latitudesh_virtual_network]
