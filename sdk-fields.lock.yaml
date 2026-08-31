@@ -2489,6 +2489,7 @@ groups:
           - {name: "Billing", wire: "billing", type: "*string", optional: true}
           - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
           - {name: "Credentials", wire: "credentials", type: "*VirtualMachineAttributesCredentials", optional: true, doc: "79270dd3"}
+          - {name: "MarketplaceApp", wire: "marketplace_app", type: "*VirtualMachineAttributesMarketplaceApp", optional: true, doc: "75d07bb7"}
           - {name: "Name", wire: "name", type: "*string", optional: true}
           - {name: "OperatingSystem", wire: "operating_system", type: "*VirtualMachineAttributesOperatingSystem", optional: true, doc: "b7f3fa66"}
           - {name: "PendingRestart", wire: "pending_restart", type: "*bool", optional: true, doc: "3dd4819b"}
@@ -2522,6 +2523,12 @@ groups:
           - {name: "SSHKeys", wire: "ssh_keys", type: "*bool", optional: true, doc: "2ac4f8f4"}
           - {name: "UserData", wire: "user_data", type: "*bool", optional: true, doc: "04385407"}
           - {name: "Workflow", wire: "workflow", type: "*bool", optional: true, doc: "d6f6f7fb"}
+      components.VirtualMachineAttributesMarketplaceApp:
+        doc: "5fe7d861"
+        fields:
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Version", wire: "version", type: "*string", optional: true}
       components.VirtualMachineAttributesOperatingSystem:
         doc: "cff6909c"
         fields:
@@ -2571,6 +2578,7 @@ groups:
           - {name: "Data", wire: "data", type: "VirtualMachineNetworkAttachmentCreatePayloadData"}
       components.VirtualMachineNetworkAttachmentCreatePayloadAttributes:
         fields:
+          - {name: "Address", wire: "address", type: "*string", optional: true, doc: "fe4bde00"}
           - {name: "VirtualNetworkID", wire: "virtual_network_id", type: "string", doc: "a3f3477b"}
       components.VirtualMachineNetworkAttachmentCreatePayloadData:
         fields:
@@ -2599,6 +2607,7 @@ groups:
       components.VirtualMachinePayloadAttributes:
         fields:
           - {name: "Billing", wire: "billing", type: "*VirtualMachinePayloadBilling", optional: true, doc: "866f42bf"}
+          - {name: "MarketplaceApp", wire: "marketplace_app", type: "*string", optional: true, doc: "2b785628"}
           - {name: "Name", wire: "name", type: "*string", optional: true, default: "my-vm"}
           - {name: "OperatingSystem", wire: "operating_system", type: "*string", optional: true, doc: "a693e30e"}
           - {name: "Plan", wire: "plan", type: "*string", optional: true, doc: "668b675e"}
