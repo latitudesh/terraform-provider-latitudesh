@@ -537,6 +537,413 @@ groups:
       operations.ListMarketplaceAppsResponse:
         fields:
           - {name: "MarketplaceApps", type: "*components.MarketplaceApps", optional: true, doc: "6d8303b0"}
+  ObjectStorage:
+    methods:
+      DeleteStorageAccessKeysUsername: {signature: "(context.Context, string, operations.PathParamStorageClass, string, *string, ...operations.Option) (*operations.DeleteStorageAccessKeysUsernameResponse, error)"}
+      DeleteStorageBucketLifecycleRule: {signature: "(context.Context, string, string, ...operations.Option) (*operations.DeleteStorageBucketLifecycleRuleResponse, error)"}
+      DeleteStorageBuckets: {signature: "(context.Context, string, ...operations.Option) (*operations.DeleteStorageBucketsResponse, error)"}
+      GetStorageAccessKeys: {signature: "(context.Context, string, ...operations.Option) (*operations.GetStorageAccessKeysResponse, error)"}
+      GetStorageBucket: {signature: "(context.Context, string, ...operations.Option) (*operations.GetStorageBucketResponse, error)"}
+      GetStorageBucketAccessKeys: {signature: "(context.Context, string, ...operations.Option) (*operations.GetStorageBucketAccessKeysResponse, error)"}
+      GetStorageBucketLifecycleRule: {signature: "(context.Context, string, string, ...operations.Option) (*operations.GetStorageBucketLifecycleRuleResponse, error)"}
+      GetStorageBucketLifecycleRules: {signature: "(context.Context, string, ...operations.Option) (*operations.GetStorageBucketLifecycleRulesResponse, error)"}
+      GetStorageBucketMetrics: {signature: "(context.Context, string, ...operations.Option) (*operations.GetStorageBucketMetricsResponse, error)"}
+      GetStorageBuckets: {signature: "(context.Context, *string, ...operations.Option) (*operations.GetStorageBucketsResponse, error)"}
+      GetStorageUsage: {signature: "(context.Context, string, *string, *types.Date, *types.Date, ...operations.Option) (*operations.GetStorageUsageResponse, error)"}
+      PatchStorageBucketLifecycleRule: {signature: "(context.Context, string, string, operations.PatchStorageBucketLifecycleRuleRequestBody, ...operations.Option) (*operations.PatchStorageBucketLifecycleRuleResponse, error)"}
+      PostStorageAccessKeys: {signature: "(context.Context, operations.PostStorageAccessKeysRequestBody, ...operations.Option) (*operations.PostStorageAccessKeysResponse, error)"}
+      PostStorageBucketLifecycleRules: {signature: "(context.Context, string, operations.PostStorageBucketLifecycleRulesRequestBody, ...operations.Option) (*operations.PostStorageBucketLifecycleRulesResponse, error)"}
+      PostStorageBuckets: {signature: "(context.Context, operations.PostStorageBucketsRequestBody, ...operations.Option) (*operations.PostStorageBucketsResponse, error)"}
+    models:
+      components.Billing:
+        fields:
+          - {name: "Method", wire: "method", type: "*string", optional: true}
+          - {name: "SubscriptionID", wire: "subscription_id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.Currency:
+        fields:
+          - {name: "Code", wire: "code", type: "*string", optional: true}
+          - {name: "CurrencyID", wire: "currency_id", type: "*int64", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.LifecycleRuleData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*LifecycleRuleDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true, doc: "39133fa3"}
+          - {name: "Type", wire: "type", type: "*LifecycleRuleDataType", optional: true}
+      components.LifecycleRuleDataAttributes:
+        fields:
+          - {name: "AbortMpuDaysAfterInitiation", wire: "abort_mpu_days_after_initiation", type: "*int64", optional: true, doc: "3b5985c3"}
+          - {name: "Enabled", wire: "enabled", type: "*bool", optional: true, doc: "ef72d1f5"}
+          - {name: "ExpirationDays", wire: "expiration_days", type: "*int64", optional: true, doc: "1eeba453"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "24603342"}
+          - {name: "NoncurrentDays", wire: "noncurrent_days", type: "*int64", optional: true, doc: "2a6098c4"}
+          - {name: "Prefix", wire: "prefix", type: "*string", optional: true, doc: "e3d53f55"}
+      components.LifecycleRuleDataType:
+        enum: ["lifecycle_rules"]
+      components.LifecycleRules:
+        fields:
+          - {name: "Data", wire: "data", type: "[]LifecycleRuleData", optional: true}
+      components.Limits:
+        fields:
+          - {name: "BareMetal", wire: "bare_metal", type: "*int64", optional: true}
+          - {name: "BareMetalGpu", wire: "bare_metal_gpu", type: "*int64", optional: true}
+          - {name: "BgpSessionPerIP", wire: "bgp_session_per_ip", type: "*int64", optional: true}
+          - {name: "BlockStorage", wire: "block_storage", type: "*int64", optional: true}
+          - {name: "Database", wire: "database", type: "*int64", optional: true}
+          - {name: "ElasticIP", wire: "elastic_ip", type: "*int64", optional: true}
+          - {name: "Filesystem", wire: "filesystem", type: "*int64", optional: true}
+          - {name: "PublicNetwork", wire: "public_network", type: "*int64", optional: true}
+          - {name: "VirtualMachine", wire: "virtual_machine", type: "*int64", optional: true}
+          - {name: "VirtualMachineGpu", wire: "virtual_machine_gpu", type: "*int64", optional: true}
+          - {name: "VirtualNetwork", wire: "virtual_network", type: "*int64", optional: true}
+      components.ObjectStorageData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*ObjectStorageDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true, doc: "533c4999"}
+          - {name: "Type", wire: "type", type: "*ObjectStorageDataType", optional: true}
+      components.ObjectStorageDataAttributes:
+        fields:
+          - {name: "BucketName", wire: "bucket_name", type: "*string", optional: true, doc: "57a17a05"}
+          - {name: "CreatedAt", wire: "created_at", type: "*time.Time", optional: true, doc: "a20fbba5"}
+          - {name: "Credentials", wire: "credentials", type: "*ObjectStorageDataCredentials", optional: true, doc: "5a3ce4e3"}
+          - {name: "Endpoint", wire: "endpoint", type: "*string", optional: true, doc: "583f58e9"}
+          - {name: "Locking", wire: "locking", type: "*bool", optional: true, doc: "62735ee1"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "82ab9f3c"}
+          - {name: "Project", wire: "project", type: "*ProjectInclude", optional: true}
+          - {name: "Region", wire: "region", type: "*ObjectStorageDataRegion", optional: true, doc: "f1567743"}
+          - {name: "RetentionMode", wire: "retention_mode", type: "*RetentionMode", optional: true, doc: "525f4396"}
+          - {name: "RetentionPeriod", wire: "retention_period", type: "*int64", optional: true, doc: "79ed1ea0"}
+          - {name: "Source", wire: "source", type: "*string", optional: true, doc: "5aeb1145"}
+          - {name: "StorageClass", wire: "storage_class", type: "*StorageClass", optional: true, doc: "706d6afe"}
+          - {name: "StorageType", wire: "storage_type", type: "*string", optional: true, doc: "d91b6c7b"}
+          - {name: "Team", wire: "team", type: "*TeamInclude", optional: true}
+          - {name: "Versioning", wire: "versioning", type: "*bool", optional: true, doc: "6e275e85"}
+      components.ObjectStorageDataCredentials:
+        doc: "8ca96dd8"
+        fields:
+          - {name: "AccessKey", wire: "access_key", type: "*string", optional: true, doc: "9a776b1d"}
+      components.ObjectStorageDataRegion:
+        doc: "bd31f726"
+        fields:
+          - {name: "City", wire: "city", type: "*string", optional: true, doc: "09f07535"}
+          - {name: "Country", wire: "country", type: "*string", optional: true, doc: "18bc1fc8"}
+          - {name: "ID", wire: "id", type: "*string", optional: true, doc: "97910c0c"}
+      components.ObjectStorageDataType:
+        enum: ["object_storages"]
+      components.ObjectStorages:
+        fields:
+          - {name: "Data", wire: "data", type: "[]ObjectStorageData", optional: true}
+      components.ProjectInclude:
+        fields:
+          - {name: "BandwidthAlert", wire: "bandwidth_alert", type: "*bool", optional: true}
+          - {name: "Billing", wire: "billing", type: "*Billing", optional: true}
+          - {name: "BillingMethod", wire: "billing_method", type: "*string", optional: true}
+          - {name: "BillingType", wire: "billing_type", type: "*string", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "Environment", wire: "environment", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "ProvisioningType", wire: "provisioning_type", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Stats", wire: "stats", type: "*ProjectIncludeStats", optional: true}
+      components.ProjectIncludeStats:
+        fields:
+          - {name: "Databases", wire: "databases", type: "*int64", optional: true}
+          - {name: "IPAddresses", wire: "ip_addresses", type: "*int64", optional: true}
+          - {name: "Prefixes", wire: "prefixes", type: "*int64", optional: true}
+          - {name: "Servers", wire: "servers", type: "*int64", optional: true}
+          - {name: "Storages", wire: "storages", type: "*int64", optional: true}
+          - {name: "VirtualMachines", wire: "virtual_machines", type: "*int64", optional: true}
+          - {name: "Vlans", wire: "vlans", type: "*int64", optional: true}
+      components.RetentionMode:
+        doc: "8903c550"
+        enum: ["COMPLIANCE", "GOVERNANCE", "NONE"]
+      components.StorageClass:
+        doc: "deec4ef8"
+        enum: ["high_performance", "standard"]
+      components.StorageUsage:
+        fields:
+          - {name: "Data", wire: "data", type: "[]StorageUsageData", optional: true}
+      components.StorageUsageAttributes:
+        fields:
+          - {name: "Bytes", wire: "bytes", type: "*int64", optional: true, doc: "9b8d6265"}
+          - {name: "Date", wire: "date", type: "*types.Date", optional: true, doc: "c6be72b1"}
+          - {name: "IngestedAt", wire: "ingested_at", type: "*time.Time", optional: true}
+          - {name: "ProjectID", wire: "project_id", type: "*int64", optional: true}
+          - {name: "RawUnit", wire: "raw_unit", type: "*string", optional: true, doc: "ec7d9282"}
+          - {name: "RawValue", wire: "raw_value", type: "*float64", optional: true, doc: "9c520f43"}
+          - {name: "Region", wire: "region", type: "*string", optional: true}
+          - {name: "StorageID", wire: "storage_id", type: "*int64", optional: true}
+          - {name: "StorageType", wire: "storage_type", type: "*string", optional: true, doc: "bf2cd021"}
+          - {name: "Tier", wire: "tier", type: "*string", optional: true, doc: "1917968f"}
+      components.StorageUsageData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*StorageUsageAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.TeamInclude:
+        fields:
+          - {name: "Address", wire: "address", type: "*string", optional: true}
+          - {name: "Currency", wire: "currency", type: "*Currency", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "FeatureFlags", wire: "feature_flags", type: "[]string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Limits", wire: "limits", type: "*Limits", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Status", wire: "status", type: "*string", optional: true}
+      operations.AccessKey:
+        doc: "d106f130"
+        fields:
+          - {name: "AccessKey", wire: "access_key", type: "*string", optional: true, doc: "2956ffe2"}
+          - {name: "AccessKeyID", wire: "access_key_id", type: "*string", optional: true, doc: "4ff17f29"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "dbf0f41f"}
+          - {name: "SecretAccessKey", wire: "secret_access_key", type: "*string", optional: true, doc: "bc8c2ed6"}
+          - {name: "SecretKey", wire: "secret_key", type: "*string", optional: true, doc: "deacb04d"}
+          - {name: "Status", wire: "status", type: "*string", optional: true, doc: "b342ffb9"}
+          - {name: "Username", wire: "username", type: "*string", optional: true, doc: "51341b7f"}
+      operations.AccessKeyStorageClass:
+        doc: "a00d7308"
+        enum: ["high_performance", "standard"]
+      operations.AccessScope:
+        doc: "38342c36"
+        enum: ["fullaccess", "limited_access"]
+      operations.BucketPermissions:
+        fields:
+          - {name: "BucketID", wire: "bucket_id", type: "string", doc: "18e25237"}
+          - {name: "Permission", wire: "permission", type: "Permission", doc: "c077558e"}
+      operations.DeleteStorageAccessKeysUsernameResponse:
+      operations.DeleteStorageBucketLifecycleRuleResponse:
+      operations.DeleteStorageBucketsResponse:
+      operations.EstimatedCost:
+        doc: "e4738251"
+        fields:
+          - {name: "Amount", wire: "amount", type: "*float64", optional: true, doc: "da903b2a"}
+          - {name: "Currency", wire: "currency", type: "*string", optional: true, doc: "5e829b5c"}
+      operations.GetStorageAccessKeysData:
+        doc: "9dd91c03"
+        fields:
+          - {name: "HighPerformance", wire: "high_performance", type: "[]HighPerformance", optional: true, doc: "f4b66966"}
+          - {name: "Standard", wire: "standard", type: "[]Standard", optional: true, doc: "45a800c0"}
+      operations.GetStorageAccessKeysResponse:
+        fields:
+          - {name: "Object", type: "*GetStorageAccessKeysResponseBody", optional: true, doc: "6d8303b0"}
+      operations.GetStorageAccessKeysResponseBody:
+        doc: "a81fe8dd"
+        fields:
+          - {name: "Data", wire: "data", type: "*GetStorageAccessKeysData", optional: true, doc: "8e15f981"}
+      operations.GetStorageBucketAccessKeysData:
+        doc: "a6d976ef"
+        fields:
+          - {name: "Access", wire: "access", type: "*string", optional: true}
+          - {name: "AccessKeyID", wire: "access_key_id", type: "*string", optional: true}
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Status", wire: "status", type: "*string", optional: true}
+          - {name: "Username", wire: "username", type: "*string", optional: true}
+      operations.GetStorageBucketAccessKeysResponse:
+        fields:
+          - {name: "Object", type: "*GetStorageBucketAccessKeysResponseBody", optional: true, doc: "6d8303b0"}
+      operations.GetStorageBucketAccessKeysResponseBody:
+        doc: "701e87db"
+        fields:
+          - {name: "Data", wire: "data", type: "[]GetStorageBucketAccessKeysData", optional: true}
+      operations.GetStorageBucketLifecycleRuleResponse:
+        fields:
+          - {name: "Object", type: "*GetStorageBucketLifecycleRuleResponseBody", optional: true, doc: "6d8303b0"}
+      operations.GetStorageBucketLifecycleRuleResponseBody:
+        doc: "28c60bcb"
+        fields:
+          - {name: "Data", wire: "data", type: "*components.LifecycleRuleData", optional: true}
+      operations.GetStorageBucketLifecycleRulesResponse:
+        fields:
+          - {name: "LifecycleRules", type: "*components.LifecycleRules", optional: true, doc: "6d8303b0"}
+      operations.GetStorageBucketMetricsAttributes:
+        fields:
+          - {name: "EstimatedCost", wire: "estimated_cost", type: "*EstimatedCost", optional: true, doc: "d09eb4b5"}
+          - {name: "Period", wire: "period", type: "*Period", optional: true, doc: "5aff074f"}
+          - {name: "Storage", wire: "storage", type: "*Storage", optional: true, doc: "582c29d8"}
+      operations.GetStorageBucketMetricsData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*GetStorageBucketMetricsAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true, doc: "a9f0bd33"}
+          - {name: "Type", wire: "type", type: "*GetStorageBucketMetricsType", optional: true}
+      operations.GetStorageBucketMetricsResponse:
+        fields:
+          - {name: "Object", type: "*GetStorageBucketMetricsResponseBody", optional: true, doc: "6d8303b0"}
+      operations.GetStorageBucketMetricsResponseBody:
+        doc: "c07c1f48"
+        fields:
+          - {name: "Data", wire: "data", type: "*GetStorageBucketMetricsData", optional: true}
+      operations.GetStorageBucketMetricsType:
+        enum: ["object_storage_metrics"]
+      operations.GetStorageBucketResponse:
+        fields:
+          - {name: "Object", type: "*GetStorageBucketResponseBody", optional: true, doc: "6d8303b0"}
+      operations.GetStorageBucketResponseBody:
+        doc: "90c63845"
+        fields:
+          - {name: "Data", wire: "data", type: "*components.ObjectStorageData", optional: true}
+      operations.GetStorageBucketsResponse:
+        fields:
+          - {name: "ObjectStorages", type: "*components.ObjectStorages", optional: true, doc: "6d8303b0"}
+      operations.GetStorageUsageResponse:
+        fields:
+          - {name: "StorageUsage", type: "*components.StorageUsage", optional: true, doc: "6d8303b0"}
+      operations.HighPerformance:
+        doc: "f778ddea"
+        fields:
+          - {name: "AccessKeyID", wire: "access_key_id", type: "*string", optional: true}
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Region", wire: "region", type: "*string", optional: true}
+          - {name: "Status", wire: "status", type: "*string", optional: true}
+          - {name: "Username", wire: "username", type: "*string", optional: true}
+      operations.PatchStorageBucketLifecycleRuleAttributes:
+        fields:
+          - {name: "AbortMpuDaysAfterInitiation", wire: "abort_mpu_days_after_initiation", type: "*int64", optional: true, doc: "3b5985c3"}
+          - {name: "Enabled", wire: "enabled", type: "*bool", optional: true, doc: "002cdef7"}
+          - {name: "ExpirationDays", wire: "expiration_days", type: "*int64", optional: true, doc: "933cec84"}
+          - {name: "Name", wire: "name", type: "string", doc: "24603342"}
+          - {name: "NoncurrentDays", wire: "noncurrent_days", type: "*int64", optional: true, doc: "50ef0040"}
+          - {name: "Prefix", wire: "prefix", type: "*string", optional: true, doc: "8ced65e7"}
+      operations.PatchStorageBucketLifecycleRuleData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "PatchStorageBucketLifecycleRuleAttributes"}
+          - {name: "Type", wire: "type", type: "PatchStorageBucketLifecycleRuleType"}
+      operations.PatchStorageBucketLifecycleRuleRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "PatchStorageBucketLifecycleRuleData"}
+      operations.PatchStorageBucketLifecycleRuleResponse:
+        fields:
+          - {name: "Object", type: "*PatchStorageBucketLifecycleRuleResponseBody", optional: true, doc: "6d8303b0"}
+      operations.PatchStorageBucketLifecycleRuleResponseBody:
+        doc: "6fa332f9"
+        fields:
+          - {name: "Data", wire: "data", type: "*components.LifecycleRuleData", optional: true}
+      operations.PatchStorageBucketLifecycleRuleType:
+        enum: ["lifecycle_rules"]
+      operations.PathParamStorageClass:
+        doc: "a33a590d"
+        enum: ["high_performance", "standard"]
+      operations.Period:
+        doc: "545f7d6b"
+        fields:
+          - {name: "End", wire: "end", type: "*time.Time", optional: true, doc: "7b5591a2"}
+          - {name: "Start", wire: "start", type: "*time.Time", optional: true, doc: "851b49f9"}
+      operations.Permission:
+        doc: "87154d1c"
+        enum: ["readonly", "rw"]
+      operations.PostStorageAccessKeysAttributes:
+        fields:
+          - {name: "AccessKeyStorageClass", wire: "storage_class", type: "AccessKeyStorageClass", doc: "d55b66e3"}
+          - {name: "AccessScope", wire: "access_scope", type: "AccessScope", doc: "21482163"}
+          - {name: "BucketPermissions", wire: "bucket_permissions", type: "[]BucketPermissions", optional: true, doc: "6176872f"}
+          - {name: "Name", wire: "name", type: "string", doc: "26dd62c4"}
+          - {name: "Project", wire: "project", type: "string", doc: "a3a5bc5c"}
+          - {name: "Region", wire: "region", type: "string", doc: "f96bffa3"}
+      operations.PostStorageAccessKeysData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "PostStorageAccessKeysAttributes"}
+          - {name: "Type", wire: "type", type: "PostStorageAccessKeysType"}
+      operations.PostStorageAccessKeysObjectStorageAttributes:
+        fields:
+          - {name: "AccessKey", wire: "access_key", type: "*AccessKey", optional: true, doc: "bf8eabd2"}
+      operations.PostStorageAccessKeysObjectStorageData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*PostStorageAccessKeysObjectStorageAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "*PostStorageAccessKeysObjectStorageType", optional: true}
+      operations.PostStorageAccessKeysObjectStorageType:
+        enum: ["access_keys"]
+      operations.PostStorageAccessKeysRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "PostStorageAccessKeysData"}
+      operations.PostStorageAccessKeysResponse:
+        fields:
+          - {name: "Object", type: "*PostStorageAccessKeysResponseBody", optional: true, doc: "09de135b"}
+      operations.PostStorageAccessKeysResponseBody:
+        doc: "e20ffc3e"
+        fields:
+          - {name: "Data", wire: "data", type: "*PostStorageAccessKeysObjectStorageData", optional: true}
+      operations.PostStorageAccessKeysType:
+        enum: ["access_keys"]
+      operations.PostStorageBucketLifecycleRulesAttributes:
+        fields:
+          - {name: "AbortMpuDaysAfterInitiation", wire: "abort_mpu_days_after_initiation", type: "*int64", optional: true, doc: "3b5985c3"}
+          - {name: "Enabled", wire: "enabled", type: "*bool", optional: true, default: "true", doc: "1f99a662"}
+          - {name: "ExpirationDays", wire: "expiration_days", type: "int64", doc: "1eeba453"}
+          - {name: "Name", wire: "name", type: "string", doc: "24603342"}
+          - {name: "NoncurrentDays", wire: "noncurrent_days", type: "*int64", optional: true, doc: "2a6098c4"}
+          - {name: "Prefix", wire: "prefix", type: "*string", optional: true, doc: "a41ce9d8"}
+      operations.PostStorageBucketLifecycleRulesData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "PostStorageBucketLifecycleRulesAttributes"}
+          - {name: "Type", wire: "type", type: "PostStorageBucketLifecycleRulesType"}
+      operations.PostStorageBucketLifecycleRulesRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "PostStorageBucketLifecycleRulesData"}
+      operations.PostStorageBucketLifecycleRulesResponse:
+        fields:
+          - {name: "Object", type: "*PostStorageBucketLifecycleRulesResponseBody", optional: true, doc: "09de135b"}
+      operations.PostStorageBucketLifecycleRulesResponseBody:
+        doc: "ef136e81"
+        fields:
+          - {name: "Data", wire: "data", type: "*components.LifecycleRuleData", optional: true}
+      operations.PostStorageBucketLifecycleRulesType:
+        enum: ["lifecycle_rules"]
+      operations.PostStorageBucketsAttributes:
+        fields:
+          - {name: "Customer", wire: "customer", type: "*string", optional: true, doc: "2e7b0663"}
+          - {name: "Locking", wire: "locking", type: "*bool", optional: true, default: "false", doc: "c79af18e"}
+          - {name: "Name", wire: "name", type: "string", doc: "4f9530ae"}
+          - {name: "Project", wire: "project", type: "string", doc: "b2158adf"}
+          - {name: "Region", wire: "region", type: "string", doc: "f2d13391"}
+          - {name: "RetentionMode", wire: "retention_mode", type: "*RetentionMode", optional: true, default: "NONE", doc: "f71b3273"}
+          - {name: "RetentionPeriod", wire: "retention_period", type: "*int64", optional: true, doc: "b8161f11"}
+          - {name: "Scoped", wire: "scoped", type: "*bool", optional: true, default: "false", doc: "c8340980"}
+          - {name: "StorageClass", wire: "storage_class", type: "*StorageClass", optional: true, default: "standard", doc: "1aef154d"}
+          - {name: "Versioning", wire: "versioning", type: "*bool", optional: true, default: "false", doc: "49d27a31"}
+      operations.PostStorageBucketsData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "PostStorageBucketsAttributes"}
+          - {name: "Type", wire: "type", type: "PostStorageBucketsType"}
+      operations.PostStorageBucketsRequestBody:
+        fields:
+          - {name: "Data", wire: "data", type: "PostStorageBucketsData"}
+      operations.PostStorageBucketsResponse:
+        fields:
+          - {name: "Object", type: "*PostStorageBucketsResponseBody", optional: true, doc: "09de135b"}
+      operations.PostStorageBucketsResponseBody:
+        doc: "5237d23f"
+        fields:
+          - {name: "Data", wire: "data", type: "*components.ObjectStorageData", optional: true}
+      operations.PostStorageBucketsType:
+        enum: ["objects"]
+      operations.RetentionMode:
+        doc: "8f204819"
+        enum: ["COMPLIANCE", "GOVERNANCE", "NONE"]
+      operations.Standard:
+        doc: "f4392b3f"
+        fields:
+          - {name: "AccessKeyID", wire: "access_key_id", type: "*string", optional: true}
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Region", wire: "region", type: "*string", optional: true}
+          - {name: "Status", wire: "status", type: "*string", optional: true}
+          - {name: "Username", wire: "username", type: "*string", optional: true}
+      operations.Storage:
+        doc: "582c29d8"
+        fields:
+          - {name: "Consumed", wire: "consumed", type: "*int64", optional: true, doc: "7567b9cf"}
+          - {name: "Current", wire: "current", type: "*int64", optional: true, doc: "324f4675"}
+          - {name: "Unit", wire: "unit", type: "*Unit", optional: true, doc: "61b5b55a"}
+      operations.StorageClass:
+        doc: "db6995c7"
+        enum: ["high_performance", "standard"]
+      operations.Unit:
+        doc: "61b5b55a"
+        enum: ["GB"]
   Plans:
     methods:
       Get: {signature: "(context.Context, string, ...operations.Option) (*operations.GetPlanResponse, error)"}
