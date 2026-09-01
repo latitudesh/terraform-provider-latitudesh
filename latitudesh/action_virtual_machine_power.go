@@ -300,7 +300,7 @@ func waitForVirtualMachineStatus(
 		case <-ctx.Done():
 			diags.AddError("Context Cancelled", fmt.Sprintf("Virtual machine %s was cancelled", operation))
 			return
-		case <-time.After(vmPowerPollInterval):
+		case <-time.After(boundedPollSleep(deadline, vmPowerPollInterval)):
 		}
 	}
 

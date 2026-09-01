@@ -197,7 +197,7 @@ func waitForServerTargetStatus(
 		case <-ctx.Done():
 			diags.AddError("Context Cancelled", fmt.Sprintf("Server %s was cancelled", operation))
 			return
-		case <-time.After(pollInterval):
+		case <-time.After(boundedPollSleep(deadline, pollInterval)):
 			// Continue to next iteration
 		}
 	}
@@ -241,4 +241,16 @@ func isServerStatusTerminal(targetStatus, initialStatus, currentStatus string, s
 // deploy-like operation waits for.
 func isReinstallTerminal(initialStatus, currentStatus string, sawTransition bool) (terminal, success bool) {
 	return isServerStatusTerminal("on", initialStatus, currentStatus, sawTransition)
+}
+
+// boundedPollSleep caps a poll sleep at the time remaining until deadline, so
+// a wait_timeout shorter than the poll interval expires when configured rather
+// than after one full interval. A remaining duration of zero or less makes
+// time.After fire immediately, which hands control back to the loop's deadline
+// check.
+func boundedPollSleep(deadline time.Time, interval time.Duration) time.Duration {
+	if remaining := time.Until(deadline); remaining < interval {
+		return remaining
+	}
+	return interval
 }

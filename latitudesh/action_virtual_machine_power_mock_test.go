@@ -260,6 +260,23 @@ func TestAccVirtualMachinePowerAction_RebootReturnsOnAcceptance(t *testing.T) {
 	})
 }
 
+// A status that never reaches the target must surface the timeout diagnostic —
+// and, with the poll sleep capped at the remaining time, a wait_timeout below
+// the poll interval expires on schedule instead of one interval late.
+func TestAccVirtualMachinePowerAction_TimeoutSurfaces(t *testing.T) {
+	_, server := newVMPowerMock(t, 0, "Running")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccVMPowerActionConfig("power_off", `    wait_timeout = "200ms"`),
+				ExpectError: regexp.MustCompile(`Virtual\s+Machine\s+power_off\s+Timeout`),
+			},
+		},
+	})
+}
+
 func TestAccVirtualMachinePowerAction_NoWaitSkipsPolling(t *testing.T) {
 	mock, server := newVMPowerMock(t, 0, "Running")
 

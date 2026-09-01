@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sync"
 	"testing"
 	"time"
@@ -246,6 +247,32 @@ func TestAccServerPowerAction_RebootReturnsOnAcceptance(t *testing.T) {
 			},
 		},
 	})
+}
+
+// The regression this guards: the poll sleep used to run a full interval past
+// the deadline, so a wait_timeout of 1s took ~30s to expire against the
+// production interval. This test deliberately does NOT shorten
+// serverPollInterval — with the sleep capped at the remaining time, the 1s
+// timeout must surface in about 1s, nowhere near the 30s interval.
+func TestAccServerPowerAction_ShortTimeoutExpiresOnSchedule(t *testing.T) {
+	mock := &serverPowerMock{statuses: []string{"off"}}
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	t.Cleanup(server.Close)
+
+	start := time.Now()
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccServerPowerActionConfig("power_on", `    wait_timeout = "1s"`),
+				ExpectError: regexp.MustCompile(`Server power_on Timeout`),
+			},
+		},
+	})
+
+	if elapsed := time.Since(start); elapsed > 15*time.Second {
+		t.Fatalf("a 1s wait_timeout took %v to expire; the poll sleep is overrunning the deadline", elapsed)
+	}
 }
 
 func TestAccServerPowerAction_NoWaitSkipsPolling(t *testing.T) {

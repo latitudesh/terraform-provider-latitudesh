@@ -174,6 +174,22 @@ func TestProviderActionWaitTimeout(t *testing.T) {
 	}
 }
 
+// A wait_timeout shorter than the poll interval must expire when configured,
+// not one full interval later.
+func TestProviderBoundedPollSleep(t *testing.T) {
+	interval := 30 * time.Second
+
+	if got := boundedPollSleep(time.Now().Add(time.Hour), interval); got != interval {
+		t.Errorf("distant deadline: sleep = %v, want the full interval %v", got, interval)
+	}
+	if got := boundedPollSleep(time.Now().Add(5*time.Millisecond), interval); got > 5*time.Millisecond {
+		t.Errorf("near deadline: sleep = %v, want at most the 5ms remaining", got)
+	}
+	if got := boundedPollSleep(time.Now().Add(-time.Second), interval); got > 0 {
+		t.Errorf("past deadline: sleep = %v, want <= 0 so the loop re-checks immediately", got)
+	}
+}
+
 // The wait must not require a transition for any power action: a reboot that
 // completes between two polls reads "on" from start to finish, and requiring a
 // transition would turn that into a false timeout.
