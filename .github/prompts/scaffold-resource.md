@@ -127,6 +127,18 @@ duplicate.** They are also off-limits to edit. If this group needs a validator o
 plan modifier that is not there, use plain schema constraints or
 `terraform-plugin-framework-validators`, and record the gap in the handoff.
 
+**Curate attributes for provisioning, not catalog browsing.** Do not mirror
+every SDK field into the schema. Map what a practitioner needs to select, size,
+and deploy: identifiers (id/slug/name), filterable classifiers (category, type),
+capacity and compatibility (system requirements, compatible plans), and deploy
+inputs (version, default OS, deployment strategy). Leave out presentation-only
+metadata: marketing descriptions, logo/image URLs, external links
+(documentation/upstream), catalog timestamps such as `created_at`, and
+post-deploy instructions written for humans. Record every deliberately omitted
+field in the group's `notes:` in `sdk-coverage.yaml` ("not exposed by team
+decision — <why>") so the field-drift agent treats the omission as binding
+instead of mapping the field back later.
+
 ## Tests — three tiers, and you owe two of them
 
 | Tier | Runs when | Name |

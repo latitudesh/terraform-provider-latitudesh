@@ -44,18 +44,11 @@ data "latitudesh_marketplace_app" "by_id" {
 
 ### Read-Only
 
-- `access_instructions` (String) Instructions for accessing the app after deployment.
 - `category` (String) Category the marketplace app belongs to.
 - `compatible_plans` (List of String) Server plan slugs compatible with this marketplace app.
-- `created_at` (String) Timestamp when the marketplace app was created.
 - `default_operating_system` (String) Default operating system used to deploy the app.
 - `deployment_strategy` (String) How the app is delivered: cloud-init install on a stock OS image (`user_data`) or a pre-built disk image (`image`).
-- `description` (String) Full description of the marketplace app.
-- `documentation_url` (String) URL of the app's documentation.
-- `logo_url` (String) URL of the app's logo image.
-- `short_description` (String) Short description of the marketplace app.
 - `system_requirements` (Attributes) Minimum system requirements to run the marketplace app. (see [below for nested schema](#nestedatt--system_requirements))
-- `upstream_url` (String) URL of the upstream project.
 - `version` (String) Version of the marketplace app.
 
 <a id="nestedatt--system_requirements"></a>
