@@ -138,14 +138,15 @@ groups:
     notes: Ships as both a resource and a data source under the same type name.
 
   Servers:
-    implemented_by: [latitudesh_server, latitudesh_server_reinstall]
+    implemented_by: [latitudesh_server, latitudesh_server_reinstall, latitudesh_server_power]
     notes: >-
       Lock/Unlock/GetDeployConfig are folded into the resource's create and update
       paths rather than exposed separately. Reinstall is folded in too (an update
       that changes a reinstall-only field) and additionally exposed as the
       latitudesh_server_reinstall action, for reinstalling without changing
-      desired state. The remaining actions (RunAction, rescue mode, IPMI,
-      out-of-band, scheduled deletion) are deliberately not exposed.
+      desired state. RunAction is exposed as the latitudesh_server_power action
+      (DX-144). The remaining operations (rescue mode, IPMI, out-of-band,
+      scheduled deletion) are planned as further DX-144/DX-145 work.
 
       v1.19.17 drift closure (lock synced 2026-08-29): mapped
       components.ServerDataAttributes.legacy_network -> new Computed
@@ -228,13 +229,15 @@ groups:
     notes: Also read by the server resource to hash user-data content.
 
   VirtualMachines:
-    implemented_by: [latitudesh_virtual_machine]
+    implemented_by: [latitudesh_virtual_machine, latitudesh_virtual_machine_power]
     notes: >-
       Network attachments and metrics are not exposed. Note the update method is
       UpdateVirtualMachine, not Update. marketplace_app is exposed as a
       slug-only string attribute (mirroring how operating_system exposes only
       Slug); the nested name/version fields on
       VirtualMachineAttributesMarketplaceApp are deliberately not surfaced.
+      CreateVirtualMachineAction is exposed as the latitudesh_virtual_machine_power
+      action (DX-144).
 
   VirtualNetworks:
     implemented_by: [latitudesh_virtual_network]

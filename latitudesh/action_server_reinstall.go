@@ -248,20 +248,9 @@ func (a *ServerReinstallAction) Invoke(ctx context.Context, req action.InvokeReq
 	}, &resp.Diagnostics)
 }
 
-// reinstallWaitTimeout resolves wait_timeout, which is a plain string rather than
-// the resource timeouts block: that helper only covers resources and data sources.
+// reinstallWaitTimeout resolves wait_timeout with the reinstall default.
 func reinstallWaitTimeout(configured types.String) (time.Duration, error) {
-	if configured.IsNull() || configured.IsUnknown() || configured.ValueString() == "" {
-		return defaultReinstallWait, nil
-	}
-	timeout, err := time.ParseDuration(configured.ValueString())
-	if err != nil {
-		return 0, fmt.Errorf("%q is not a valid duration: %w", configured.ValueString(), err)
-	}
-	if timeout <= 0 {
-		return 0, fmt.Errorf("%q must be a positive duration", configured.ValueString())
-	}
-	return timeout, nil
+	return actionWaitTimeout(configured, defaultReinstallWait)
 }
 
 // reinstallAttributesFromAction mirrors ServerResource.reinstallServer, but reads

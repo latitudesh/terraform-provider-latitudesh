@@ -1,0 +1,32 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Runs a power action on a [Latitude.sh](https://latitude.sh/) virtual machine: `power_on`, `power_off`, or `reboot`.
+
+The `latitudesh_virtual_machine` resource has no attribute describing power state, so these operations have no declarative home. The action is how you drive them from Terraform: nothing about desired state changes, and invoking it never drifts the resource.
+
+~> **Requires Terraform v1.14 or later.** Actions are not available on earlier CLI versions.
+
+## Example usage
+
+{{ tffile .ExampleFile }}
+
+Invoke it directly, outside of any resource change:
+
+```sh
+terraform apply -invoke=action.latitudesh_virtual_machine_power.reboot
+```
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Behavior
+
+- **`wait_for_status` defaults to `true`**, so `power_on` blocks until the machine reports `Running` and `power_off` until it reports `Stopped`, failing if it lands in `Failed`. Status changes are streamed as progress events while it waits. The reported status is pushed by event watchers, so it typically settles within seconds — but the first polls may still read the pre-action status.
+- **`reboot` returns as soon as the API accepts it.** A restart tears the instance down and brings it back to the status it started from, so there is no target a wait could distinguish from "never went down". `wait_for_status` and `wait_timeout` have no effect for it, and setting them raises a config warning.
+- **The action does not update Terraform state.** A virtual machine powered off through this action still satisfies its `latitudesh_virtual_machine` resource on the next plan.

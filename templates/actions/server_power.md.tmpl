@@ -1,0 +1,33 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Runs a power action on a [Latitude.sh](https://latitude.sh/) server: `power_on`, `power_off`, or `reboot`.
+
+The `latitudesh_server` resource has no attribute describing power state, so these operations have no declarative home. The action is how you drive them from Terraform: nothing about desired state changes, and invoking it never drifts the resource.
+
+~> **Requires Terraform v1.14 or later.** Actions are not available on earlier CLI versions.
+
+## Example usage
+
+{{ tffile .ExampleFile }}
+
+Invoke it directly, outside of any resource change:
+
+```sh
+terraform apply -invoke=action.latitudesh_server_power.reboot
+```
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Behavior
+
+- **`wait_for_status` defaults to `true`**, so `power_on` blocks until the server reports `on` and `power_off` until it reports `off`. Status changes are streamed as progress events while it waits. The reported status is refreshed by a background sync, so expect some lag between the machine changing state and the wait observing it.
+- **`reboot` returns as soon as the API accepts it.** A reboot is a warm reset: power never drops, the server's status reads `on` before, during, and after, and the API reports no action progress — so there is nothing a wait could observe. `wait_for_status` and `wait_timeout` have no effect for it, and setting them raises a config warning.
+- **Powering off a server does not pause billing.** The machine stays allocated to you; it is just powered down.
+- **The action does not update Terraform state.** A server powered off through this action still satisfies its `latitudesh_server` resource on the next plan.

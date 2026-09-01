@@ -203,5 +203,7 @@ func (p *latitudeshProvider) DataSources(ctx context.Context) []func() datasourc
 func (p *latitudeshProvider) Actions(ctx context.Context) []func() action.Action {
 	return []func() action.Action{
 		NewServerReinstallAction,
+		NewServerPowerAction,
+		NewVirtualMachinePowerAction,
 	}
 }
