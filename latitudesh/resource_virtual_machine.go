@@ -50,6 +50,7 @@ type VirtualMachineResourceModel struct {
 	Plan            types.String   `tfsdk:"plan"`
 	Project         types.String   `tfsdk:"project"`
 	OperatingSystem types.String   `tfsdk:"operating_system"`
+	MarketplaceApp  types.String   `tfsdk:"marketplace_app"`
 	Billing         types.String   `tfsdk:"billing"`
 	SSHKeys         types.List     `tfsdk:"ssh_keys"`
 	Status          types.String   `tfsdk:"status"`
@@ -119,6 +120,24 @@ func (r *VirtualMachineResource) Schema(ctx context.Context, req resource.Schema
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"marketplace_app": schema.StringAttribute{
+				MarkdownDescription: "A marketplace app reference (slug, e.g. `openclaw`, or encoded id_hash) to preinstall on the virtual machine via cloud-init. Cannot be combined with `operating_system`; the app defines its own. Changing a configured value forces a new resource; removing it from the configuration does not (the app stays installed).",
+				Optional:            true,
+				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					// The app is installed at provision time only: the update API
+					// takes no marketplace_app, so an in-place change would leave
+					// state claiming an app that was never installed.
+					//
+					// IfConfigured, not the unconditional RequiresReplace: this
+					// attribute is Optional+Computed, so on any plan that changes
+					// something else the framework marks the unconfigured null as
+					// unknown. Comparing that unknown against a null state would
+					// read as a change, and renaming a VM that uses no marketplace
+					// app would destroy and recreate it.
+					stringplanmodifier.RequiresReplaceIfConfigured(),
 				},
 			},
 			"billing": schema.StringAttribute{
@@ -226,6 +245,11 @@ func (r *VirtualMachineResource) Create(ctx context.Context, req resource.Create
 	if !data.OperatingSystem.IsNull() && !data.OperatingSystem.IsUnknown() && data.OperatingSystem.ValueString() != "" {
 		os := data.OperatingSystem.ValueString()
 		attrs.OperatingSystem = &os
+	}
+
+	if !data.MarketplaceApp.IsNull() && !data.MarketplaceApp.IsUnknown() && data.MarketplaceApp.ValueString() != "" {
+		marketplaceApp := data.MarketplaceApp.ValueString()
+		attrs.MarketplaceApp = &marketplaceApp
 	}
 
 	if !data.Billing.IsNull() && !data.Billing.IsUnknown() && data.Billing.ValueString() != "" {
@@ -609,6 +633,10 @@ func (r *VirtualMachineResource) readVirtualMachine(ctx context.Context, data *V
 
 	if (data.OperatingSystem.IsNull() || data.OperatingSystem.IsUnknown()) && a.OperatingSystem != nil && a.OperatingSystem.Slug != nil {
 		data.OperatingSystem = types.StringValue(*a.OperatingSystem.Slug)
+	}
+
+	if (data.MarketplaceApp.IsNull() || data.MarketplaceApp.IsUnknown()) && a.MarketplaceApp != nil && a.MarketplaceApp.Slug != nil {
+		data.MarketplaceApp = types.StringValue(*a.MarketplaceApp.Slug)
 	}
 
 	if (data.Plan.IsNull() || data.Plan.IsUnknown()) && a.Plan != nil && a.Plan.ID != nil {

@@ -235,7 +235,10 @@ groups:
     implemented_by: [latitudesh_virtual_machine]
     notes: >-
       Network attachments and metrics are not exposed. Note the update method is
-      UpdateVirtualMachine, not Update.
+      UpdateVirtualMachine, not Update. marketplace_app is exposed as a
+      slug-only string attribute (mirroring how operating_system exposes only
+      Slug); the nested name/version fields on
+      VirtualMachineAttributesMarketplaceApp are deliberately not surfaced.
 
   VirtualNetworks:
     implemented_by: [latitudesh_virtual_network]
@@ -273,6 +276,13 @@ groups:
       becomes generally available. Shape context: the API genuinely has no
       single-item read (confirmed against the routes), so import support would
       need thought — an API limitation, not a spec gap.
+
+  IPAddresses:
+    ceiling: none
+    rationale: api_constraint
+    notes: >-
+      The /ips collection is not settled enough yet to model as a data source.
+      Revisit on a later SDK bump.
 
   KubernetesClusters:
     ceiling: none
