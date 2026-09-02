@@ -359,6 +359,9 @@ func (r *ObjectStorageResource) readObjectStorageInto(ctx context.Context, data 
 		data.Name = types.StringValue(*a.Name)
 	}
 
+	// Purely-computed fields (known only after apply) are set to null when the
+	// API omits them, so a create never leaves an unknown value in state. In
+	// practice the API always returns these for an existing bucket.
 	if a.BucketName != nil {
 		data.BucketName = types.StringValue(*a.BucketName)
 	} else {
@@ -371,40 +374,10 @@ func (r *ObjectStorageResource) readObjectStorageInto(ctx context.Context, data 
 		data.StorageType = types.StringNull()
 	}
 
-	if a.StorageClass != nil {
-		data.StorageClass = types.StringValue(string(*a.StorageClass))
-	} else {
-		data.StorageClass = types.StringNull()
-	}
-
 	if a.Endpoint != nil {
 		data.Endpoint = types.StringValue(*a.Endpoint)
 	} else {
 		data.Endpoint = types.StringNull()
-	}
-
-	if a.Versioning != nil {
-		data.Versioning = types.BoolValue(*a.Versioning)
-	} else {
-		data.Versioning = types.BoolNull()
-	}
-
-	if a.Locking != nil {
-		data.Locking = types.BoolValue(*a.Locking)
-	} else {
-		data.Locking = types.BoolNull()
-	}
-
-	if a.RetentionMode != nil {
-		data.RetentionMode = types.StringValue(string(*a.RetentionMode))
-	} else {
-		data.RetentionMode = types.StringNull()
-	}
-
-	if a.RetentionPeriod != nil {
-		data.RetentionPeriod = types.Int64Value(*a.RetentionPeriod)
-	} else {
-		data.RetentionPeriod = types.Int64Null()
 	}
 
 	if a.Source != nil {
@@ -417,6 +390,32 @@ func (r *ObjectStorageResource) readObjectStorageInto(ctx context.Context, data 
 		data.CreatedAt = types.StringValue(a.CreatedAt.Format("2006-01-02T15:04:05Z07:00"))
 	} else {
 		data.CreatedAt = types.StringNull()
+	}
+
+	// Configured/defaulted fields always carry a concrete value in the plan and
+	// prior state (schema defaults for storage_class/versioning/locking/
+	// retention_mode; a user value or null for retention_period). The API may
+	// omit them from a response, so only overwrite when a value is present:
+	// writing null on absence would clobber the default and yield an
+	// inconsistent-state error after apply or recurring drift on refresh.
+	if a.StorageClass != nil {
+		data.StorageClass = types.StringValue(string(*a.StorageClass))
+	}
+
+	if a.Versioning != nil {
+		data.Versioning = types.BoolValue(*a.Versioning)
+	}
+
+	if a.Locking != nil {
+		data.Locking = types.BoolValue(*a.Locking)
+	}
+
+	if a.RetentionMode != nil {
+		data.RetentionMode = types.StringValue(string(*a.RetentionMode))
+	}
+
+	if a.RetentionPeriod != nil {
+		data.RetentionPeriod = types.Int64Value(*a.RetentionPeriod)
 	}
 
 	// The region sub-object (city/country) is an expansion of the site slug
