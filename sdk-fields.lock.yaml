@@ -5,7 +5,7 @@
 # See CONTRIBUTING.md, "Field drift".
 version: 1
 sdk_module: github.com/latitudesh/latitudesh-go-sdk
-sdk_version: v1.19.17
+sdk_version: v1.19.19
 groups:
   Billing:
     methods:
@@ -687,31 +687,22 @@ groups:
           - {name: "Specs", wire: "specs", type: "*Specs", optional: true}
       components.PlanDataAttributesType:
         enum: ["HDD", "NVME", "SSD"]
-      components.PlanDataBRL:
-        fields:
-          - {name: "Hour", wire: "hour", type: "*float64", optional: true}
-          - {name: "Month", wire: "month", type: "*float64", optional: true}
-          - {name: "Year", wire: "year", type: "*float64", optional: true}
       components.PlanDataFeatures:
         enum: ["raid", "sev", "ssh", "user_data"]
       components.PlanDataPricing:
         fields:
-          - {name: "Brl", wire: "BRL", type: "*PlanDataBRL", optional: true}
-          - {name: "Usd", wire: "USD", type: "*PlanDataUSD", optional: true}
+          - {name: "Hour", wire: "hour", type: "*float64", optional: true}
+          - {name: "Month", wire: "month", type: "*float64", optional: true}
+          - {name: "Year", wire: "year", type: "*float64", optional: true}
       components.PlanDataRegions:
         fields:
           - {name: "DeploysInstantly", wire: "deploys_instantly", type: "[]string", optional: true}
           - {name: "Locations", wire: "locations", type: "*Locations", optional: true}
           - {name: "Name", wire: "name", type: "*string", optional: true}
-          - {name: "Pricing", wire: "pricing", type: "*PlanDataPricing", optional: true}
+          - {name: "Pricing", wire: "pricing", type: "map[string]PlanDataPricing", optional: true, doc: "d09ca134"}
           - {name: "StockLevel", wire: "stock_level", type: "*StockLevel", optional: true}
       components.PlanDataType:
         enum: ["plans"]
-      components.PlanDataUSD:
-        fields:
-          - {name: "Hour", wire: "hour", type: "*float64", optional: true}
-          - {name: "Month", wire: "month", type: "*float64", optional: true}
-          - {name: "Year", wire: "year", type: "*float64", optional: true}
       components.PlanMeta:
       components.Pricing:
         fields:
@@ -740,23 +731,16 @@ groups:
           - {name: "Regions", wire: "regions", type: "[]StoragePlanDataRegions", optional: true}
           - {name: "StoragePlanStorageClass", wire: "storage_class", type: "*StoragePlanStorageClass", optional: true}
           - {name: "StoragePlanStorageType", wire: "storage_type", type: "*StoragePlanStorageType", optional: true}
-      components.StoragePlanDataBRL:
-        fields:
-          - {name: "Month", wire: "month", type: "*float64", optional: true}
       components.StoragePlanDataPricing:
         fields:
-          - {name: "Brl", wire: "BRL", type: "*StoragePlanDataBRL", optional: true}
-          - {name: "Usd", wire: "USD", type: "*StoragePlanDataUSD", optional: true}
+          - {name: "Month", wire: "month", type: "*float64", optional: true}
       components.StoragePlanDataRegions:
         fields:
           - {name: "Locations", wire: "locations", type: "[]string", optional: true}
           - {name: "Name", wire: "name", type: "*string", optional: true}
-          - {name: "Pricing", wire: "pricing", type: "*StoragePlanDataPricing", optional: true}
+          - {name: "Pricing", wire: "pricing", type: "map[string]StoragePlanDataPricing", optional: true, doc: "d09ca134"}
       components.StoragePlanDataType:
         enum: ["storage_plans"]
-      components.StoragePlanDataUSD:
-        fields:
-          - {name: "Month", wire: "month", type: "*float64", optional: true}
       components.StoragePlanStorageClass:
         enum: ["high_performance", "standard"]
       components.StoragePlanStorageType:

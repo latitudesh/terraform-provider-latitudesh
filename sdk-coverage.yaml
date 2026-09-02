@@ -115,7 +115,39 @@ groups:
 
   Plans:
     implemented_by: [latitudesh_plan]
-    notes: Data source. UpdateBandwidth is not wired up, hence the -RU- shape.
+    notes: >-
+      Data source. UpdateBandwidth is not wired up, hence the -RU- shape.
+      GetBandwidth, GetManagedDatabasePlans and ListStorage are likewise
+      unmapped — latitudesh_plan only calls Get and List. StoragePlanData
+      (the model behind ListStorage) has no backing Terraform type at all.
+
+      v1.19.19 drift closure (lock synced 2026-09-02): no mapping change.
+      components.PlanDataAttributes.Regions (and, on the storage side,
+      StoragePlanDataAttributes.Regions) has never been exposed by
+      latitudesh_plan — the schema only surfaces slug/name/features/specs;
+      regions, pricing and available_operating_systems are absent from both
+      the schema and the Read mapping today, predating this drift. This PR
+      continues that boundary rather than deciding it fresh.
+
+      Deliberately left unmapped (all under the unmapped Regions surface):
+      - components.PlanDataPricing.BRL/.USD (removed) and their backing
+        components.PlanDataBRL/.PlanDataUSD models (removed): the currency
+        struct fields are gone from the SDK, replaced by
+        components.PlanDataPricing.hour/.month/.year (new *float64 fields).
+      - components.PlanDataRegions.pricing: type changed from
+        *PlanDataPricing to map[string]PlanDataPricing (now keyed by ISO
+        4217 currency code per the updated SDK doc comment) — a shape change
+        to a field this data source never read.
+      - The identical BRL/USD -> flat-pricing shape change on the storage
+        side: components.StoragePlanDataPricing.BRL/.USD (removed) and their
+        components.StoragePlanDataBRL/.StoragePlanDataUSD models (removed),
+        components.StoragePlanDataPricing.month (new), and
+        components.StoragePlanDataRegions.pricing (type changed from
+        *StoragePlanDataPricing to map[string]StoragePlanDataPricing).
+
+      Reopen this if a future PR decides to expose plan/region pricing as a
+      new attribute — see the handoff for the v1.19.19 drift PR for the
+      reviewer flag.
 
   PrivateNetworks:
     implemented_by: [latitudesh_virtual_network, latitudesh_vlan_assignment]
