@@ -12,7 +12,7 @@ output "backups_endpoint" {
 }
 
 data "latitudesh_object_storage" "by_id" {
-  id = "bucket_..."
+  id = "bkt_..."
 }
 
 data "latitudesh_object_storage" "by_name" {

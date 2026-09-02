@@ -26,7 +26,7 @@ output "backups_endpoint" {
 }
 
 data "latitudesh_object_storage" "by_id" {
-  id = "bucket_..."
+  id = "bkt_..."
 }
 
 data "latitudesh_object_storage" "by_name" {
@@ -48,13 +48,11 @@ data "latitudesh_object_storage" "by_name" {
 
 - `bucket_name` (String) S3-compatible bucket name.
 - `created_at` (String) The timestamp for when the object storage was created.
-- `customer` (String) Customer identifier for scoped storage.
 - `endpoint` (String) Region-specific S3-compatible endpoint URL for accessing the bucket.
 - `locking` (Boolean) Whether S3 Object Lock (WORM) is enabled.
 - `region` (String) Site slug representing the region (e.g. `DAL`, `SAO2`).
 - `retention_mode` (String) Object Lock retention mode applied to new objects (`NONE`, `GOVERNANCE`, or `COMPLIANCE`).
 - `retention_period` (Number) Default retention period, in days, applied to new objects when Object Lock is enabled.
-- `scoped` (Boolean) Whether this is a scoped storage bucket, isolated to a specific customer context.
 - `source` (String) How the bucket originated: `default` for buckets created through the API, or `synchronized` for buckets imported from the storage provider.
 - `storage_class` (String) Backend storage tier (`standard` or `high_performance`).
 - `storage_type` (String) Type of storage (e.g. `object`).

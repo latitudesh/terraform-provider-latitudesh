@@ -46,8 +46,6 @@ type ObjectStorageResourceModel struct {
 	Project         types.String `tfsdk:"project"`
 	Name            types.String `tfsdk:"name"`
 	Region          types.String `tfsdk:"region"`
-	Scoped          types.Bool   `tfsdk:"scoped"`
-	Customer        types.String `tfsdk:"customer"`
 	StorageClass    types.String `tfsdk:"storage_class"`
 	Versioning      types.Bool   `tfsdk:"versioning"`
 	Locking         types.Bool   `tfsdk:"locking"`
@@ -94,22 +92,6 @@ func (r *ObjectStorageResource) Schema(ctx context.Context, req resource.SchemaR
 			"region": schema.StringAttribute{
 				MarkdownDescription: "Site slug representing the region (e.g. `DAL`, `SAO2`). Changing this forces a new resource.",
 				Required:            true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
-			},
-			"scoped": schema.BoolAttribute{
-				MarkdownDescription: "Whether to create a scoped storage bucket, isolated to a specific customer context. Defaults to `false`. Changing this forces a new resource.",
-				Optional:            true,
-				Computed:            true,
-				Default:             booldefault.StaticBool(false),
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.RequiresReplace(),
-				},
-			},
-			"customer": schema.StringAttribute{
-				MarkdownDescription: "Customer identifier for scoped storage. Used when `scoped` is `true` to create customer-specific bucket isolation. Changing this forces a new resource.",
-				Optional:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -228,14 +210,6 @@ func (r *ObjectStorageResource) Create(ctx context.Context, req resource.CreateR
 		Region:  data.Region.ValueString(),
 	}
 
-	if !data.Scoped.IsNull() && !data.Scoped.IsUnknown() {
-		scoped := data.Scoped.ValueBool()
-		attrs.Scoped = &scoped
-	}
-	if !data.Customer.IsNull() && !data.Customer.IsUnknown() && data.Customer.ValueString() != "" {
-		customer := data.Customer.ValueString()
-		attrs.Customer = &customer
-	}
 	if !data.StorageClass.IsNull() && !data.StorageClass.IsUnknown() {
 		storageClass := operations.StorageClass(data.StorageClass.ValueString())
 		attrs.StorageClass = &storageClass

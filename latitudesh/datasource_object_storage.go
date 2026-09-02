@@ -41,8 +41,6 @@ type ObjectStorageDataSourceModel struct {
 
 	// Attributes
 	Region          types.String `tfsdk:"region"`
-	Scoped          types.Bool   `tfsdk:"scoped"`
-	Customer        types.String `tfsdk:"customer"`
 	StorageClass    types.String `tfsdk:"storage_class"`
 	Versioning      types.Bool   `tfsdk:"versioning"`
 	Locking         types.Bool   `tfsdk:"locking"`
@@ -94,14 +92,6 @@ func (d *ObjectStorageDataSource) Schema(ctx context.Context, req datasource.Sch
 			},
 			"region": schema.StringAttribute{
 				MarkdownDescription: "Site slug representing the region (e.g. `DAL`, `SAO2`).",
-				Computed:            true,
-			},
-			"scoped": schema.BoolAttribute{
-				MarkdownDescription: "Whether this is a scoped storage bucket, isolated to a specific customer context.",
-				Computed:            true,
-			},
-			"customer": schema.StringAttribute{
-				MarkdownDescription: "Customer identifier for scoped storage.",
 				Computed:            true,
 			},
 			"storage_class": schema.StringAttribute{

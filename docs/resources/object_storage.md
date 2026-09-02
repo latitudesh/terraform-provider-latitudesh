@@ -26,7 +26,7 @@ output "backups_endpoint" {
 }
 
 data "latitudesh_object_storage" "by_id" {
-  id = "bucket_..."
+  id = "bkt_..."
 }
 
 data "latitudesh_object_storage" "by_name" {
@@ -45,12 +45,10 @@ data "latitudesh_object_storage" "by_name" {
 
 ### Optional
 
-- `customer` (String) Customer identifier for scoped storage. Used when `scoped` is `true` to create customer-specific bucket isolation. Changing this forces a new resource.
 - `locking` (Boolean) Enable S3 Object Lock (WORM). Must be enabled at bucket creation; cannot be added to an existing bucket. When `true`, `versioning` is automatically enabled. Defaults to `false`. Changing this forces a new resource.
 - `project` (String) The project (ID or slug) to create the bucket in. Optional here only if `project` is set on the provider block; one of the two is required. Changing it forces a new resource.
 - `retention_mode` (String) Object Lock retention mode applied to new objects. `GOVERNANCE` allows privileged users to override the retention; `COMPLIANCE` cannot be overridden by anyone. Only applies when `locking` is `true`. Defaults to `NONE`. Changing this forces a new resource.
 - `retention_period` (Number) Default retention period, in days, applied to new objects when Object Lock is enabled. Only applies when `locking` is `true`. Changing this forces a new resource.
-- `scoped` (Boolean) Whether to create a scoped storage bucket, isolated to a specific customer context. Defaults to `false`. Changing this forces a new resource.
 - `storage_class` (String) Backend storage tier. `standard` is the default S3-compatible tier. `high_performance` is a lower-latency, higher-throughput tier available in select regions only. Changing this forces a new resource.
 - `versioning` (Boolean) Enable S3 object versioning. Versioning can be suspended later unless Object Lock is enabled; enabling Object Lock requires versioning and prevents versioning from being suspended. Defaults to `false`. Changing this forces a new resource (there is no update endpoint to suspend it in place).
 

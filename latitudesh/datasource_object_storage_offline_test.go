@@ -8,9 +8,9 @@ import (
 
 func TestMatchObjectStorageByName(t *testing.T) {
 	data := []components.ObjectStorageData{
-		{ID: strPtr("bucket_1"), Attributes: &components.ObjectStorageDataAttributes{Name: strPtr("app-backups")}},
-		{ID: strPtr("bucket_2"), Attributes: &components.ObjectStorageDataAttributes{Name: strPtr(" logs ")}},
-		{ID: strPtr("bucket_3"), Attributes: nil},
+		{ID: strPtr("bkt_1"), Attributes: &components.ObjectStorageDataAttributes{Name: strPtr("app-backups")}},
+		{ID: strPtr("bkt_2"), Attributes: &components.ObjectStorageDataAttributes{Name: strPtr(" logs ")}},
+		{ID: strPtr("bkt_3"), Attributes: nil},
 	}
 
 	cases := []struct {
@@ -18,8 +18,8 @@ func TestMatchObjectStorageByName(t *testing.T) {
 		query  string
 		wantID string
 	}{
-		{"exact match", "app-backups", "bucket_1"},
-		{"match ignores surrounding whitespace on stored name", "logs", "bucket_2"},
+		{"exact match", "app-backups", "bkt_1"},
+		{"match ignores surrounding whitespace on stored name", "logs", "bkt_2"},
 		{"no match", "does-not-exist", ""},
 	}
 
@@ -43,7 +43,7 @@ func TestMatchObjectStorageByName(t *testing.T) {
 // than dereferencing a nil pointer.
 func TestMatchObjectStorageByNameNilAttributes(t *testing.T) {
 	data := []components.ObjectStorageData{
-		{ID: strPtr("bucket_3"), Attributes: nil},
+		{ID: strPtr("bkt_3"), Attributes: nil},
 	}
 
 	if got := matchObjectStorageByName(data, "anything"); got != nil {

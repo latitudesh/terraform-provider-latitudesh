@@ -10,6 +10,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/action"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -22,6 +23,7 @@ import (
 // Ensure latitudeshProvider satisfies various provider interfaces
 var _ provider.Provider = &latitudeshProvider{}
 var _ provider.ProviderWithActions = &latitudeshProvider{}
+var _ provider.ProviderWithEphemeralResources = &latitudeshProvider{}
 
 // latitudeshProvider defines the provider implementation.
 type latitudeshProvider struct {
@@ -131,7 +133,10 @@ func (p *latitudeshProvider) Configure(ctx context.Context, req provider.Configu
 		baseTransport = http.DefaultTransport
 	}
 	httpClient := &http.Client{
-		Transport:     &userAgentTransport{base: baseTransport, userAgent: userAgent},
+		Transport: &userAgentTransport{
+			base:      &objectStorageSanitizerTransport{base: baseTransport},
+			userAgent: userAgent,
+		},
 		Timeout:       baseClient.Timeout,
 		CheckRedirect: baseClient.CheckRedirect,
 		Jar:           baseClient.Jar,
@@ -161,11 +166,12 @@ func (p *latitudeshProvider) Configure(ctx context.Context, req provider.Configu
 	}
 
 	// Each of these is a separate field on purpose: the framework hands resources,
-	// data sources and actions their own copy, and leaving one unset means that
-	// kind gets nil ProviderData and no client at all.
+	// data sources, actions and ephemeral resources their own copy, and leaving
+	// one unset means that kind gets nil ProviderData and no client at all.
 	resp.ResourceData = providerContext
 	resp.DataSourceData = providerContext
 	resp.ActionData = providerContext
+	resp.EphemeralResourceData = providerContext
 }
 
 func (p *latitudeshProvider) Resources(ctx context.Context) []func() resource.Resource {
@@ -183,6 +189,7 @@ func (p *latitudeshProvider) Resources(ctx context.Context) []func() resource.Re
 		NewFirewallResource,
 		NewFirewallAssignmentResource,
 		NewObjectStorageResource,
+		NewObjectStorageAccessKeyResource,
 	}
 }
 
@@ -197,6 +204,15 @@ func (p *latitudeshProvider) DataSources(ctx context.Context) []func() datasourc
 		NewRoleDataSource,
 		NewSSHKeyDataSource,
 		NewTagDataSource,
+	}
+}
+
+// EphemeralResources registers the provider's ephemeral resources. Ephemeral
+// resources require Terraform 1.10 or later; older CLIs simply never ask for
+// them.
+func (p *latitudeshProvider) EphemeralResources(ctx context.Context) []func() ephemeral.EphemeralResource {
+	return []func() ephemeral.EphemeralResource{
+		NewObjectStorageAccessKeyEphemeral,
 	}
 }
 

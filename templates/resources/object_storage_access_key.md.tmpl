@@ -1,0 +1,22 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Creates and manages a long-lived S3-compatible [object storage](https://www.latitude.sh/dashboard) access key.
+
+The API returns the secret **only once**, at creation. By default it is kept in the Terraform state as a sensitive value; set `pgp_key` to keep only a PGP-encrypted copy in state instead (the plaintext never touches the state). There is no update endpoint, so changing any attribute forces a new resource — which rotates the credentials (`terraform apply -replace=...` rotates on demand).
+
+For a run-scoped key that never persists anywhere, use the `latitudesh_object_storage_access_key` [ephemeral resource](../ephemeral-resources/object_storage_access_key) instead.
+
+~> Because the secret cannot be retrieved after creation, this resource does not support `terraform import`.
+
+## Example Usage
+
+{{ tffile "examples/latitudesh_object_storage_access_key_resource.tf" }}
+
+{{ .SchemaMarkdown | trimspace }}

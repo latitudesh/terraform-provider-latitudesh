@@ -5,7 +5,7 @@
 # See CONTRIBUTING.md, "Field drift".
 version: 1
 sdk_module: github.com/latitudesh/latitudesh-go-sdk
-sdk_version: v1.19.17
+sdk_version: v1.19.19
 groups:
   Billing:
     methods:
@@ -116,6 +116,7 @@ groups:
         fields:
           - {name: "Asn", wire: "asn", type: "*int64", optional: true}
           - {name: "CreatedAt", wire: "created_at", type: "*time.Time", optional: true}
+          - {name: "PeerAddress", wire: "peer_address", type: "*string", optional: true, doc: "2dc44011"}
           - {name: "Region", wire: "region", type: "*BgpSessionDataRegion", optional: true, doc: "21a2d42b"}
           - {name: "Server", wire: "server", type: "*BgpSessionDataServer", optional: true, doc: "56545f09"}
           - {name: "ServerIP", wire: "server_ip", type: "*string", optional: true}
@@ -600,7 +601,7 @@ groups:
       components.ObjectStorageData:
         fields:
           - {name: "Attributes", wire: "attributes", type: "*ObjectStorageDataAttributes", optional: true}
-          - {name: "ID", wire: "id", type: "*string", optional: true, doc: "533c4999"}
+          - {name: "ID", wire: "id", type: "*string", optional: true, doc: "739efa1e"}
           - {name: "Type", wire: "type", type: "*ObjectStorageDataType", optional: true}
       components.ObjectStorageDataAttributes:
         fields:
@@ -670,11 +671,11 @@ groups:
           - {name: "Bytes", wire: "bytes", type: "*int64", optional: true, doc: "9b8d6265"}
           - {name: "Date", wire: "date", type: "*types.Date", optional: true, doc: "c6be72b1"}
           - {name: "IngestedAt", wire: "ingested_at", type: "*time.Time", optional: true}
-          - {name: "ProjectID", wire: "project_id", type: "*int64", optional: true}
+          - {name: "ProjectID", wire: "project_id", type: "*string", optional: true, doc: "2557cf75"}
           - {name: "RawUnit", wire: "raw_unit", type: "*string", optional: true, doc: "ec7d9282"}
           - {name: "RawValue", wire: "raw_value", type: "*float64", optional: true, doc: "9c520f43"}
           - {name: "Region", wire: "region", type: "*string", optional: true}
-          - {name: "StorageID", wire: "storage_id", type: "*int64", optional: true}
+          - {name: "StorageID", wire: "storage_id", type: "*string", optional: true, doc: "e8bcc554"}
           - {name: "StorageType", wire: "storage_type", type: "*string", optional: true, doc: "bf2cd021"}
           - {name: "Tier", wire: "tier", type: "*string", optional: true, doc: "1917968f"}
       components.StorageUsageData:
@@ -1094,31 +1095,22 @@ groups:
           - {name: "Specs", wire: "specs", type: "*Specs", optional: true}
       components.PlanDataAttributesType:
         enum: ["HDD", "NVME", "SSD"]
-      components.PlanDataBRL:
-        fields:
-          - {name: "Hour", wire: "hour", type: "*float64", optional: true}
-          - {name: "Month", wire: "month", type: "*float64", optional: true}
-          - {name: "Year", wire: "year", type: "*float64", optional: true}
       components.PlanDataFeatures:
         enum: ["raid", "sev", "ssh", "user_data"]
       components.PlanDataPricing:
         fields:
-          - {name: "Brl", wire: "BRL", type: "*PlanDataBRL", optional: true}
-          - {name: "Usd", wire: "USD", type: "*PlanDataUSD", optional: true}
+          - {name: "Hour", wire: "hour", type: "*float64", optional: true}
+          - {name: "Month", wire: "month", type: "*float64", optional: true}
+          - {name: "Year", wire: "year", type: "*float64", optional: true}
       components.PlanDataRegions:
         fields:
           - {name: "DeploysInstantly", wire: "deploys_instantly", type: "[]string", optional: true}
           - {name: "Locations", wire: "locations", type: "*Locations", optional: true}
           - {name: "Name", wire: "name", type: "*string", optional: true}
-          - {name: "Pricing", wire: "pricing", type: "*PlanDataPricing", optional: true}
+          - {name: "Pricing", wire: "pricing", type: "map[string]PlanDataPricing", optional: true, doc: "d09ca134"}
           - {name: "StockLevel", wire: "stock_level", type: "*StockLevel", optional: true}
       components.PlanDataType:
         enum: ["plans"]
-      components.PlanDataUSD:
-        fields:
-          - {name: "Hour", wire: "hour", type: "*float64", optional: true}
-          - {name: "Month", wire: "month", type: "*float64", optional: true}
-          - {name: "Year", wire: "year", type: "*float64", optional: true}
       components.PlanMeta:
       components.Pricing:
         fields:
@@ -1147,23 +1139,16 @@ groups:
           - {name: "Regions", wire: "regions", type: "[]StoragePlanDataRegions", optional: true}
           - {name: "StoragePlanStorageClass", wire: "storage_class", type: "*StoragePlanStorageClass", optional: true}
           - {name: "StoragePlanStorageType", wire: "storage_type", type: "*StoragePlanStorageType", optional: true}
-      components.StoragePlanDataBRL:
-        fields:
-          - {name: "Month", wire: "month", type: "*float64", optional: true}
       components.StoragePlanDataPricing:
         fields:
-          - {name: "Brl", wire: "BRL", type: "*StoragePlanDataBRL", optional: true}
-          - {name: "Usd", wire: "USD", type: "*StoragePlanDataUSD", optional: true}
+          - {name: "Month", wire: "month", type: "*float64", optional: true}
       components.StoragePlanDataRegions:
         fields:
           - {name: "Locations", wire: "locations", type: "[]string", optional: true}
           - {name: "Name", wire: "name", type: "*string", optional: true}
-          - {name: "Pricing", wire: "pricing", type: "*StoragePlanDataPricing", optional: true}
+          - {name: "Pricing", wire: "pricing", type: "map[string]StoragePlanDataPricing", optional: true, doc: "d09ca134"}
       components.StoragePlanDataType:
         enum: ["storage_plans"]
-      components.StoragePlanDataUSD:
-        fields:
-          - {name: "Month", wire: "month", type: "*float64", optional: true}
       components.StoragePlanStorageClass:
         enum: ["high_performance", "standard"]
       components.StoragePlanStorageType:
@@ -1330,6 +1315,7 @@ groups:
           - {name: "Name", wire: "name", type: "*string", optional: true, doc: "81b25629"}
           - {name: "Project", wire: "project", type: "*ProjectInclude", optional: true}
           - {name: "Region", wire: "region", type: "*VirtualNetworkDataRegion", optional: true}
+          - {name: "Storage", wire: "storage", type: "*bool", optional: true, doc: "d0060d0e"}
           - {name: "Tags", wire: "tags", type: "[]VirtualNetworkDataTags", optional: true, doc: "8c63a69c"}
           - {name: "Vid", wire: "vid", type: "*int64", optional: true, doc: "24a9e0c8"}
       components.VirtualNetworkDataRegion:
@@ -1628,7 +1614,7 @@ groups:
         fields:
           - {name: "Country", wire: "country", type: "*RegionCountry", optional: true}
           - {name: "Facility", wire: "facility", type: "*string", optional: true}
-          - {name: "Features", wire: "features", type: "[]string", optional: true, doc: "6ac52a34"}
+          - {name: "Features", wire: "features", type: "[]string", optional: true, doc: "5800fae9"}
           - {name: "Name", wire: "name", type: "*string", optional: true}
           - {name: "NetworkGroup", wire: "network_group", type: "*string", optional: true, doc: "e4800b0d"}
           - {name: "Slug", wire: "slug", type: "*string", optional: true}
@@ -1652,7 +1638,7 @@ groups:
         fields:
           - {name: "Country", wire: "country", type: "*Country", optional: true}
           - {name: "Facility", wire: "facility", type: "*string", optional: true}
-          - {name: "Features", wire: "features", type: "[]string", optional: true, doc: "6ac52a34"}
+          - {name: "Features", wire: "features", type: "[]string", optional: true, doc: "5800fae9"}
           - {name: "Name", wire: "name", type: "*string", optional: true}
           - {name: "NetworkGroup", wire: "network_group", type: "*string", optional: true, doc: "e4800b0d"}
           - {name: "Slug", wire: "slug", type: "*string", optional: true}
@@ -2121,6 +2107,8 @@ groups:
           - {name: "Type", wire: "type", type: "*string", optional: true}
       components.ServerDataAttributes:
         fields:
+          - {name: "BgpDeployed", wire: "bgp_deployed", type: "*bool", optional: true, doc: "6e287a80"}
+          - {name: "BgpEligible", wire: "bgp_eligible", type: "*bool", optional: true, doc: "464cfe63"}
           - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
           - {name: "Credentials", wire: "credentials", type: "*Credentials", optional: true, doc: "f839bfc0"}
           - {name: "Features", wire: "features", type: "[]string", optional: true, doc: "183b851e"}
@@ -2391,6 +2379,7 @@ groups:
       operations.GetServersRequest:
         fields:
           - {name: "ExtraFieldsServers", wire: "extra_fields[servers]", type: "*string", optional: true, doc: "359d7aad"}
+          - {name: "FilterBgpEligible", wire: "filter[bgp_eligible]", type: "*bool", optional: true, doc: "46e08c8e"}
           - {name: "FilterCreatedAtGte", wire: "filter[created_at_gte]", type: "*string", optional: true, doc: "baf96d38"}
           - {name: "FilterCreatedAtLte", wire: "filter[created_at_lte]", type: "*string", optional: true, doc: "91d19eb3"}
           - {name: "FilterDiskEql", wire: "filter[disk][eql]", type: "*int64", optional: true, doc: "8f27e90e"}

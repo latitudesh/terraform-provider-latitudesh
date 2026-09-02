@@ -318,18 +318,20 @@ groups:
   # generated PR starts with the context already gathered.
 
   ObjectStorage:
-    implemented_by: [latitudesh_object_storage]
+    implemented_by: [latitudesh_object_storage, latitudesh_object_storage_access_key]
     notes: >-
       The CR-D shape UNDERSTATES the API: PATCH /storage/buckets/:id is routed and
       implemented but missing from the spec, as are the lifecycle_rules
       sub-resource, a metrics endpoint, and a bucket-exists check. Scoped
       previously as PD-6063 and paused pending storage-team spec fixes. The
       generated resource lacks update support it could have had: every attribute
-      is RequiresReplace. Only PostStorageBuckets/GetStorageBucket/GetStorageBuckets/
+      is RequiresReplace. PostStorageBuckets/GetStorageBucket/GetStorageBuckets/
       DeleteStorageBuckets back latitudesh_object_storage (resource + data source).
-      Unmapped: PostStorageAccessKeys, GetStorageAccessKeys,
-      GetStorageBucketAccessKeys, DeleteStorageAccessKeysUsername (a separate
-      access-key lifecycle, not scoped to one bucket by ID); PostStorageBucketLifecycleRules,
+      PostStorageAccessKeys/GetStorageAccessKeys/DeleteStorageAccessKeysUsername
+      back latitudesh_object_storage_access_key (managed resource with optional
+      pgp_key, plus an ephemeral resource sharing the create/delete calls).
+      Unmapped: GetStorageBucketAccessKeys (per-bucket key listing, read-only);
+      PostStorageBucketLifecycleRules,
       GetStorageBucketLifecycleRules, GetStorageBucketLifecycleRule,
       PatchStorageBucketLifecycleRule, DeleteStorageBucketLifecycleRule (the
       lifecycle_rules sub-resource, its own CRUD lifecycle keyed by bucket_id +
