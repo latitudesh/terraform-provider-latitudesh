@@ -17,21 +17,40 @@ import (
 // changes it at runtime.
 var serverPollInterval = 30 * time.Second
 
-// waitForServerStatus polls a server until it reaches a terminal state, appending
-// a diagnostic when it fails or the wait runs out.
-//
-// It takes the client rather than hanging off ServerResource so the reinstall
-// action can wait exactly the way the resource does: same poll interval, same
-// terminal-state rules, same stale-reading guard. Two wait loops would drift.
-//
-// progress, when non-nil, is called on every observed status change. The resource
-// passes nil (it has nowhere to report mid-apply); the action forwards them to
-// Terraform as invocation progress events.
+// waitForServerStatus polls a server until it reaches "on", appending a
+// diagnostic when it fails or the wait runs out. It is the wait every deploy-like
+// operation (create, reinstall) shares; power actions wait for other targets
+// through waitForServerTargetStatus.
 func waitForServerStatus(
 	ctx context.Context,
 	client *latitudeshgosdk.Latitudesh,
 	serverID string,
 	operation string,
+	configuredTimeout time.Duration,
+	requireTransition bool,
+	progress func(message string),
+	diags *diag.Diagnostics,
+) {
+	waitForServerTargetStatus(ctx, client, serverID, operation, "on", configuredTimeout, requireTransition, progress, diags)
+}
+
+// waitForServerTargetStatus polls a server until it reaches targetStatus,
+// appending a diagnostic when it fails or the wait runs out.
+//
+// It takes the client rather than hanging off ServerResource so the reinstall
+// and power actions can wait exactly the way the resource does: same poll
+// interval, same terminal-state rules, same stale-reading guard. Parallel wait
+// loops would drift.
+//
+// progress, when non-nil, is called on every observed status change. The resource
+// passes nil (it has nowhere to report mid-apply); the actions forward them to
+// Terraform as invocation progress events.
+func waitForServerTargetStatus(
+	ctx context.Context,
+	client *latitudeshgosdk.Latitudesh,
+	serverID string,
+	operation string,
+	targetStatus string,
 	configuredTimeout time.Duration,
 	requireTransition bool,
 	progress func(message string),
@@ -142,8 +161,8 @@ func waitForServerStatus(
 		// Log status changes for debugging
 		if status != lastStatus {
 			if enableDebug {
-				fmt.Fprintf(os.Stderr, "[DEBUG] Server %s: status changed from '%s' to '%s' (waiting for 'on')\n",
-					operation, lastStatus, status)
+				fmt.Fprintf(os.Stderr, "[DEBUG] Server %s: status changed from '%s' to '%s' (waiting for '%s')\n",
+					operation, lastStatus, status, targetStatus)
 			}
 			if progress != nil {
 				progress(fmt.Sprintf("Server %s: status %s", operation, status))
@@ -159,10 +178,10 @@ func waitForServerStatus(
 		}
 
 		effectiveTransition := sawTransition || !requireTransition
-		if terminal, success := isReinstallTerminal(initialStatus, status, effectiveTransition); terminal {
+		if terminal, success := isServerStatusTerminal(targetStatus, initialStatus, status, effectiveTransition); terminal {
 			if success {
 				if enableDebug {
-					fmt.Fprintf(os.Stderr, "[DEBUG] Server %s completed successfully (status: on)\n", operation)
+					fmt.Fprintf(os.Stderr, "[DEBUG] Server %s completed successfully (status: %s)\n", operation, targetStatus)
 				}
 				return
 			}
@@ -178,7 +197,7 @@ func waitForServerStatus(
 		case <-ctx.Done():
 			diags.AddError("Context Cancelled", fmt.Sprintf("Server %s was cancelled", operation))
 			return
-		case <-time.After(pollInterval):
+		case <-time.After(boundedPollSleep(deadline, pollInterval)):
 			// Continue to next iteration
 		}
 	}
@@ -186,22 +205,23 @@ func waitForServerStatus(
 	// Timeout reached
 	diags.AddError(
 		fmt.Sprintf("Server %s Timeout", operation),
-		fmt.Sprintf("Server did not reach 'on' state within %v. Check server status in Latitude.sh dashboard.", timeout),
+		fmt.Sprintf("Server did not reach '%s' state within %v. Check server status in Latitude.sh dashboard.", targetStatus, timeout),
 	)
 }
 
-// isReinstallTerminal decides whether a polled server status should be treated
-// as terminal (success or failure). When the operation started while the server
-// was already in a terminal-looking state (`on`, `failed_deployment`,
-// `failed_disk_erasing`) — common on a reinstall right after a previous
-// reinstall — accepting the first stale reading as terminal causes false
-// success or false failure. Require an observed transition before honoring a
-// terminal status that matches the initial one.
+// isServerStatusTerminal decides whether a polled server status should be
+// treated as terminal (success or failure) for a wait targeting targetStatus.
+// When the operation started while the server was already in a terminal-looking
+// state (the target itself, `failed_deployment`, `failed_disk_erasing`) —
+// common on a reinstall right after a previous reinstall — accepting the first
+// stale reading as terminal causes false success or false failure. Require an
+// observed transition before honoring a terminal status that matches the
+// initial one.
 //
 // success is only meaningful when terminal is true; ignore otherwise.
-func isReinstallTerminal(initialStatus, currentStatus string, sawTransition bool) (terminal, success bool) {
+func isServerStatusTerminal(targetStatus, initialStatus, currentStatus string, sawTransition bool) (terminal, success bool) {
 	isTerminal := func(s string) bool {
-		return s == "on" || s == "failed_deployment" || s == "failed_disk_erasing"
+		return s == targetStatus || s == "failed_deployment" || s == "failed_disk_erasing"
 	}
 
 	if !isTerminal(currentStatus) {
@@ -214,5 +234,23 @@ func isReinstallTerminal(initialStatus, currentStatus string, sawTransition bool
 		return false, false
 	}
 
-	return true, currentStatus == "on"
+	return true, currentStatus == targetStatus
+}
+
+// isReinstallTerminal is isServerStatusTerminal with the "on" target every
+// deploy-like operation waits for.
+func isReinstallTerminal(initialStatus, currentStatus string, sawTransition bool) (terminal, success bool) {
+	return isServerStatusTerminal("on", initialStatus, currentStatus, sawTransition)
+}
+
+// boundedPollSleep caps a poll sleep at the time remaining until deadline, so
+// a wait_timeout shorter than the poll interval expires when configured rather
+// than after one full interval. A remaining duration of zero or less makes
+// time.After fire immediately, which hands control back to the loop's deadline
+// check.
+func boundedPollSleep(deadline time.Time, interval time.Duration) time.Duration {
+	if remaining := time.Until(deadline); remaining < interval {
+		return remaining
+	}
+	return interval
 }
