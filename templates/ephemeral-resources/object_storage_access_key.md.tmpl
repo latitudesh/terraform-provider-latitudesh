@@ -1,0 +1,18 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Provisions a temporary [object storage](https://www.latitude.sh/dashboard) access key for the duration of the Terraform run. The key is created when the ephemeral resource is opened and revoked when the run finishes, so the secret never persists in state or plan files.
+
+-> Ephemeral resources require Terraform 1.10 or later.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}

@@ -1,0 +1,47 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Creates and manages an S3-compatible [object storage](https://www.latitude.sh/dashboard) bucket. The underlying API has no update endpoint for buckets, so changing any attribute forces a new resource.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+You can import an object storage resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_object_storage` resource can be imported by specifying the bucket ID:
+
+```sh
+terraform import latitudesh_object_storage.backups <BUCKET_ID>
+```
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration.
+
+```hcl
+import {
+  to = latitudesh_object_storage.backups
+  id = "<BUCKET_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_object_storage.tf
+```
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.
