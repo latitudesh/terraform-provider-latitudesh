@@ -15,7 +15,7 @@ Retrieve an [object storage](https://www.latitude.sh/dashboard) bucket by `id`, 
 resource "latitudesh_object_storage" "backups" {
   project = "proj_..."
   name    = "app-backups"
-  region  = "SAO2"
+  region  = "ASH"
 
   versioning    = true
   storage_class = "standard"
@@ -50,7 +50,7 @@ data "latitudesh_object_storage" "by_name" {
 - `created_at` (String) The timestamp for when the object storage was created.
 - `endpoint` (String) Region-specific S3-compatible endpoint URL for accessing the bucket.
 - `locking` (Boolean) Whether S3 Object Lock (WORM) is enabled.
-- `region` (String) Site slug representing the region (e.g. `DAL`, `SAO2`).
+- `region` (String) Site slug representing the region (e.g. `ASH`, `DAL`).
 - `retention_mode` (String) Object Lock retention mode applied to new objects (`NONE`, `GOVERNANCE`, or `COMPLIANCE`).
 - `retention_period` (Number) Default retention period, in days, applied to new objects when Object Lock is enabled.
 - `source` (String) How the bucket originated: `default` for buckets created through the API, or `synchronized` for buckets imported from the storage provider.

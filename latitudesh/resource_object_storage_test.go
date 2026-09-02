@@ -12,7 +12,7 @@ import (
 
 const (
 	testObjectStorageName   = "tf-acc-object-storage"
-	testObjectStorageRegion = "SAO2"
+	testObjectStorageRegion = "ASH"
 )
 
 func TestAccObjectStorage_Basic(t *testing.T) {

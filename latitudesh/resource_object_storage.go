@@ -90,7 +90,7 @@ func (r *ObjectStorageResource) Schema(ctx context.Context, req resource.SchemaR
 				},
 			},
 			"region": schema.StringAttribute{
-				MarkdownDescription: "Site slug representing the region (e.g. `DAL`, `SAO2`). Changing this forces a new resource.",
+				MarkdownDescription: "Site slug representing the region (e.g. `ASH`, `DAL`). Changing this forces a new resource.",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),

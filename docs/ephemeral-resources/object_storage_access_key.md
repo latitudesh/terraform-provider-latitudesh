@@ -46,7 +46,7 @@ ephemeral "latitudesh_object_storage_access_key" "ci" {
 ### Required
 
 - `name` (String) Name for the access key. Normalized server-side (lowercased, with special characters replaced by hyphens).
-- `region` (String) Region slug (e.g. `DAL`, `SAO2`). Selects the VAST cluster for `high_performance` keys.
+- `region` (String) Region slug (e.g. `ASH`, `DAL`). Selects the VAST cluster for `high_performance` keys.
 - `storage_class` (String) Backend storage tier. `standard` provisions the key on Wasabi; `high_performance` provisions it on VAST.
 
 ### Optional

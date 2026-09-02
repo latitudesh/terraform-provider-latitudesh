@@ -91,7 +91,7 @@ func (d *ObjectStorageDataSource) Schema(ctx context.Context, req datasource.Sch
 				Computed:            true,
 			},
 			"region": schema.StringAttribute{
-				MarkdownDescription: "Site slug representing the region (e.g. `DAL`, `SAO2`).",
+				MarkdownDescription: "Site slug representing the region (e.g. `ASH`, `DAL`).",
 				Computed:            true,
 			},
 			"storage_class": schema.StringAttribute{

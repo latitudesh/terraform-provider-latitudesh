@@ -128,7 +128,7 @@ func (r *ObjectStorageAccessKeyResource) Schema(ctx context.Context, req resourc
 				},
 			},
 			"region": schema.StringAttribute{
-				MarkdownDescription: "Region slug (e.g. `DAL`, `SAO2`). Selects the VAST cluster for `high_performance` keys. Changing this forces a new resource.",
+				MarkdownDescription: "Region slug (e.g. `ASH`, `DAL`). Selects the VAST cluster for `high_performance` keys. Changing this forces a new resource.",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),

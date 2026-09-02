@@ -105,7 +105,7 @@ func (e *ObjectStorageAccessKeyEphemeral) Schema(ctx context.Context, req epheme
 				},
 			},
 			"region": schema.StringAttribute{
-				MarkdownDescription: "Region slug (e.g. `DAL`, `SAO2`). Selects the VAST cluster for `high_performance` keys.",
+				MarkdownDescription: "Region slug (e.g. `ASH`, `DAL`). Selects the VAST cluster for `high_performance` keys.",
 				Required:            true,
 			},
 			"access_scope": schema.StringAttribute{

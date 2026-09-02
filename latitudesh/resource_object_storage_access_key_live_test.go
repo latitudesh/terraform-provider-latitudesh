@@ -27,7 +27,7 @@ import (
 const (
 	testAccessKeyName   = "tf-acc-access-key"
 	testAccessKeyBucket = "tf-acc-access-key-bucket"
-	testAccessKeyRegion = "SAO2"
+	testAccessKeyRegion = "ASH"
 )
 
 func TestAccObjectStorageAccessKeyResource_Live(t *testing.T) {

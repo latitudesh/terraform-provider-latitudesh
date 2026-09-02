@@ -1,7 +1,7 @@
 resource "latitudesh_object_storage" "backups" {
   project = "proj_..."
   name    = "app-backups"
-  region  = "SAO2"
+  region  = "ASH"
 
   versioning    = true
   storage_class = "standard"

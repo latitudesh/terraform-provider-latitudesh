@@ -75,7 +75,7 @@ output "ci_encrypted_secret" {
 ### Required
 
 - `name` (String) Name for the access key. Normalized server-side (lowercased, with special characters replaced by hyphens). Changing this forces a new resource.
-- `region` (String) Region slug (e.g. `DAL`, `SAO2`). Selects the VAST cluster for `high_performance` keys. Changing this forces a new resource.
+- `region` (String) Region slug (e.g. `ASH`, `DAL`). Selects the VAST cluster for `high_performance` keys. Changing this forces a new resource.
 - `storage_class` (String) Backend storage tier. `standard` provisions the key on Wasabi; `high_performance` provisions it on VAST. Changing this forces a new resource.
 
 ### Optional

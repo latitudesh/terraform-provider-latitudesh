@@ -15,7 +15,7 @@ Creates and manages an S3-compatible [object storage](https://www.latitude.sh/da
 resource "latitudesh_object_storage" "backups" {
   project = "proj_..."
   name    = "app-backups"
-  region  = "SAO2"
+  region  = "ASH"
 
   versioning    = true
   storage_class = "standard"
@@ -41,7 +41,7 @@ data "latitudesh_object_storage" "by_name" {
 ### Required
 
 - `name` (String) Object storage name. Cannot contain special characters or spaces. Changing this forces a new resource.
-- `region` (String) Site slug representing the region (e.g. `DAL`, `SAO2`). Changing this forces a new resource.
+- `region` (String) Site slug representing the region (e.g. `ASH`, `DAL`). Changing this forces a new resource.
 
 ### Optional
 
