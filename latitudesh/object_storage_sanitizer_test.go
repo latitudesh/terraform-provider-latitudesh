@@ -127,6 +127,33 @@ func TestSanitizeObjectStorageBody(t *testing.T) {
 			t.Error("invalid JSON should not be rewritten")
 		}
 	})
+
+	t.Run("region site slug is lifted into region id", func(t *testing.T) {
+		body := []byte(`{"data":{"id":"bkt_1","attributes":{"region":{"city":"Ashburn","country":"United States","site":{"id":"loc_1","slug":"ASH"}}}}}`)
+		fixed, changed := sanitizeObjectStorageBody(body)
+		if !changed {
+			t.Fatal("expected body to change")
+		}
+		attrs := decodeAttrs(t, fixed)
+		region, _ := attrs["region"].(map[string]any)
+		if got := region["id"]; got != "ASH" {
+			t.Errorf("region.id = %v, want ASH", got)
+		}
+	})
+
+	t.Run("existing region id is untouched", func(t *testing.T) {
+		body := []byte(`{"data":{"id":"bkt_1","attributes":{"region":{"id":"DAL","site":{"slug":"ASH"}}}}}`)
+		if _, changed := sanitizeObjectStorageBody(body); changed {
+			t.Error("a present region.id should not trigger a rewrite")
+		}
+	})
+
+	t.Run("region without site passes through", func(t *testing.T) {
+		body := []byte(`{"data":{"id":"bkt_1","attributes":{"region":{"city":"Ashburn"}}}}`)
+		if _, changed := sanitizeObjectStorageBody(body); changed {
+			t.Error("region without a site should not trigger a rewrite")
+		}
+	})
 }
 
 func decodeAttrs(t *testing.T, body []byte) map[string]any {
@@ -235,6 +262,8 @@ func TestAccObjectStorage_EmptyRetentionByID(t *testing.T) {
 					resource.TestCheckResourceAttr("data.latitudesh_object_storage.test", "name", "dark-star-mock"),
 					resource.TestCheckResourceAttr("data.latitudesh_object_storage.test", "endpoint", "https://objects.ash.storage.sh"),
 					resource.TestCheckNoResourceAttr("data.latitudesh_object_storage.test", "retention_period"),
+					// region comes from region.site.slug lifted into region.id
+					resource.TestCheckResourceAttr("data.latitudesh_object_storage.test", "region", "ASH"),
 				),
 			},
 		},

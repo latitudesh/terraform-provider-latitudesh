@@ -17,25 +17,36 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 )
 
-type mockBucketDefaultsAPI struct{}
+type mockBucketDefaultsAPI struct {
+	// full mimics the real API (every attribute present); false deliberately
+	// omits the defaulted attributes (storage_class, versioning, locking,
+	// retention_mode) to exercise the preserve-on-absence read path.
+	full bool
+}
 
-// bucketData deliberately omits storage_class, versioning, locking and
-// retention_mode — the defaulted attributes — to mimic an API response that
-// drops them.
+// bucketData mirrors the live payload shape: region carries the slug only
+// under region.site.slug (no region-level id), exactly like the real API.
 func (m *mockBucketDefaultsAPI) bucketData() map[string]any {
+	attrs := map[string]any{
+		"name":         "defaults-mock",
+		"bucket_name":  "defaults-mock",
+		"storage_type": "object",
+		"endpoint":     "https://objects.ash.storage.sh",
+		"created_at":   "2026-09-02T00:00:00.000Z",
+		"source":       "default",
+		"region":       map[string]any{"city": "Ashburn", "country": "United States", "site": map[string]any{"id": "loc_mock", "slug": "ASH"}},
+		"project":      map[string]any{"id": "proj_mock", "slug": "lanusse"},
+	}
+	if m.full {
+		attrs["storage_class"] = "standard"
+		attrs["versioning"] = false
+		attrs["locking"] = false
+		attrs["retention_mode"] = "NONE"
+	}
 	return map[string]any{
-		"id":   "bkt_defaults_mock",
-		"type": "object_storages",
-		"attributes": map[string]any{
-			"name":         "defaults-mock",
-			"bucket_name":  "defaults-mock",
-			"storage_type": "object",
-			"endpoint":     "https://objects.ash.storage.sh",
-			"created_at":   "2026-09-02T00:00:00.000Z",
-			"source":       "default",
-			"region":       map[string]any{"city": "Ashburn", "country": "United States", "site": map[string]any{"id": "loc_mock", "slug": "ASH"}},
-			"project":      map[string]any{"id": "proj_mock", "slug": "lanusse"},
-		},
+		"id":         "bkt_defaults_mock",
+		"type":       "object_storages",
+		"attributes": attrs,
 	}
 }
 
@@ -96,6 +107,35 @@ func TestAccObjectStorage_DefaultsSurviveOmittedFields(t *testing.T) {
 				// empty (defaults preserved, no drift to null).
 				Config:   testAccBucketDefaultsConfig(),
 				PlanOnly: true,
+			},
+		},
+	})
+}
+
+// Regression for the e2e import failure: the live API sends the region slug
+// only under region.site.slug (no region-level id), so without the sanitizer
+// lift an imported bucket lost its `region` attribute. Import against a
+// realistic full payload must round-trip every attribute.
+func TestAccObjectStorage_ImportRoundTripsRegion(t *testing.T) {
+	mock := &mockBucketDefaultsAPI{full: true}
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccBucketDefaultsConfig(),
+				Check: resource.TestCheckResourceAttr(
+					"latitudesh_object_storage.test", "region", "ASH"),
+			},
+			{
+				ResourceName:      "latitudesh_object_storage.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+				// project is identified by slug on read but configured by id;
+				// the live test ignores it for the same reason.
+				ImportStateVerifyIgnore: []string{"project"},
 			},
 		},
 	})

@@ -9,15 +9,21 @@ import (
 	"strings"
 )
 
-// objectStorageSanitizerTransport works around an API contract violation on
-// the object storage endpoints: the swagger declares `retention_period` as a
-// nullable integer, but the backend persists whatever the storage provider
-// echoes back and can emit "" (unset on VAST), "30" or "30d" instead of a
-// number. Any of those strings makes the generated SDK fail to unmarshal the
-// whole response ("cannot unmarshal string into Go value of type int64"), so
-// bucket payloads are rewritten here before the SDK sees them: day counts are
-// coerced to integers and unparseable or unset values are dropped, matching
-// the documented `integer | null` contract.
+// objectStorageSanitizerTransport works around API contract violations on the
+// object storage endpoints by rewriting bucket payloads before the SDK
+// unmarshals them:
+//
+//   - The swagger declares `retention_period` as a nullable integer, but the
+//     backend persists whatever the storage provider echoes back and can emit
+//     "" (unset on VAST), "30" or "30d" instead of a number. Any of those
+//     strings fails the whole unmarshal ("cannot unmarshal string into Go
+//     value of type int64"), so day counts are coerced to integers and
+//     unparseable or unset values are dropped, matching `integer | null`.
+//
+//   - The swagger declares `region` as {id, city, country} with id carrying
+//     the site slug, but the live API nests the slug under region.site.slug
+//     and sends no region-level id. The slug is lifted into region.id so the
+//     generated model (which has no `site` field) can carry it.
 type objectStorageSanitizerTransport struct {
 	base http.RoundTripper
 }
@@ -98,16 +104,34 @@ func sanitizeObjectStorageEntry(entry map[string]any) bool {
 	if !ok {
 		return false
 	}
-	raw, ok := attrs["retention_period"].(string)
-	if !ok {
-		return false
+	changed := false
+
+	if raw, ok := attrs["retention_period"].(string); ok {
+		if days, ok := parseRetentionDays(raw); ok {
+			attrs["retention_period"] = days
+		} else {
+			delete(attrs, "retention_period")
+		}
+		changed = true
 	}
-	if days, ok := parseRetentionDays(raw); ok {
-		attrs["retention_period"] = days
-	} else {
-		delete(attrs, "retention_period")
+
+	// The documented region shape is {id, city, country} with id carrying the
+	// site slug, but the live API nests the slug under region.site.slug and
+	// sends no region-level id at all. Lift the slug into region.id so the SDK
+	// model carries it — resource import and the data source read the region
+	// from there.
+	if region, ok := attrs["region"].(map[string]any); ok {
+		if id, _ := region["id"].(string); id == "" {
+			if site, ok := region["site"].(map[string]any); ok {
+				if slug, _ := site["slug"].(string); slug != "" {
+					region["id"] = slug
+					changed = true
+				}
+			}
+		}
 	}
-	return true
+
+	return changed
 }
 
 // parseRetentionDays extracts the day count from the string shapes the
