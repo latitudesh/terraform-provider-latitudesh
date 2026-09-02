@@ -17,6 +17,9 @@ import (
 
 type mockMarketplaceAppAPI struct{}
 
+// appEnvelope deliberately includes the presentation-only fields the data
+// source does not expose (description, URLs, logo, created_at): the real API
+// sends them, and the provider must ignore them without erroring.
 func (m *mockMarketplaceAppAPI) appEnvelope() map[string]any {
 	return map[string]any{
 		"data": map[string]any{

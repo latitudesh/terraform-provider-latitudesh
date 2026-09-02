@@ -53,9 +53,9 @@ func TestMarketplaceAppItemValue(t *testing.T) {
 		t.Error("SystemRequirements is null; want a known object")
 	}
 
-	// A short_description absent from the API must land as null, not "".
-	if !item.ShortDescription.IsNull() {
-		t.Errorf("ShortDescription = %q, want null", item.ShortDescription.ValueString())
+	// An attribute absent from the API must land as null, not "".
+	if !item.DefaultOperatingSystem.IsNull() {
+		t.Errorf("DefaultOperatingSystem = %q, want null", item.DefaultOperatingSystem.ValueString())
 	}
 }
 

@@ -637,6 +637,13 @@ func (r *VirtualMachineResource) readVirtualMachine(ctx context.Context, data *V
 
 	if (data.MarketplaceApp.IsNull() || data.MarketplaceApp.IsUnknown()) && a.MarketplaceApp != nil && a.MarketplaceApp.Slug != nil {
 		data.MarketplaceApp = types.StringValue(*a.MarketplaceApp.Slug)
+	} else if data.MarketplaceApp.IsUnknown() {
+		// A VM created without a marketplace_app gets no app back from the API.
+		// The attribute is Optional+Computed, so an unconfigured value arrives as
+		// unknown; leaving it unknown after apply makes Terraform reject the
+		// result ("Provider returned invalid result object after apply"). Resolve
+		// the unknown to null so state always holds a known value.
+		data.MarketplaceApp = types.StringNull()
 	}
 
 	if (data.Plan.IsNull() || data.Plan.IsUnknown()) && a.Plan != nil && a.Plan.ID != nil {

@@ -41,20 +41,15 @@ type MarketplaceAppDataSourceModel struct {
 	Slug types.String `tfsdk:"slug"`
 	Name types.String `tfsdk:"name"`
 
-	// Attributes
-	Description            types.String `tfsdk:"description"`
-	ShortDescription       types.String `tfsdk:"short_description"`
+	// Attributes. Presentation-only catalog metadata (descriptions, marketing
+	// URLs, logo, created_at, access instructions) is deliberately not exposed:
+	// this data source serves provisioning, not catalog browsing.
 	Category               types.String `tfsdk:"category"`
 	Version                types.String `tfsdk:"version"`
 	SystemRequirements     types.Object `tfsdk:"system_requirements"`
 	DeploymentStrategy     types.String `tfsdk:"deployment_strategy"`
 	DefaultOperatingSystem types.String `tfsdk:"default_operating_system"`
 	CompatiblePlans        types.List   `tfsdk:"compatible_plans"`
-	AccessInstructions     types.String `tfsdk:"access_instructions"`
-	UpstreamURL            types.String `tfsdk:"upstream_url"`
-	DocumentationURL       types.String `tfsdk:"documentation_url"`
-	LogoURL                types.String `tfsdk:"logo_url"`
-	CreatedAt              types.String `tfsdk:"created_at"`
 }
 
 // MarketplaceAppSystemRequirementsModel is the minimum hardware needed to run
@@ -140,14 +135,6 @@ func (d *MarketplaceAppDataSource) Schema(ctx context.Context, req datasource.Sc
 					),
 				},
 			},
-			"description": schema.StringAttribute{
-				MarkdownDescription: "Full description of the marketplace app.",
-				Computed:            true,
-			},
-			"short_description": schema.StringAttribute{
-				MarkdownDescription: "Short description of the marketplace app.",
-				Computed:            true,
-			},
 			"category": schema.StringAttribute{
 				MarkdownDescription: "Category the marketplace app belongs to.",
 				Computed:            true,
@@ -189,26 +176,6 @@ func (d *MarketplaceAppDataSource) Schema(ctx context.Context, req datasource.Sc
 			"compatible_plans": schema.ListAttribute{
 				MarkdownDescription: "Server plan slugs compatible with this marketplace app.",
 				ElementType:         types.StringType,
-				Computed:            true,
-			},
-			"access_instructions": schema.StringAttribute{
-				MarkdownDescription: "Instructions for accessing the app after deployment.",
-				Computed:            true,
-			},
-			"upstream_url": schema.StringAttribute{
-				MarkdownDescription: "URL of the upstream project.",
-				Computed:            true,
-			},
-			"documentation_url": schema.StringAttribute{
-				MarkdownDescription: "URL of the app's documentation.",
-				Computed:            true,
-			},
-			"logo_url": schema.StringAttribute{
-				MarkdownDescription: "URL of the app's logo image.",
-				Computed:            true,
-			},
-			"created_at": schema.StringAttribute{
-				MarkdownDescription: "Timestamp when the marketplace app was created.",
 				Computed:            true,
 			},
 		},
@@ -280,8 +247,6 @@ func (d *MarketplaceAppDataSource) Read(ctx context.Context, req datasource.Read
 		if attrs.Slug != nil {
 			data.Slug = types.StringValue(*attrs.Slug)
 		}
-		data.Description = types.StringPointerValue(attrs.Description)
-		data.ShortDescription = types.StringPointerValue(attrs.ShortDescription)
 		data.Category = types.StringPointerValue(attrs.Category)
 		data.Version = types.StringPointerValue(attrs.Version)
 		if attrs.DeploymentStrategy != nil {
@@ -290,11 +255,6 @@ func (d *MarketplaceAppDataSource) Read(ctx context.Context, req datasource.Read
 			data.DeploymentStrategy = types.StringNull()
 		}
 		data.DefaultOperatingSystem = types.StringPointerValue(attrs.DefaultOperatingSystem)
-		data.AccessInstructions = types.StringPointerValue(attrs.AccessInstructions)
-		data.UpstreamURL = types.StringPointerValue(attrs.UpstreamURL)
-		data.DocumentationURL = types.StringPointerValue(attrs.DocumentationURL)
-		data.LogoURL = types.StringPointerValue(attrs.LogoURL)
-		data.CreatedAt = types.StringPointerValue(attrs.CreatedAt)
 
 		if attrs.CompatiblePlans != nil {
 			plansList, diags := types.ListValueFrom(ctx, types.StringType, attrs.CompatiblePlans)

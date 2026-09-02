@@ -111,7 +111,11 @@ groups:
       published apps and require the `marketplace_apps` feature to be
       enabled for the team, per the SDK doc comments — a team without that
       feature enabled or with the app unpublished will see 404s the same as
-      a genuinely missing id/slug/name.
+      a genuinely missing id/slug/name. Presentation-only catalog fields on
+      MarketplaceAppDataAttributes are not exposed by team decision
+      (2026-09-01) — description, short_description, access_instructions,
+      upstream_url, documentation_url, logo_url, created_at serve catalog
+      browsing, not provisioning; do not map them.
 
   Plans:
     implemented_by: [latitudesh_plan]

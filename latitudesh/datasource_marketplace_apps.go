@@ -41,24 +41,18 @@ type MarketplaceAppsDataSourceModel struct {
 }
 
 // MarketplaceAppItemModel mirrors the read-only attributes of the singular
-// marketplace app data source for each entry in the list.
+// marketplace app data source for each entry in the list. Presentation-only
+// catalog metadata is deliberately not exposed (see the singular model).
 type MarketplaceAppItemModel struct {
 	ID                     types.String `tfsdk:"id"`
 	Name                   types.String `tfsdk:"name"`
 	Slug                   types.String `tfsdk:"slug"`
-	Description            types.String `tfsdk:"description"`
-	ShortDescription       types.String `tfsdk:"short_description"`
 	Category               types.String `tfsdk:"category"`
 	Version                types.String `tfsdk:"version"`
 	SystemRequirements     types.Object `tfsdk:"system_requirements"`
 	DeploymentStrategy     types.String `tfsdk:"deployment_strategy"`
 	DefaultOperatingSystem types.String `tfsdk:"default_operating_system"`
 	CompatiblePlans        types.List   `tfsdk:"compatible_plans"`
-	AccessInstructions     types.String `tfsdk:"access_instructions"`
-	UpstreamURL            types.String `tfsdk:"upstream_url"`
-	DocumentationURL       types.String `tfsdk:"documentation_url"`
-	LogoURL                types.String `tfsdk:"logo_url"`
-	CreatedAt              types.String `tfsdk:"created_at"`
 }
 
 var marketplaceAppItemObjectType = types.ObjectType{
@@ -66,19 +60,12 @@ var marketplaceAppItemObjectType = types.ObjectType{
 		"id":                       types.StringType,
 		"name":                     types.StringType,
 		"slug":                     types.StringType,
-		"description":              types.StringType,
-		"short_description":        types.StringType,
 		"category":                 types.StringType,
 		"version":                  types.StringType,
 		"system_requirements":      marketplaceAppSystemRequirementsObjectType,
 		"deployment_strategy":      types.StringType,
 		"default_operating_system": types.StringType,
 		"compatible_plans":         types.ListType{ElemType: types.StringType},
-		"access_instructions":      types.StringType,
-		"upstream_url":             types.StringType,
-		"documentation_url":        types.StringType,
-		"logo_url":                 types.StringType,
-		"created_at":               types.StringType,
 	},
 }
 
@@ -98,8 +85,6 @@ func marketplaceAppItemValue(ctx context.Context, app *components.MarketplaceApp
 
 		item.Name = types.StringPointerValue(attrs.Name)
 		item.Slug = types.StringPointerValue(attrs.Slug)
-		item.Description = types.StringPointerValue(attrs.Description)
-		item.ShortDescription = types.StringPointerValue(attrs.ShortDescription)
 		item.Category = types.StringPointerValue(attrs.Category)
 		item.Version = types.StringPointerValue(attrs.Version)
 		if attrs.DeploymentStrategy != nil {
@@ -108,11 +93,6 @@ func marketplaceAppItemValue(ctx context.Context, app *components.MarketplaceApp
 			item.DeploymentStrategy = types.StringNull()
 		}
 		item.DefaultOperatingSystem = types.StringPointerValue(attrs.DefaultOperatingSystem)
-		item.AccessInstructions = types.StringPointerValue(attrs.AccessInstructions)
-		item.UpstreamURL = types.StringPointerValue(attrs.UpstreamURL)
-		item.DocumentationURL = types.StringPointerValue(attrs.DocumentationURL)
-		item.LogoURL = types.StringPointerValue(attrs.LogoURL)
-		item.CreatedAt = types.StringPointerValue(attrs.CreatedAt)
 
 		if attrs.CompatiblePlans != nil {
 			plansList, d := types.ListValueFrom(ctx, types.StringType, attrs.CompatiblePlans)
@@ -169,14 +149,6 @@ func (d *MarketplaceAppsDataSource) Schema(ctx context.Context, req datasource.S
 							MarkdownDescription: "Slug of the marketplace app (e.g. \"wordpress\").",
 							Computed:            true,
 						},
-						"description": schema.StringAttribute{
-							MarkdownDescription: "Full description of the marketplace app.",
-							Computed:            true,
-						},
-						"short_description": schema.StringAttribute{
-							MarkdownDescription: "Short description of the marketplace app.",
-							Computed:            true,
-						},
 						"category": schema.StringAttribute{
 							MarkdownDescription: "Category the marketplace app belongs to.",
 							Computed:            true,
@@ -218,26 +190,6 @@ func (d *MarketplaceAppsDataSource) Schema(ctx context.Context, req datasource.S
 						"compatible_plans": schema.ListAttribute{
 							MarkdownDescription: "Server plan slugs compatible with this marketplace app.",
 							ElementType:         types.StringType,
-							Computed:            true,
-						},
-						"access_instructions": schema.StringAttribute{
-							MarkdownDescription: "Instructions for accessing the app after deployment.",
-							Computed:            true,
-						},
-						"upstream_url": schema.StringAttribute{
-							MarkdownDescription: "URL of the upstream project.",
-							Computed:            true,
-						},
-						"documentation_url": schema.StringAttribute{
-							MarkdownDescription: "URL of the app's documentation.",
-							Computed:            true,
-						},
-						"logo_url": schema.StringAttribute{
-							MarkdownDescription: "URL of the app's logo image.",
-							Computed:            true,
-						},
-						"created_at": schema.StringAttribute{
-							MarkdownDescription: "Timestamp when the marketplace app was created.",
 							Computed:            true,
 						},
 					},
