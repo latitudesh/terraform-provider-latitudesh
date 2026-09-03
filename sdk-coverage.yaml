@@ -99,6 +99,15 @@ groups:
       read path maps the target from
       components.FirewallAssignmentDataAttributes.Server/.VirtualMachine.
 
+  ManagedDatabases:
+    implemented_by: [latitudesh_managed_databas]
+    notes: >-
+      Data source. ShowManagedDatabaseMetrics is the only method on this
+      group (crud shape -R--) and it is the one mapped: managed_database_id,
+      period and queries drive the request, and from/to/metrics (a map keyed
+      by metric name, each entry carrying unit/current/points) back the
+      response. No methods are left unmapped.
+
   MarketplaceApps:
     implemented_by: [latitudesh_marketplace_app, latitudesh_marketplace_apps]
     notes: >-

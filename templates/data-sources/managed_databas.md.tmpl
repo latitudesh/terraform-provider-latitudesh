@@ -1,0 +1,18 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Retrieve a time window of metrics for a managed database: CPU usage, memory usage, TPS, max connections, deadlocks, blocked queries, and database size.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+`period` must be one of `1800`, `3600`, `21600`, `86400`, or `604800` seconds and defaults to `1800`. `queries` is a comma-separated subset of the available metric names and defaults to all of them.
+
+{{ .SchemaMarkdown | trimspace }}

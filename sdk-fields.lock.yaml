@@ -488,6 +488,28 @@ groups:
       operations.CreateFirewallAssignmentResponse:
         fields:
           - {name: "FirewallServer", type: "*components.FirewallServer", optional: true, doc: "09de135b"}
+  ManagedDatabases:
+    methods:
+      ShowManagedDatabaseMetrics: {signature: "(context.Context, string, *int64, *string, ...operations.Option) (*operations.ShowManagedDatabaseMetricsResponse, error)"}
+    models:
+      operations.Metrics:
+        fields:
+          - {name: "Current", wire: "current", type: "*float64", optional: true}
+          - {name: "Points", wire: "points", type: "[]Points"}
+          - {name: "Unit", wire: "unit", type: "string"}
+      operations.Points:
+        fields:
+          - {name: "Timestamp", wire: "timestamp", type: "time.Time"}
+          - {name: "Value", wire: "value", type: "float64"}
+      operations.ShowManagedDatabaseMetricsResponse:
+        fields:
+          - {name: "Object", type: "*ShowManagedDatabaseMetricsResponseBody", optional: true, doc: "85e4b82f"}
+      operations.ShowManagedDatabaseMetricsResponseBody:
+        doc: "8354f305"
+        fields:
+          - {name: "From", wire: "from", type: "time.Time"}
+          - {name: "Metrics", wire: "metrics", type: "map[string]Metrics"}
+          - {name: "To", wire: "to", type: "time.Time"}
   MarketplaceApps:
     methods:
       GetMarketplaceApp: {signature: "(context.Context, string, ...operations.Option) (*operations.GetMarketplaceAppResponse, error)"}
