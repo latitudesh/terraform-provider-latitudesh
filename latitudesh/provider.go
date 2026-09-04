@@ -199,6 +199,7 @@ func (p *latitudeshProvider) DataSources(ctx context.Context) []func() datasourc
 		NewMarketplaceAppDataSource,
 		NewMarketplaceAppsDataSource,
 		NewObjectStorageDataSource,
+		NewOperatingSystemDataSource,
 		NewPlanDataSource,
 		NewRegionDataSource,
 		NewRoleDataSource,
