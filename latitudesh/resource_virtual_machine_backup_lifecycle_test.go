@@ -307,6 +307,40 @@ func TestWaitForBackupDeleted_PresentThenGone(t *testing.T) {
 	}
 }
 
+func TestWaitForBackupDeleted_ArchivedCountsAsDeleted(t *testing.T) {
+	// Delete is a soft delete: the backup goes to "Archived" and keeps
+	// answering Get instead of 404ing. Archived must be read as deletion
+	// complete, otherwise destroy spins until the timeout.
+	mock, r := newVMBackupMock(t, vmBackupGetStep{httpStatus: 200, status: "Archived"})
+
+	var diags diag.Diagnostics
+	r.waitForBackupDeleted(context.Background(), mockBackupID, time.Second, &diags)
+
+	if diags.HasError() {
+		t.Fatalf("expected Archived to be read as deletion complete, got: %v", diags.Errors())
+	}
+	if got := mock.gets(); got != 1 {
+		t.Fatalf("expected exactly 1 poll for an already-Archived backup, got %d", got)
+	}
+}
+
+func TestWaitForBackupDeleted_ReadyThenArchived(t *testing.T) {
+	mock, r := newVMBackupMock(t,
+		vmBackupGetStep{httpStatus: 200, status: "Ready"},
+		vmBackupGetStep{httpStatus: 200, status: "Archived"},
+	)
+
+	var diags diag.Diagnostics
+	r.waitForBackupDeleted(context.Background(), mockBackupID, 5*time.Second, &diags)
+
+	if diags.HasError() {
+		t.Fatalf("expected success once the backup is Archived, got: %v", diags.Errors())
+	}
+	if got := mock.gets(); got < 2 {
+		t.Fatalf("expected the poller to wait for the Archived transition, got %d polls", got)
+	}
+}
+
 func TestWaitForBackupDeleted_TransientServerErrorThenGone(t *testing.T) {
 	mock, r := newVMBackupMock(t,
 		vmBackupGetStep{httpStatus: 500},
@@ -362,7 +396,7 @@ func TestWaitForBackupDeleted_Timeout(t *testing.T) {
 	if !diags.HasError() {
 		t.Fatal("expected a timeout error for a backup that never disappears")
 	}
-	if !hasDiagContaining(diags, "still present") {
+	if !hasDiagContaining(diags, "was not archived or removed") {
 		t.Fatalf("expected a deletion-timeout diagnostic, got: %v", diags.Errors())
 	}
 }

@@ -233,9 +233,10 @@ func (r *VirtualMachineBackupResource) Delete(ctx context.Context, req resource.
 		return
 	}
 
-	// Deletion is asynchronous server-side (202 Accepted): the API archives
-	// and removes the backup afterwards. Wait until it is actually gone so a
-	// dependent delete (e.g. the virtual machine it backs up) doesn't race it.
+	// Deletion is asynchronous server-side (202 Accepted): the API soft-deletes
+	// the backup, moving it to a terminal "Archived" status rather than removing
+	// it. Wait until it reaches Archived (or 404s) so a dependent delete (e.g.
+	// the virtual machine it backs up) doesn't race it.
 	r.waitForBackupDeleted(ctx, id, deleteTimeout, &resp.Diagnostics)
 }
 
@@ -318,7 +319,7 @@ func (r *VirtualMachineBackupResource) waitForBackupDeleted(ctx context.Context,
 	consecutiveErrors := 0
 
 	for time.Now().Before(deadline) {
-		_, err := r.client.VirtualMachineBackups.Get(ctx, id)
+		result, err := r.client.VirtualMachineBackups.Get(ctx, id)
 		if err != nil {
 			var apiErr *components.APIError
 			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
@@ -335,6 +336,18 @@ func (r *VirtualMachineBackupResource) waitForBackupDeleted(ctx context.Context,
 			}
 		} else {
 			consecutiveErrors = 0
+			// Delete is a soft delete: the API archives the backup and keeps
+			// returning it as "Archived" (a 404 may never come). Treat Archived
+			// as the terminal deleted state so destroy doesn't spin until the
+			// timeout.
+			if result != nil && result.VirtualMachineBackup != nil &&
+				result.VirtualMachineBackup.Data != nil &&
+				result.VirtualMachineBackup.Data.Attributes != nil {
+				attrs := result.VirtualMachineBackup.Data.Attributes
+				if attrs.Status != nil && *attrs.Status == components.VirtualMachineBackupAttributesStatusArchived {
+					return
+				}
+			}
 		}
 
 		select {
@@ -347,7 +360,7 @@ func (r *VirtualMachineBackupResource) waitForBackupDeleted(ctx context.Context,
 
 	diags.AddError(
 		"Timeout waiting for virtual machine backup deletion",
-		fmt.Sprintf("Virtual machine backup %q was still present after %s.", id, timeout),
+		fmt.Sprintf("Virtual machine backup %q was not archived or removed after %s.", id, timeout),
 	)
 }
 

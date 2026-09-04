@@ -62,8 +62,17 @@ func testAccCheckVirtualMachineBackupDestroy(s *terraform.State) error {
 			continue
 		}
 
-		_, err := client.VirtualMachineBackups.Get(ctx, id)
+		result, err := client.VirtualMachineBackups.Get(ctx, id)
 		if err == nil {
+			// Delete is a soft delete: the backup lingers as "Archived" instead
+			// of 404ing, so Archived counts as destroyed.
+			if result != nil && result.VirtualMachineBackup != nil &&
+				result.VirtualMachineBackup.Data != nil &&
+				result.VirtualMachineBackup.Data.Attributes != nil &&
+				result.VirtualMachineBackup.Data.Attributes.Status != nil &&
+				*result.VirtualMachineBackup.Data.Attributes.Status == components.VirtualMachineBackupAttributesStatusArchived {
+				continue
+			}
 			return fmt.Errorf("virtual machine backup %s still exists", id)
 		}
 		var apiErr *components.APIError
