@@ -339,6 +339,29 @@ groups:
       Delete-only fragment — PrivateNetworks owns the rest of the lifecycle. The
       derived ---D shape is expected and is not a gap.
 
+  VirtualMachineRestores:
+    implemented_by: [latitudesh_virtual_machine_restore]
+    notes: >-
+      VERIFY FIRST: the sibling VirtualMachineBackups group carries a note that
+      the API checkout reviewed (2026-06-22) has backup domain code but no HTTP
+      routes at all; restores are created from backups, so the same doubt
+      applies here and this was not re-verified against a live API. Data source
+      only (CR-- shape, kind requested was datasource). Unmapped: Create and
+      CreateForVirtualMachineBackup (both mutate — a POST — which a data source
+      cannot issue; promoting them to a resource is a separate decision, not
+      attempted here). List, ListForBackup, and ListForVirtualMachineBackup are
+      also unmapped: a backup can have more than one restore, so none of them
+      gives a selector with the one-match-or-none semantics a data source
+      needs; Get(id) is the only read with that shape and is what backs the
+      data source. Team is not exposed — List's doc comment says restores are
+      scoped to "the authenticated team", so it is implied by the provider's
+      credentials and adds nothing a practitioner can act on. The nested
+      TeamInclude/ProjectInclude envelopes carry a lot more than that (billing,
+      stats, currency, feature flags, limits); only ProjectInclude's identifying
+      string is exposed, as `project` (slug, falling back to id) — not exposed
+      by team decision (2026-09-04): those fields serve account/billing
+      management, not restore provisioning.
+
   # --------------------------------------------------------------- excluded ---
 
   BaselinesPreview:

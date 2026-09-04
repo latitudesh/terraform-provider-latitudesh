@@ -207,6 +207,7 @@ func (p *latitudeshProvider) DataSources(ctx context.Context) []func() datasourc
 		NewRoleDataSource,
 		NewSSHKeyDataSource,
 		NewTagDataSource,
+		NewVirtualMachineRestoreDataSource,
 	}
 }
 
