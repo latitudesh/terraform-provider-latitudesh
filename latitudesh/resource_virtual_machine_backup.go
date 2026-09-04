@@ -23,6 +23,14 @@ import (
 var _ resource.Resource = &VirtualMachineBackupResource{}
 var _ resource.ResourceWithImportState = &VirtualMachineBackupResource{}
 
+// Poll intervals for the async create/delete waits. Declared as vars (not
+// consts) so the lifecycle tests can shorten them to keep the mock-backed
+// suite fast; production keeps the defaults.
+var (
+	vmBackupReadyPollInterval  = 10 * time.Second
+	vmBackupDeletePollInterval = 5 * time.Second
+)
+
 func NewVirtualMachineBackupResource() resource.Resource {
 	return &VirtualMachineBackupResource{}
 }
@@ -236,10 +244,8 @@ func (r *VirtualMachineBackupResource) ImportState(ctx context.Context, req reso
 }
 
 func (r *VirtualMachineBackupResource) waitForBackupReady(ctx context.Context, id string, timeout time.Duration, diags *diag.Diagnostics) {
-	const (
-		pollInterval         = 10 * time.Second
-		maxConsecutiveErrors = 5
-	)
+	const maxConsecutiveErrors = 5
+	pollInterval := vmBackupReadyPollInterval
 
 	deadline := time.Now().Add(timeout)
 	lastStatus := ""
@@ -305,10 +311,8 @@ func (r *VirtualMachineBackupResource) waitForBackupReady(ctx context.Context, i
 }
 
 func (r *VirtualMachineBackupResource) waitForBackupDeleted(ctx context.Context, id string, timeout time.Duration, diags *diag.Diagnostics) {
-	const (
-		pollInterval         = 5 * time.Second
-		maxConsecutiveErrors = 5
-	)
+	const maxConsecutiveErrors = 5
+	pollInterval := vmBackupDeletePollInterval
 
 	deadline := time.Now().Add(timeout)
 	consecutiveErrors := 0
