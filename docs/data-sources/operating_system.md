@@ -13,17 +13,18 @@ Look up an operating system available to deploy and reinstall, by `id`, `slug`, 
 
 ```terraform
 data "latitudesh_operating_system" "ubuntu" {
-  slug = "ubuntu_22_04_x64_lts"
+  slug = "ubuntu_24_04_x64_lts"
 }
 
 output "operating_system_provisionable_on" {
   value = data.latitudesh_operating_system.ubuntu.provisionable_on
 }
 
+# `project` is inherited from the provider block:
+#   provider "latitudesh" { project = "<project id or slug>" }
 resource "latitudesh_server" "web" {
-  project          = "proj_..."
   hostname         = "web-01"
-  plan             = "c2-small-x86"
+  plan             = "c3-small-x86"
   site             = "SAO2"
   operating_system = data.latitudesh_operating_system.ubuntu.slug
 }
@@ -36,13 +37,13 @@ resource "latitudesh_server" "web" {
 
 - `id` (String) Operating system ID to look up.
 - `name` (String) Operating system name to look up.
-- `slug` (String) Operating system slug to look up (e.g. "ubuntu_22_04_x64_lts"). This is the value expected by `latitudesh_server.operating_system`.
+- `slug` (String) Operating system slug to look up (e.g. "ubuntu_24_04_x64_lts"). This is the value expected by `latitudesh_server.operating_system`.
 
 ### Read-Only
 
 - `distro` (String) Distribution family (e.g. "ubuntu").
 - `features` (Attributes) Deployment features supported by this operating system build. (see [below for nested schema](#nestedatt--features))
-- `provisionable_on` (List of String) Server plan slugs this operating system can be deployed on.
+- `provisionable_on` (List of String) Server plan names this operating system can be deployed on (e.g. "c3.small.x86", as reported by `latitudesh_plan.name`).
 - `user` (String) Default login user for this operating system.
 - `version` (String) Distribution version.
 

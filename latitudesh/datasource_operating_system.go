@@ -115,7 +115,7 @@ func (d *OperatingSystemDataSource) Schema(ctx context.Context, req datasource.S
 				},
 			},
 			"slug": schema.StringAttribute{
-				MarkdownDescription: "Operating system slug to look up (e.g. \"ubuntu_22_04_x64_lts\"). This is the value expected by `latitudesh_server.operating_system`.",
+				MarkdownDescription: "Operating system slug to look up (e.g. \"ubuntu_24_04_x64_lts\"). This is the value expected by `latitudesh_server.operating_system`.",
 				Optional:            true,
 				Computed:            true,
 				Validators: []validator.String{
@@ -151,7 +151,7 @@ func (d *OperatingSystemDataSource) Schema(ctx context.Context, req datasource.S
 				Computed:            true,
 			},
 			"provisionable_on": schema.ListAttribute{
-				MarkdownDescription: "Server plan slugs this operating system can be deployed on.",
+				MarkdownDescription: "Server plan names this operating system can be deployed on (e.g. \"c3.small.x86\", as reported by `latitudesh_plan.name`).",
 				ElementType:         types.StringType,
 				Computed:            true,
 			},
@@ -211,18 +211,37 @@ func (d *OperatingSystemDataSource) Read(ctx context.Context, req datasource.Rea
 		return
 	}
 
-	var args findOperatingSystemArgs
+	var (
+		args     findOperatingSystemArgs
+		selector path.Path
+		value    string
+	)
 	switch {
 	case !data.ID.IsNull():
-		args.ID = data.ID.ValueString()
+		selector, value = path.Root("id"), data.ID.ValueString()
+		args.ID = value
 	case !data.Slug.IsNull():
-		args.Slug = data.Slug.ValueString()
+		selector, value = path.Root("slug"), data.Slug.ValueString()
+		args.Slug = value
 	case !data.Name.IsNull():
-		args.Name = data.Name.ValueString()
+		selector, value = path.Root("name"), data.Name.ValueString()
+		args.Name = value
 	default:
 		resp.Diagnostics.AddError(
 			"Missing selector",
 			"Exactly one of 'id', 'slug', or 'name' must be provided.",
+		)
+		return
+	}
+
+	// ExactlyOneOf only checks that a selector is set, not that it has content.
+	// Reject blank values here rather than walking the whole catalog for a
+	// guaranteed miss and reporting it as "not found".
+	if strings.TrimSpace(value) == "" {
+		resp.Diagnostics.AddAttributeError(
+			selector,
+			"Blank selector",
+			fmt.Sprintf("%q must not be empty or whitespace-only.", selector.String()),
 		)
 		return
 	}
@@ -283,6 +302,14 @@ type findOperatingSystemArgs struct {
 // matching the given selector. OperatingSystems exposes no single-item read
 // (ListPlans is its only method), so every lookup — including by ID — walks
 // the list.
+//
+// pageSize is deliberately nil. The SDK still sends its default page[size]=20
+// on the wire, but Next() derives its stop condition from the argument we
+// passed: with nil it keeps going until the API returns an empty page (which
+// the live endpoint does past the last one); with an explicit size it stops on
+// the first short page. The explicit form saves one request per miss but
+// silently truncates the walk if the API ever caps page[size] below the value
+// requested, so the robust form is used here.
 func (d *OperatingSystemDataSource) findOne(ctx context.Context, args findOperatingSystemArgs) (*components.OperatingSystemData, error) {
 	idQ := strings.TrimSpace(args.ID)
 	slugQ := strings.TrimSpace(args.Slug)
