@@ -202,6 +202,7 @@ func (p *latitudeshProvider) DataSources(ctx context.Context) []func() datasourc
 		NewObjectStorageDataSource,
 		NewOperatingSystemDataSource,
 		NewPlanDataSource,
+		NewPlanVMDataSource,
 		NewRegionDataSource,
 		NewRoleDataSource,
 		NewSSHKeyDataSource,
