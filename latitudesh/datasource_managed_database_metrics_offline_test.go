@@ -10,7 +10,7 @@ import (
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
-func TestManagedDatabasMetricsValueMapping(t *testing.T) {
+func TestManagedDatabaseMetricsValueMapping(t *testing.T) {
 	ctx := context.Background()
 
 	current := 42.5
@@ -30,15 +30,15 @@ func TestManagedDatabasMetricsValueMapping(t *testing.T) {
 		},
 	}
 
-	got, diags := managedDatabasMetricsValue(ctx, metrics)
+	got, diags := managedDatabaseMetricsValue(ctx, metrics)
 	if diags.HasError() {
-		t.Fatalf("managedDatabasMetricsValue diagnostics: %v", diags)
+		t.Fatalf("managedDatabaseMetricsValue diagnostics: %v", diags)
 	}
 	if got.IsNull() {
 		t.Fatal("metrics map is null; want a known map")
 	}
 
-	var models map[string]ManagedDatabasMetricModel
+	var models map[string]ManagedDatabaseMetricModel
 	if d := got.ElementsAs(ctx, &models, false); d.HasError() {
 		t.Fatalf("ElementsAs: %v", d)
 	}
@@ -54,7 +54,7 @@ func TestManagedDatabasMetricsValueMapping(t *testing.T) {
 		t.Errorf("cpuUsage current = %v, want 42.5", cpu.Current.ValueFloat64())
 	}
 
-	var points []ManagedDatabasMetricPointModel
+	var points []ManagedDatabaseMetricPointModel
 	if d := cpu.Points.ElementsAs(ctx, &points, false); d.HasError() {
 		t.Fatalf("ElementsAs points: %v", d)
 	}
@@ -80,25 +80,25 @@ func TestManagedDatabasMetricsValueMapping(t *testing.T) {
 	}
 }
 
-// TestManagedDatabasMetricsValueEmptyNeverNull guards the "always a map, never
+// TestManagedDatabaseMetricsValueEmptyNeverNull guards the "always a map, never
 // null" guarantee (mirrors TestBillingProductsValueEmptyNeverNull) so a config
 // that iterates `metrics` never fails on a null iteratee for a database with
 // no metrics reported yet.
-func TestManagedDatabasMetricsValueEmptyNeverNull(t *testing.T) {
+func TestManagedDatabaseMetricsValueEmptyNeverNull(t *testing.T) {
 	ctx := context.Background()
-	got, diags := managedDatabasMetricsValue(ctx, nil)
+	got, diags := managedDatabaseMetricsValue(ctx, nil)
 	if diags.HasError() {
-		t.Fatalf("managedDatabasMetricsValue(nil) diagnostics: %v", diags)
+		t.Fatalf("managedDatabaseMetricsValue(nil) diagnostics: %v", diags)
 	}
 	if got.IsNull() {
-		t.Fatal("managedDatabasMetricsValue(nil) returned a null map; want an empty known map")
+		t.Fatal("managedDatabaseMetricsValue(nil) returned a null map; want an empty known map")
 	}
 	if n := len(got.Elements()); n != 0 {
-		t.Fatalf("managedDatabasMetricsValue(nil) length = %d, want 0", n)
+		t.Fatalf("managedDatabaseMetricsValue(nil) length = %d, want 0", n)
 	}
 }
 
-func TestManagedDatabasMetricsNotFound(t *testing.T) {
+func TestManagedDatabaseMetricsNotFound(t *testing.T) {
 	cases := []struct {
 		name string
 		err  error
@@ -128,8 +128,8 @@ func TestManagedDatabasMetricsNotFound(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := managedDatabasMetricsNotFound(tc.err); got != tc.want {
-				t.Errorf("managedDatabasMetricsNotFound(%v) = %v, want %v", tc.err, got, tc.want)
+			if got := managedDatabaseMetricsNotFound(tc.err); got != tc.want {
+				t.Errorf("managedDatabaseMetricsNotFound(%v) = %v, want %v", tc.err, got, tc.want)
 			}
 		})
 	}

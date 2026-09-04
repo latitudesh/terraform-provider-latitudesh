@@ -8,13 +8,13 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 )
 
-// TestAccManagedDatabas_Basic reads metrics for a pre-existing managed
+// TestAccManagedDatabaseMetrics_Basic reads metrics for a pre-existing managed
 // database. ManagedDatabases exposes no create method (crud shape -R--), so
 // unlike testAccSharedServers this cannot provision its own fixture: a human
 // must export LATITUDESH_TEST_MANAGED_DATABASE_ID for an existing managed
 // database before running this test live.
-func TestAccManagedDatabas_Basic(t *testing.T) {
-	dataSourceName := "data.latitudesh_managed_databas.test"
+func TestAccManagedDatabaseMetrics_Basic(t *testing.T) {
+	dataSourceName := "data.latitudesh_managed_database_metrics.test"
 
 	managedDatabaseID := os.Getenv("LATITUDESH_TEST_MANAGED_DATABASE_ID")
 
@@ -28,7 +28,7 @@ func TestAccManagedDatabas_Basic(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccConfigManagedDatabasMetrics(managedDatabaseID),
+				Config: testAccConfigManagedDatabaseMetrics(managedDatabaseID),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(dataSourceName, "managed_database_id", managedDatabaseID),
 					resource.TestCheckResourceAttrSet(dataSourceName, "from"),
@@ -40,9 +40,9 @@ func TestAccManagedDatabas_Basic(t *testing.T) {
 	})
 }
 
-func testAccConfigManagedDatabasMetrics(managedDatabaseID string) string {
+func testAccConfigManagedDatabaseMetrics(managedDatabaseID string) string {
 	return fmt.Sprintf(`
-data "latitudesh_managed_databas" "test" {
+data "latitudesh_managed_database_metrics" "test" {
   managed_database_id = %q
   period               = 3600
 }

@@ -100,7 +100,7 @@ groups:
       components.FirewallAssignmentDataAttributes.Server/.VirtualMachine.
 
   ManagedDatabases:
-    implemented_by: [latitudesh_managed_databas]
+    implemented_by: [latitudesh_managed_database_metrics]
     notes: >-
       Data source. ShowManagedDatabaseMetrics is the only method on this
       group (crud shape -R--) and it is the one mapped: managed_database_id,

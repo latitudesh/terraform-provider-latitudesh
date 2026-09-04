@@ -1,25 +1,25 @@
 ---
-page_title: "latitudesh_managed_databas Data Source - latitudesh"
+page_title: "latitudesh_managed_database_metrics Data Source - latitudesh"
 subcategory: ""
 description: |-
   Managed database metrics data source - retrieve a time window of metrics for a managed database (CPU, memory, TPS, connections, deadlocks, blocked queries, database size).
 ---
 
-# latitudesh_managed_databas (Data Source)
+# latitudesh_managed_database_metrics (Data Source)
 
 Retrieve a time window of metrics for a managed database: CPU usage, memory usage, TPS, max connections, deadlocks, blocked queries, and database size.
 
 ## Example Usage
 
 ```terraform
-data "latitudesh_managed_databas" "example" {
+data "latitudesh_managed_database_metrics" "example" {
   managed_database_id = "managed_database_..."
   period              = 3600
   queries             = "cpuUsage,memoryUsage"
 }
 
 output "managed_database_metrics" {
-  value = data.latitudesh_managed_databas.example.metrics
+  value = data.latitudesh_managed_database_metrics.example.metrics
 }
 ```
 
