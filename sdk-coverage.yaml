@@ -459,10 +459,26 @@ groups:
       usage/metrics reporting, candidates for their own data sources later).
 
   VirtualMachineBackups:
+    implemented_by: [latitudesh_virtual_machine_backup]
     notes: >-
       VERIFY FIRST: the API checkout reviewed (2026-06-22) has backup domain code
       but no HTTP routes at all. The SDK exposing this group implies production does
       have the endpoints, but confirm before merging generated code against them.
+      Only the top-level Create (POST /virtual_machine_backups, body carries
+      virtual_machine) is wired into the resource; CreateForVirtualMachine (the
+      VM-nested POST variant) and ListForVirtualMachine (VM-scoped list) are
+      unmapped alternate paths to the same data — the resource and data source
+      cover the same ground via the top-level Create/Get. List (all backups for
+      the team) is also unmapped: nothing here needs to browse every backup
+      across the team, and there is no unique selector (unlike name/slug on
+      other data sources) to build a safe "find one" lookup on top of it. The
+      nested `team` and `project` envelope/include objects on the read response
+      (TeamInclude, ProjectInclude — name, slug, billing, currency, limits,
+      feature flags, etc.) are not exposed by team decision: they are
+      catalog/billing metadata about the owning team and project, not something
+      a practitioner sets or needs to provision a backup. The nested
+      virtual_machine.name is likewise not exposed — the resource already
+      exposes the VM by id.
 
   APIKeys:
     notes: >-
