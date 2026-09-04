@@ -1,0 +1,49 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Triggers a backup of a [Latitude.sh](https://latitude.sh/) virtual machine. The resource waits for the backup to reach a terminal status (`Ready` or `Failed`) before completing.
+
+There is no update endpoint, so changing `virtual_machine` forces a new resource — which triggers a brand new backup rather than modifying one in place.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+You can import a virtual machine backup resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_virtual_machine_backup` resource can be imported by specifying the backup ID:
+
+```sh
+terraform import latitudesh_virtual_machine_backup.bastion <BACKUP_ID>
+```
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration.
+
+```hcl
+import {
+  to = latitudesh_virtual_machine_backup.bastion
+  id = "<BACKUP_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_virtual_machine_backup.tf
+```
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.

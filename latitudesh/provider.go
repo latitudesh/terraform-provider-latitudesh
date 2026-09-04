@@ -190,6 +190,7 @@ func (p *latitudeshProvider) Resources(ctx context.Context) []func() resource.Re
 		NewFirewallAssignmentResource,
 		NewObjectStorageResource,
 		NewObjectStorageAccessKeyResource,
+		NewVirtualMachineBackupResource,
 	}
 }
 
@@ -207,6 +208,7 @@ func (p *latitudeshProvider) DataSources(ctx context.Context) []func() datasourc
 		NewRoleDataSource,
 		NewSSHKeyDataSource,
 		NewTagDataSource,
+		NewVirtualMachineBackupDataSource,
 	}
 }
 
