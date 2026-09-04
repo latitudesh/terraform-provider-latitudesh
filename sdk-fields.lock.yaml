@@ -3118,6 +3118,139 @@ groups:
       operations.ListVirtualMachineScopedBackupsResponse:
         fields:
           - {name: "VirtualMachineBackups", type: "*components.VirtualMachineBackups", optional: true, doc: "6d8303b0"}
+  VirtualMachineRestores:
+    methods:
+      Create: {signature: "(context.Context, components.VirtualMachineRestorePayload, ...operations.Option) (*operations.CreateVirtualMachineRestoreFlatResponse, error)"}
+      CreateForVirtualMachineBackup: {signature: "(context.Context, string, string, *components.VirtualMachineRestorePayload, ...operations.Option) (*operations.CreateVirtualMachineRestoreResponse, error)"}
+      Get: {signature: "(context.Context, string, ...operations.Option) (*operations.GetVirtualMachineRestoreResponse, error)"}
+      List: {signature: "(context.Context, ...operations.Option) (*operations.ListVirtualMachineRestoresResponse, error)"}
+      ListForBackup: {signature: "(context.Context, string, ...operations.Option) (*operations.ListBackupRestoresResponse, error)"}
+      ListForVirtualMachineBackup: {signature: "(context.Context, string, string, ...operations.Option) (*operations.ListVirtualMachineScopedRestoresResponse, error)"}
+    models:
+      components.Backup:
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+      components.Billing:
+        fields:
+          - {name: "Method", wire: "method", type: "*string", optional: true}
+          - {name: "SubscriptionID", wire: "subscription_id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+      components.Currency:
+        fields:
+          - {name: "Code", wire: "code", type: "*string", optional: true}
+          - {name: "CurrencyID", wire: "currency_id", type: "*int64", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.Limits:
+        fields:
+          - {name: "BareMetal", wire: "bare_metal", type: "*int64", optional: true}
+          - {name: "BareMetalGpu", wire: "bare_metal_gpu", type: "*int64", optional: true}
+          - {name: "BgpSessionPerIP", wire: "bgp_session_per_ip", type: "*int64", optional: true}
+          - {name: "BlockStorage", wire: "block_storage", type: "*int64", optional: true}
+          - {name: "Database", wire: "database", type: "*int64", optional: true}
+          - {name: "ElasticIP", wire: "elastic_ip", type: "*int64", optional: true}
+          - {name: "Filesystem", wire: "filesystem", type: "*int64", optional: true}
+          - {name: "PublicNetwork", wire: "public_network", type: "*int64", optional: true}
+          - {name: "VirtualMachine", wire: "virtual_machine", type: "*int64", optional: true}
+          - {name: "VirtualMachineGpu", wire: "virtual_machine_gpu", type: "*int64", optional: true}
+          - {name: "VirtualNetwork", wire: "virtual_network", type: "*int64", optional: true}
+      components.ProjectInclude:
+        fields:
+          - {name: "BandwidthAlert", wire: "bandwidth_alert", type: "*bool", optional: true}
+          - {name: "Billing", wire: "billing", type: "*Billing", optional: true}
+          - {name: "BillingMethod", wire: "billing_method", type: "*string", optional: true}
+          - {name: "BillingType", wire: "billing_type", type: "*string", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "Environment", wire: "environment", type: "*string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "ProvisioningType", wire: "provisioning_type", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Stats", wire: "stats", type: "*ProjectIncludeStats", optional: true}
+      components.ProjectIncludeStats:
+        fields:
+          - {name: "Databases", wire: "databases", type: "*int64", optional: true}
+          - {name: "IPAddresses", wire: "ip_addresses", type: "*int64", optional: true}
+          - {name: "Prefixes", wire: "prefixes", type: "*int64", optional: true}
+          - {name: "Servers", wire: "servers", type: "*int64", optional: true}
+          - {name: "Storages", wire: "storages", type: "*int64", optional: true}
+          - {name: "VirtualMachines", wire: "virtual_machines", type: "*int64", optional: true}
+          - {name: "Vlans", wire: "vlans", type: "*int64", optional: true}
+      components.TeamInclude:
+        fields:
+          - {name: "Address", wire: "address", type: "*string", optional: true}
+          - {name: "Currency", wire: "currency", type: "*Currency", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "FeatureFlags", wire: "feature_flags", type: "[]string", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Limits", wire: "limits", type: "*Limits", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "Status", wire: "status", type: "*string", optional: true}
+      components.VirtualMachineRestore:
+        fields:
+          - {name: "Data", wire: "data", type: "*VirtualMachineRestoreAttributes", optional: true}
+          - {name: "Meta", wire: "meta", type: "*VirtualMachineRestoreMeta", optional: true}
+      components.VirtualMachineRestoreAttributes:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*VirtualMachineRestoreAttributesAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*VirtualMachineRestoreAttributesType", optional: true}
+      components.VirtualMachineRestoreAttributesAttributes:
+        fields:
+          - {name: "Backup", wire: "backup", type: "*Backup", optional: true}
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "Project", wire: "project", type: "*ProjectInclude", optional: true}
+          - {name: "Status", wire: "status", type: "*VirtualMachineRestoreAttributesStatus", optional: true}
+          - {name: "Team", wire: "team", type: "*TeamInclude", optional: true}
+          - {name: "VirtualMachine", wire: "virtual_machine", type: "*VirtualMachineRestoreAttributesVirtualMachine", optional: true, doc: "74566766"}
+      components.VirtualMachineRestoreAttributesStatus:
+        enum: ["Creating", "Failed", "Ready"]
+      components.VirtualMachineRestoreAttributesType:
+        enum: ["virtual_machine_restores"]
+      components.VirtualMachineRestoreAttributesVirtualMachine:
+        doc: "d6d419ca"
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.VirtualMachineRestoreMeta:
+      components.VirtualMachineRestorePayload:
+        fields:
+          - {name: "Data", wire: "data", type: "*VirtualMachineRestorePayloadData", optional: true}
+      components.VirtualMachineRestorePayloadAttributes:
+        fields:
+          - {name: "Backup", wire: "backup", type: "*string", optional: true, doc: "3e3956a1"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "a9ddaa37"}
+          - {name: "Site", wire: "site", type: "*string", optional: true, doc: "a2142656"}
+      components.VirtualMachineRestorePayloadData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*VirtualMachineRestorePayloadAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "*VirtualMachineRestorePayloadType", optional: true}
+      components.VirtualMachineRestorePayloadType:
+        enum: ["virtual_machine_restores"]
+      components.VirtualMachineRestores:
+        fields:
+          - {name: "Data", wire: "data", type: "[]VirtualMachineRestoreAttributes", optional: true}
+          - {name: "Meta", wire: "meta", type: "*VirtualMachineRestoresMeta", optional: true}
+      components.VirtualMachineRestoresMeta:
+      operations.CreateVirtualMachineRestoreFlatResponse:
+        fields:
+          - {name: "VirtualMachineRestore", type: "*components.VirtualMachineRestore", optional: true, doc: "09de135b"}
+      operations.CreateVirtualMachineRestoreResponse:
+        fields:
+          - {name: "VirtualMachineRestore", type: "*components.VirtualMachineRestore", optional: true, doc: "09de135b"}
+      operations.GetVirtualMachineRestoreResponse:
+        fields:
+          - {name: "VirtualMachineRestore", type: "*components.VirtualMachineRestore", optional: true, doc: "6d8303b0"}
+      operations.ListBackupRestoresResponse:
+        fields:
+          - {name: "VirtualMachineRestores", type: "*components.VirtualMachineRestores", optional: true, doc: "6d8303b0"}
+      operations.ListVirtualMachineRestoresResponse:
+        fields:
+          - {name: "VirtualMachineRestores", type: "*components.VirtualMachineRestores", optional: true, doc: "6d8303b0"}
+      operations.ListVirtualMachineScopedRestoresResponse:
+        fields:
+          - {name: "VirtualMachineRestores", type: "*components.VirtualMachineRestores", optional: true, doc: "6d8303b0"}
   VirtualMachines:
     methods:
       Create: {signature: "(context.Context, components.VirtualMachinePayload, ...operations.Option) (*operations.CreateVirtualMachineResponse, error)"}
