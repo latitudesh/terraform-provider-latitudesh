@@ -189,6 +189,11 @@ groups:
       legacy_network and .features -> new Computed features (list) on
       latitudesh_server, both straightforward read-only refreshes.
 
+      v1.19.20 drift closure (lock synced 2026-09-04): all 16 rows were new
+      filter[...] fields (plus two doc_changed rows) on
+      operations.GetServersRequest — lock synced only, no mapping, per the
+      pre-existing GetServersRequest.sort note below.
+
       Deliberately left unmapped:
       - components.DeployConfigAttributes.ipxe_url: legacy field per team
         decision (2026-08-31) — not exposed as an attribute; the provider's
@@ -223,8 +228,14 @@ groups:
         Servers.UpdateDeployConfig is never called anywhere in this
         provider — disk_layout/ipxe/raid changes go through Servers.Reinstall
         instead — so the whole request-body reshape is dead surface for us.
-      - operations.GetServersRequest.sort: no server list/data source exists
-        to take a sort parameter.
+      - operations.GetServersRequest.sort and all of its filter[...] fields
+        (including the filter[created_at], filter[id], and
+        filter[hostname|label|plan][eql|match|prefix|suffix] fields added in
+        v1.19.20): Servers.List / GetServersRequest is never called anywhere
+        in this provider — no server list/data source exists to take a sort
+        or filter parameter, so the whole request type is dead surface. The
+        filter[created_at_gte]/[created_at_lte] doc_changed rows in the same
+        v1.19.20 bump fall under this too, for the same reason.
       - operations.CreateServerServersAttributes.public_network /
         .public_network_id (new, both **Preview**, gated to teams with
         public networks enabled), plus the already-unmapped (pre-existing,

@@ -5,7 +5,7 @@
 # See CONTRIBUTING.md, "Field drift".
 version: 1
 sdk_module: github.com/latitudesh/latitudesh-go-sdk
-sdk_version: v1.19.19
+sdk_version: v1.19.20
 groups:
   Billing:
     methods:
@@ -2380,15 +2380,29 @@ groups:
         fields:
           - {name: "ExtraFieldsServers", wire: "extra_fields[servers]", type: "*string", optional: true, doc: "359d7aad"}
           - {name: "FilterBgpEligible", wire: "filter[bgp_eligible]", type: "*bool", optional: true, doc: "46e08c8e"}
-          - {name: "FilterCreatedAtGte", wire: "filter[created_at_gte]", type: "*string", optional: true, doc: "baf96d38"}
-          - {name: "FilterCreatedAtLte", wire: "filter[created_at_lte]", type: "*string", optional: true, doc: "91d19eb3"}
+          - {name: "FilterCreatedAt", wire: "filter[created_at]", type: "*string", optional: true, doc: "b96ffe33"}
+          - {name: "FilterCreatedAtGte", wire: "filter[created_at_gte]", type: "*string", optional: true, doc: "9bf4150b"}
+          - {name: "FilterCreatedAtLte", wire: "filter[created_at_lte]", type: "*string", optional: true, doc: "ffc40934"}
           - {name: "FilterDiskEql", wire: "filter[disk][eql]", type: "*int64", optional: true, doc: "8f27e90e"}
           - {name: "FilterDiskGte", wire: "filter[disk][gte]", type: "*int64", optional: true, doc: "ede7cf54"}
           - {name: "FilterDiskLte", wire: "filter[disk][lte]", type: "*int64", optional: true, doc: "9bf87e01"}
           - {name: "FilterGpu", wire: "filter[gpu]", type: "*bool", optional: true, doc: "d15cf75d"}
           - {name: "FilterHostname", wire: "filter[hostname]", type: "*string", optional: true, doc: "5e802199"}
+          - {name: "FilterHostnameEql", wire: "filter[hostname][eql]", type: "*string", optional: true, doc: "a5dc5d00"}
+          - {name: "FilterHostnameMatch", wire: "filter[hostname][match]", type: "*string", optional: true, doc: "daafeb64"}
+          - {name: "FilterHostnamePrefix", wire: "filter[hostname][prefix]", type: "*string", optional: true, doc: "2896591e"}
+          - {name: "FilterHostnameSuffix", wire: "filter[hostname][suffix]", type: "*string", optional: true, doc: "f18d3d31"}
+          - {name: "FilterID", wire: "filter[id]", type: "*string", optional: true, doc: "f868f993"}
           - {name: "FilterLabel", wire: "filter[label]", type: "*string", optional: true, doc: "59719708"}
+          - {name: "FilterLabelEql", wire: "filter[label][eql]", type: "*string", optional: true, doc: "15e0f12f"}
+          - {name: "FilterLabelMatch", wire: "filter[label][match]", type: "*string", optional: true, doc: "b534a219"}
+          - {name: "FilterLabelPrefix", wire: "filter[label][prefix]", type: "*string", optional: true, doc: "31b72055"}
+          - {name: "FilterLabelSuffix", wire: "filter[label][suffix]", type: "*string", optional: true, doc: "e8c9b8aa"}
           - {name: "FilterPlan", wire: "filter[plan]", type: "*string", optional: true, doc: "5c73284b"}
+          - {name: "FilterPlanEql", wire: "filter[plan][eql]", type: "*string", optional: true, doc: "3d0d0323"}
+          - {name: "FilterPlanMatch", wire: "filter[plan][match]", type: "*string", optional: true, doc: "ef66c5bb"}
+          - {name: "FilterPlanPrefix", wire: "filter[plan][prefix]", type: "*string", optional: true, doc: "0b42756f"}
+          - {name: "FilterPlanSuffix", wire: "filter[plan][suffix]", type: "*string", optional: true, doc: "4a44cca0"}
           - {name: "FilterProject", wire: "filter[project]", type: "*string", optional: true, doc: "42805174"}
           - {name: "FilterRAMEql", wire: "filter[ram][eql]", type: "*int64", optional: true, doc: "6dd062cd"}
           - {name: "FilterRAMGte", wire: "filter[ram][gte]", type: "*int64", optional: true, doc: "9f67fa90"}
