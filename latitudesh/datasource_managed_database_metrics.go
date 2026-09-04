@@ -18,9 +18,27 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	"github.com/latitudesh/latitudesh-go-sdk/retry"
 
 	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
+
+// metricsRetryConfig caps how long a metrics read may spend retrying transient
+// upstream errors (the SDK retries 429/500/502/503/504). This data source is
+// read during `terraform plan`, so it overrides the provider-wide 5-minute
+// retry budget with a short one: a persistent 5xx (e.g. a 502 from the metrics
+// backend) then fails the plan in a few seconds with the real error, instead of
+// hanging while the backoff walks all the way to MaxElapsedTime.
+var metricsRetryConfig = retry.Config{
+	Strategy: "backoff",
+	Backoff: &retry.BackoffStrategy{
+		InitialInterval: 500,
+		MaxInterval:     2000,
+		Exponent:        1.5,
+		MaxElapsedTime:  10000,
+	},
+	RetryConnectionErrors: false,
+}
 
 var (
 	_ datasource.DataSource              = &ManagedDatabaseMetricsDataSource{}
@@ -179,7 +197,7 @@ func (d *ManagedDatabaseMetricsDataSource) Read(ctx context.Context, req datasou
 		queries = &v
 	}
 
-	res, err := d.client.ManagedDatabases.ShowManagedDatabaseMetrics(ctx, managedDatabaseID, period, queries)
+	res, err := d.client.ManagedDatabases.ShowManagedDatabaseMetrics(ctx, managedDatabaseID, period, queries, operations.WithRetries(metricsRetryConfig))
 	if err != nil {
 		if managedDatabaseMetricsNotFound(err) {
 			resp.Diagnostics.AddError("Not Found", fmt.Sprintf("No managed database exists with ID %q", managedDatabaseID))
