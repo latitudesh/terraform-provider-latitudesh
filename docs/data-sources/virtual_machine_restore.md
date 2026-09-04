@@ -13,7 +13,7 @@ Look up a virtual machine restore by `id`. Useful for polling a restore triggere
 
 ```terraform
 data "latitudesh_virtual_machine_restore" "example" {
-  id = "vmr_..."
+  id = "vmrst_..."
 }
 
 output "restored_virtual_machine_id" {

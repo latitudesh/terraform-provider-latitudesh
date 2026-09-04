@@ -1,5 +1,5 @@
 data "latitudesh_virtual_machine_restore" "example" {
-  id = "vmr_..."
+  id = "vmrst_..."
 }
 
 output "restored_virtual_machine_id" {
