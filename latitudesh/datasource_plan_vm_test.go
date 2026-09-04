@@ -19,14 +19,14 @@ func TestAccDataSourcePlanVM(t *testing.T) {
 	// exercises a plan that actually exists on the backend.
 	planSlug := testAccVMPlan(t)
 
-	_, teardown := createTestRecorder(t)
+	recorder, teardown := createTestRecorder(t)
 	defer teardown()
 
 	notFoundRe := regexp.MustCompile(`(?i)(virtual\s*machine\s*plan\s*not\s*found|no\s*virtual\s*machine\s*plan\s*matches)`)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccTokenCheck(t) },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithVCR(recorder),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccConfigPlanVMBySlug(planSlug),
