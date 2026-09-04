@@ -1288,6 +1288,84 @@ groups:
       operations.UpdatePlansBandwidthResponse:
         fields:
           - {name: "BandwidthPackages", type: "*components.BandwidthPackages", optional: true, doc: "6d8303b0"}
+  Plans.VM:
+    methods:
+      List: {signature: "(context.Context, *bool, ...operations.Option) (*operations.GetVMPlansResponse, error)"}
+    models:
+      components.Disk:
+        fields:
+          - {name: "Size", wire: "size", type: "*VirtualMachinePlansSize", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true, doc: "ce9184e0"}
+      components.Vcpu:
+        doc: "0c8885a4"
+        fields:
+          - {name: "Clock", wire: "clock", type: "*float64", optional: true, doc: "c0322875"}
+          - {name: "Count", wire: "count", type: "*int64", optional: true, doc: "b45a46b8"}
+          - {name: "Type", wire: "type", type: "*string", optional: true, doc: "84d0f44c"}
+      components.VirtualMachinePlans:
+        fields:
+          - {name: "Data", wire: "data", type: "[]VirtualMachinePlansData", optional: true}
+      components.VirtualMachinePlansAttributes:
+        fields:
+          - {name: "AvailableOperatingSystems", wire: "available_operating_systems", type: "[]string", optional: true, doc: "1ec5ba28"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "39ed30fe"}
+          - {name: "Regions", wire: "regions", type: "[]VirtualMachinePlansRegions", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true, doc: "1c00257f"}
+          - {name: "Specs", wire: "specs", type: "*VirtualMachinePlansSpecs", optional: true}
+          - {name: "StockLevel", wire: "stock_level", type: "*VirtualMachinePlansStockLevel", optional: true, doc: "0364ed35"}
+      components.VirtualMachinePlansData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*VirtualMachinePlansAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true, doc: "24499704"}
+          - {name: "Type", wire: "type", type: "*VirtualMachinePlansType", optional: true, doc: "f4bccf56"}
+      components.VirtualMachinePlansDataStockLevel:
+        doc: "26da4e92"
+        enum: ["high", "low", "medium", "unavailable"]
+      components.VirtualMachinePlansLocations:
+        fields:
+          - {name: "Available", wire: "available", type: "[]string", optional: true, doc: "a49fac8d"}
+          - {name: "InStock", wire: "in_stock", type: "[]string", optional: true, doc: "befa4a0a"}
+      components.VirtualMachinePlansNics:
+        fields:
+          - {name: "Count", wire: "count", type: "*int64", optional: true, doc: "dfcaffa8"}
+          - {name: "Type", wire: "type", type: "*string", optional: true, doc: "4d5c793b"}
+      components.VirtualMachinePlansPricing:
+        fields:
+          - {name: "Hour", wire: "hour", type: "*float64", optional: true}
+          - {name: "Month", wire: "month", type: "*float64", optional: true}
+          - {name: "Year", wire: "year", type: "*float64", optional: true}
+      components.VirtualMachinePlansRegions:
+        fields:
+          - {name: "Available", wire: "available", type: "[]string", optional: true}
+          - {name: "Locations", wire: "locations", type: "*VirtualMachinePlansLocations", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Pricing", wire: "pricing", type: "map[string]VirtualMachinePlansPricing", optional: true, doc: "d09ca134"}
+          - {name: "StockLevel", wire: "stock_level", type: "*VirtualMachinePlansDataStockLevel", optional: true, doc: "f9325b17"}
+      components.VirtualMachinePlansSize:
+        fields:
+          - {name: "Amount", wire: "amount", type: "*int64", optional: true, doc: "33d28cbc"}
+          - {name: "Unit", wire: "unit", type: "*VirtualMachinePlansUnit", optional: true, doc: "bb181222"}
+      components.VirtualMachinePlansSpecs:
+        fields:
+          - {name: "Disk", wire: "disk", type: "*Disk", optional: true}
+          - {name: "Gpu", wire: "gpu", type: "*string", optional: true, doc: "f25c3cbe"}
+          - {name: "Memory", wire: "memory", type: "*int64", optional: true, doc: "11fc2d6d"}
+          - {name: "Nics", wire: "nics", type: "[]VirtualMachinePlansNics", optional: true, doc: "4d3a4859"}
+          - {name: "Vcpu", wire: "vcpu", type: "*Vcpu", optional: true, doc: "3fdcc973"}
+          - {name: "Vcpus", wire: "vcpus", type: "*int64", optional: true, doc: "906e43b2"}
+          - {name: "VramPerGpu", wire: "vram_per_gpu", type: "*int64", optional: true, doc: "850c64d2"}
+      components.VirtualMachinePlansStockLevel:
+        doc: "925ee236"
+        enum: ["high", "low", "medium", "unavailable"]
+      components.VirtualMachinePlansType:
+        doc: "920b1787"
+        enum: ["virtual_machine_plans"]
+      components.VirtualMachinePlansUnit:
+        doc: "4fc3cf47"
+        enum: ["gib"]
+      operations.GetVMPlansResponse:
+        fields:
+          - {name: "VirtualMachinePlans", type: "*components.VirtualMachinePlans", optional: true, doc: "6d8303b0"}
   PrivateNetworks:
     methods:
       Assign: {signature: "(context.Context, operations.AssignServerVirtualNetworkPrivateNetworksRequestBody, ...operations.Option) (*operations.AssignServerVirtualNetworkResponse, error)"}

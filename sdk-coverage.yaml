@@ -174,6 +174,32 @@ groups:
       new attribute — see the handoff for the v1.19.19 drift PR for the
       reviewer flag.
 
+  Plans.VM:
+    implemented_by: [latitudesh_plan_vm]
+    notes: >-
+      Data source. List is the only method on the VM sub-group (crud shape
+      -R--) and it is the one mapped — no methods are left unmapped.
+      VirtualMachinePlansAttributes carries no presentation-only fields (no
+      description, logo, URL, or catalog timestamp), so every attribute is
+      exposed (memory, gpu, vram_per_gpu, vcpus, vcpu, nics, disk, regions,
+      stock_level, available_operating_systems). The only field left out is
+      VirtualMachinePlansData.Type, the constant JSON:API envelope
+      discriminator ("virtual_machine_plans" on every row) — not exposed by
+      team decision, it carries no information.
+
+      Unlike the sibling `Plans` group above, regions (including per-currency
+      pricing and locations) ARE exposed here: this is a fresh mapping, not
+      one inheriting a pre-existing schema boundary, and stock/pricing by
+      region is exactly the "capacity" information a practitioner needs to
+      pick a plan that is actually available where they want to deploy.
+
+      GetVMPlansResponse carries no Next field, so List does not paginate —
+      lookup by id, slug, or name all walk the single response in memory.
+      VM.List takes an optional filterGpu *bool query param; it is not
+      surfaced as a schema attribute (the id/slug/name selectors already
+      narrow to one plan) and List is always called with filterGpu=nil so no
+      plan is excluded from the in-memory scan.
+
   PrivateNetworks:
     implemented_by: [latitudesh_virtual_network, latitudesh_vlan_assignment]
     notes: >-
