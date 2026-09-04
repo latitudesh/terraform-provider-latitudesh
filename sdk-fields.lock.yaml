@@ -967,6 +967,50 @@ groups:
       operations.Unit:
         doc: "61b5b55a"
         enum: ["GB"]
+  OperatingSystems:
+    methods:
+      ListPlans: {signature: "(context.Context, *int64, *int64, *string, ...operations.Option) (*operations.GetPlansOperatingSystemResponse, error)"}
+    models:
+      components.Features:
+        fields:
+          - {name: "Accelerate", wire: "accelerate", type: "*bool", optional: true}
+          - {name: "Raid", wire: "raid", type: "*bool", optional: true}
+          - {name: "Rescue", wire: "rescue", type: "*bool", optional: true}
+          - {name: "SSHKeys", wire: "ssh_keys", type: "*bool", optional: true}
+          - {name: "UserData", wire: "user_data", type: "*bool", optional: true}
+          - {name: "Workflow", wire: "workflow", type: "*bool", optional: true}
+      components.OperatingSystemData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*OperatingSystemDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*OperatingSystemDataType", optional: true}
+      components.OperatingSystemDataAttributes:
+        fields:
+          - {name: "Distro", wire: "distro", type: "*string", optional: true}
+          - {name: "Features", wire: "features", type: "*Features", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "ProvisionableOn", wire: "provisionable_on", type: "[]string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+          - {name: "User", wire: "user", type: "*string", optional: true}
+          - {name: "Version", wire: "version", type: "*string", optional: true}
+      components.OperatingSystemDataType:
+        enum: ["operating_system"]
+      components.OperatingSystems:
+        fields:
+          - {name: "Data", wire: "data", type: "[]OperatingSystemData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*PaginationMeta", optional: true}
+      components.PaginationMeta:
+        fields:
+          - {name: "Stats", wire: "stats", type: "*Stats", optional: true}
+      components.Stats:
+        fields:
+          - {name: "Total", wire: "total", type: "*Total", optional: true}
+      components.Total:
+        fields:
+          - {name: "Count", wire: "count", type: "*int64", optional: true, doc: "892c1421"}
+      operations.GetPlansOperatingSystemResponse:
+        fields:
+          - {name: "OperatingSystems", type: "*components.OperatingSystems", optional: true, doc: "6d8303b0"}
   Plans:
     methods:
       Get: {signature: "(context.Context, string, ...operations.Option) (*operations.GetPlanResponse, error)"}

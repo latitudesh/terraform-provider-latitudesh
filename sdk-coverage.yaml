@@ -126,6 +126,18 @@ groups:
       upstream_url, documentation_url, logo_url, created_at serve catalog
       browsing, not provisioning; do not map them.
 
+  OperatingSystems:
+    implemented_by: [latitudesh_operating_system]
+    notes: >-
+      Data source. ListPlans is the group's only method and is fully mapped —
+      no methods are left unmapped. OperatingSystemDataAttributes carries no
+      presentation-only fields (no description, logo, URL, or timestamp), so
+      every attribute (name, slug, distro, user, version, provisionable_on,
+      features) is exposed; nothing was deliberately excluded. ListPlans
+      paginates (page[size]/page[number]); since there is no single-item read,
+      lookup by id, slug, or name all walk the list via response.Next until a
+      match is found or pages are exhausted.
+
   Plans:
     implemented_by: [latitudesh_plan]
     notes: >-
