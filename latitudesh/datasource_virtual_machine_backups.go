@@ -9,9 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
@@ -96,8 +98,11 @@ func (d *VirtualMachineBackupsDataSource) Schema(ctx context.Context, req dataso
 				Optional:            true,
 			},
 			"status": schema.StringAttribute{
-				MarkdownDescription: "Only return backups with this status (`Creating`, `Ready`, `Failed`, or `Archived`; case-insensitive).",
+				MarkdownDescription: "Only return backups with this status (`Creating`, `Ready`, `Failed`, or `Archived`; case-insensitive). Any other value is rejected at plan time.",
 				Optional:            true,
+				Validators: []validator.String{
+					stringvalidator.OneOfCaseInsensitive("Creating", "Ready", "Failed", "Archived"),
+				},
 			},
 			"backups": schema.ListNestedAttribute{
 				MarkdownDescription: "The matching backups, newest first.",
@@ -171,6 +176,12 @@ func (d *VirtualMachineBackupsDataSource) Read(ctx context.Context, req datasour
 	vmFilter := strings.TrimSpace(data.VirtualMachine.ValueString())
 	statusFilter := strings.TrimSpace(data.Status.ValueString())
 
+	// One request is the whole collection: unlike the paginated list
+	// operations in this SDK (servers, projects, firewalls, regions, ...),
+	// whose request structs carry PageNumber/PageSize, neither backups list
+	// operation has page parameters, builds query params, or returns
+	// pagination metadata (VirtualMachineBackupsMeta is empty). There is no
+	// second page to fetch, so filtering and sorting this response is complete.
 	var page *components.VirtualMachineBackups
 	if vmFilter != "" {
 		res, err := d.client.VirtualMachineBackups.ListForVirtualMachine(ctx, vmFilter)

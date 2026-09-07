@@ -838,10 +838,16 @@ func (r *VirtualMachineResource) createFromBackup(ctx context.Context, data *Vir
 		return
 	}
 
-	// The boot gets whatever is left of the create timeout.
+	// The boot gets exactly what is left of the create timeout: the deadline
+	// is the user's and is never extended. The VM is already in state, so
+	// giving up here does not orphan it; a re-run keeps waiting for the boot.
 	remaining := time.Until(deadline)
-	if remaining < time.Minute {
-		remaining = time.Minute
+	if remaining <= 0 {
+		resp.Diagnostics.AddError(
+			"Timeout waiting for virtual machine",
+			fmt.Sprintf("Restore %q reached Ready, but the create timeout (%s) was exhausted before virtual machine %q finished booting. The VM was adopted into state; re-run apply to keep waiting for it, or raise timeouts.create.", restoreID, createTimeout, vmID),
+		)
+		return
 	}
 	r.waitForVMReady(ctx, vmID, remaining, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {

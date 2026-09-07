@@ -181,6 +181,20 @@ func TestAccVirtualMachineBackups_VMNotFound(t *testing.T) {
 	})
 }
 
+func TestAccVirtualMachineBackups_InvalidStatusRejected(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc((&mockVirtualMachineBackupsAPI{}).handler))
+	defer server.Close()
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		Steps: []resource.TestStep{{
+			// A typo must fail at plan time instead of silently matching nothing.
+			Config:      testAccVirtualMachineBackupsMockConfig(`  status = "Readyy"`),
+			ExpectError: regexp.MustCompile(`(?i)value must be one of`),
+		}},
+	})
+}
+
 // --- live / VCR tier --------------------------------------------------------
 
 // TestAccVirtualMachineBackups_Basic lists the team's backups through the

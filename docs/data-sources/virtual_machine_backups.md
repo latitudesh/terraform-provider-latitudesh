@@ -29,7 +29,7 @@ output "latest_ready_backup_id" {
 
 ### Optional
 
-- `status` (String) Only return backups with this status (`Creating`, `Ready`, `Failed`, or `Archived`; case-insensitive).
+- `status` (String) Only return backups with this status (`Creating`, `Ready`, `Failed`, or `Archived`; case-insensitive). Any other value is rejected at plan time.
 - `virtual_machine` (String) Virtual machine ID to scope the list to. When omitted, every backup in the team is listed.
 
 ### Read-Only
