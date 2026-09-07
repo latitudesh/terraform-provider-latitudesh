@@ -34,7 +34,7 @@ The resource waits for the virtual machine to reach a running state with a prima
 
 ### Create from a backup
 
-Set `backup_id` instead of `plan` to restore a `Ready` virtual machine backup into a new virtual machine. The restored VM inherits plan, operating system, and project from the backup; `name`, `site`, and `billing` can still be set (`operating_system`, `marketplace_app`, and `ssh_keys` cannot). The resource triggers the restore, waits for it to reach `Ready`, adopts the resulting VM, and then waits for it to boot, so `primary_ipv4` is usable in the same apply. Restores take tens of minutes; the create timeout defaults to 60 minutes on this path.
+Set `backup_id` instead of `plan` to restore a `Ready` virtual machine backup into a new virtual machine. The restored VM inherits plan, operating system, and project from the backup. `name` and `site` are passed to the restore; `billing` is applied right after it as an in-place upgrade, since the restore itself carries no billing (a value below what the restored VM comes up with fails once the restore completes). `operating_system`, `marketplace_app`, and `ssh_keys` cannot be set. The resource triggers the restore, waits for it to reach `Ready`, adopts the resulting VM, and then waits for it to boot, so `primary_ipv4` is usable in the same apply. Restores take tens of minutes; the create timeout defaults to 60 minutes on this path.
 
 ```hcl
 data "latitudesh_virtual_machine_backups" "bastion" {
@@ -57,7 +57,7 @@ resource "latitudesh_virtual_machine" "bastion_restored" {
 
 ### Optional
 
-- `backup_id` (String) ID of a `Ready` virtual machine backup to restore into this new virtual machine, instead of provisioning from `plan`. The restored VM inherits plan, operating system, and project from the backup; `name`, `site`, and `billing` may still be set. Conflicts with `operating_system`, `marketplace_app`, and `ssh_keys`. The API does not return the source backup, so this is kept from configuration and is null after import. The create timeout defaults to 60 minutes on this path. Changing this forces a new resource.
+- `backup_id` (String) ID of a `Ready` virtual machine backup to restore into this new virtual machine, instead of provisioning from `plan`. The restored VM inherits plan, operating system, and project from the backup. `name` and `site` are passed to the restore; `billing` is applied right after it as an in-place upgrade (the restore itself carries no billing, so a value below what the restored VM comes up with fails once the restore completes). Conflicts with `operating_system`, `marketplace_app`, and `ssh_keys`. The API does not return the source backup, so this is kept from configuration and is null after import. The create timeout defaults to 60 minutes on this path. Changing this forces a new resource.
 - `billing` (String) The virtual machine billing type. Accepts `hourly` and `monthly` for on-demand projects and `yearly` for reserved projects. Defaults to `monthly` (reserved projects default to `yearly`). Billing can only be upgraded in place (`hourly` -> `monthly` -> `yearly`); downgrades are not allowed.
 - `marketplace_app` (String) A marketplace app reference (slug, e.g. `openclaw`, or encoded id_hash) to preinstall on the virtual machine via cloud-init. Cannot be combined with `operating_system`; the app defines its own. Changing a configured value forces a new resource; removing it from the configuration does not (the app stays installed).
 - `name` (String) The virtual machine name (hostname). Defaults to `my-vm` if not set.

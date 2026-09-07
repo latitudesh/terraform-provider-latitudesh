@@ -34,7 +34,7 @@ The resource waits for the virtual machine to reach a running state with a prima
 
 ### Create from a backup
 
-Set `backup_id` instead of `plan` to restore a `Ready` virtual machine backup into a new virtual machine. The restored VM inherits plan, operating system, and project from the backup; `name`, `site`, and `billing` can still be set (`operating_system`, `marketplace_app`, and `ssh_keys` cannot). The resource triggers the restore, waits for it to reach `Ready`, adopts the resulting VM, and then waits for it to boot, so `primary_ipv4` is usable in the same apply. Restores take tens of minutes; the create timeout defaults to 60 minutes on this path.
+Set `backup_id` instead of `plan` to restore a `Ready` virtual machine backup into a new virtual machine. The restored VM inherits plan, operating system, and project from the backup. `name` and `site` are passed to the restore; `billing` is applied right after it as an in-place upgrade, since the restore itself carries no billing (a value below what the restored VM comes up with fails once the restore completes). `operating_system`, `marketplace_app`, and `ssh_keys` cannot be set. The resource triggers the restore, waits for it to reach `Ready`, adopts the resulting VM, and then waits for it to boot, so `primary_ipv4` is usable in the same apply. Restores take tens of minutes; the create timeout defaults to 60 minutes on this path.
 
 ```hcl
 data "latitudesh_virtual_machine_backups" "bastion" {

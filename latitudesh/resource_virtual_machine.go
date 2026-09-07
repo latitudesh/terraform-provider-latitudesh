@@ -101,7 +101,7 @@ func (r *VirtualMachineResource) Schema(ctx context.Context, req resource.Schema
 				},
 			},
 			"backup_id": schema.StringAttribute{
-				MarkdownDescription: "ID of a `Ready` virtual machine backup to restore into this new virtual machine, instead of provisioning from `plan`. The restored VM inherits plan, operating system, and project from the backup; `name`, `site`, and `billing` may still be set. Conflicts with `operating_system`, `marketplace_app`, and `ssh_keys`. The API does not return the source backup, so this is kept from configuration and is null after import. The create timeout defaults to 60 minutes on this path. Changing this forces a new resource.",
+				MarkdownDescription: "ID of a `Ready` virtual machine backup to restore into this new virtual machine, instead of provisioning from `plan`. The restored VM inherits plan, operating system, and project from the backup. `name` and `site` are passed to the restore; `billing` is applied right after it as an in-place upgrade (the restore itself carries no billing, so a value below what the restored VM comes up with fails once the restore completes). Conflicts with `operating_system`, `marketplace_app`, and `ssh_keys`. The API does not return the source backup, so this is kept from configuration and is null after import. The create timeout defaults to 60 minutes on this path. Changing this forces a new resource.",
 				Optional:            true,
 				Validators: []validator.String{
 					stringvalidator.ConflictsWith(
