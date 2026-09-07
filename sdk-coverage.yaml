@@ -339,6 +339,23 @@ groups:
       Delete-only fragment — PrivateNetworks owns the rest of the lifecycle. The
       derived ---D shape is expected and is not a gap.
 
+  VirtualMachineRestores:
+    implemented_by: [latitudesh_virtual_machine]
+    notes: >-
+      Covered by `backup_id` on latitudesh_virtual_machine, not by a type of its
+      own: a restore is an operation whose only handle is an opaque id, so a
+      lookup adds nothing over the create response (the data source scaffolded
+      for this group was dropped on review, PR #248). The resource calls Create
+      (flat POST /virtual_machine_restores) and polls Get until Ready, then
+      adopts the virtual machine the restore produced - the VM create payload
+      has no backup source, so this is the only way to build a VM from a
+      backup. Verified live 2026-09-04: routes exist, restores have no
+      Delete/Update, virtual_machine is null until Ready, and the restored VM
+      ends Running with an IPv4. Unmapped: CreateForVirtualMachineBackup (the
+      VM-nested POST, same operation) and List/ListForBackup/
+      ListForVirtualMachineBackup (browsing restore history has no Terraform
+      use; a backup can be restored many times, so none is a unique selector).
+
   # --------------------------------------------------------------- excluded ---
 
   BaselinesPreview:
@@ -436,26 +453,20 @@ groups:
       usage/metrics reporting, candidates for their own data sources later).
 
   VirtualMachineBackups:
-    implemented_by: [latitudesh_virtual_machine_backup]
+    implemented_by: [latitudesh_virtual_machine_backup, latitudesh_virtual_machine_backups]
     notes: >-
-      VERIFY FIRST: the API checkout reviewed (2026-06-22) has backup domain code
-      but no HTTP routes at all. The SDK exposing this group implies production does
-      have the endpoints, but confirm before merging generated code against them.
-      Only the top-level Create (POST /virtual_machine_backups, body carries
-      virtual_machine) is wired into the resource; CreateForVirtualMachine (the
-      VM-nested POST variant) and ListForVirtualMachine (VM-scoped list) are
-      unmapped alternate paths to the same data — the resource and data source
-      cover the same ground via the top-level Create/Get. List (all backups for
-      the team) is also unmapped: nothing here needs to browse every backup
-      across the team, and there is no unique selector (unlike name/slug on
-      other data sources) to build a safe "find one" lookup on top of it. The
-      nested `team` and `project` envelope/include objects on the read response
-      (TeamInclude, ProjectInclude — name, slug, billing, currency, limits,
-      feature flags, etc.) are not exposed by team decision: they are
-      catalog/billing metadata about the owning team and project, not something
-      a practitioner sets or needs to provision a backup. The nested
-      virtual_machine.name is likewise not exposed — the resource already
-      exposes the VM by id.
+      Routes verified live 2026-09-04 (the API checkout reviewed 2026-06-22 had
+      no HTTP routes; production does). The resource wires the top-level Create
+      (POST /virtual_machine_backups, body carries virtual_machine), Get and
+      Delete (a soft delete: the backup lingers as Archived, treated as
+      terminal). The plural data source latitudesh_virtual_machine_backups maps
+      List (team-wide) and ListForVirtualMachine (VM-scoped) with a client-side
+      status filter, newest first, so backups[0] feeds backup_id on
+      latitudesh_virtual_machine. Unmapped: CreateForVirtualMachine, the
+      VM-nested POST variant of the same create. The nested team and project
+      envelope objects on the read response are not exposed beyond the
+      project's identifying slug (account/billing management, not backup
+      provisioning).
 
   APIKeys:
     notes: >-

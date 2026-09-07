@@ -1,0 +1,16 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+List [Latitude.sh](https://latitude.sh/) virtual machine backups, optionally scoped to one virtual machine and filtered by status. Results are newest first, so with `status = "Ready"` the first entry is the latest restorable backup and the natural input for `backup_id` on `latitudesh_virtual_machine`.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}

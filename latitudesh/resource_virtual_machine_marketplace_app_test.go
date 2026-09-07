@@ -122,6 +122,7 @@ func runVMMarketplaceCreate(t *testing.T, r *VirtualMachineResource, marketplace
 		"name":             tftypes.NewValue(tftypes.String, testVMName),
 		"site":             tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
 		"plan":             tftypes.NewValue(tftypes.String, testVMPlan),
+		"backup_id":        tftypes.NewValue(tftypes.String, nil),
 		"project":          tftypes.NewValue(tftypes.String, "test-project"),
 		"operating_system": tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
 		"marketplace_app":  marketplaceApp,
