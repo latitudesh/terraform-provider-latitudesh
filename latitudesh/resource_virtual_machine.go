@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -16,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
@@ -48,6 +50,7 @@ type VirtualMachineResourceModel struct {
 	Name            types.String   `tfsdk:"name"`
 	Site            types.String   `tfsdk:"site"`
 	Plan            types.String   `tfsdk:"plan"`
+	BackupID        types.String   `tfsdk:"backup_id"`
 	Project         types.String   `tfsdk:"project"`
 	OperatingSystem types.String   `tfsdk:"operating_system"`
 	MarketplaceApp  types.String   `tfsdk:"marketplace_app"`
@@ -80,10 +83,35 @@ func (r *VirtualMachineResource) Schema(ctx context.Context, req resource.Schema
 				},
 			},
 			"plan": schema.StringAttribute{
-				MarkdownDescription: "The plan (ID or slug) for the virtual machine. Changing this forces a new resource.",
-				Required:            true,
+				MarkdownDescription: "The plan (ID or slug) for the virtual machine. Required unless `backup_id` is set, in which case the plan is inherited from the backup. Changing this forces a new resource.",
+				Optional:            true,
+				Computed:            true,
+				Validators: []validator.String{
+					stringvalidator.ExactlyOneOf(
+						path.MatchRoot("plan"),
+						path.MatchRoot("backup_id"),
+					),
+				},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
+					// Computed for the backup path: without this an unrelated update
+					// would mark the null-config plan unknown and RequiresReplace
+					// (which has no unknown guard) would force a new VM.
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"backup_id": schema.StringAttribute{
+				MarkdownDescription: "ID of a `Ready` virtual machine backup to restore into this new virtual machine, instead of provisioning from `plan`. The restored VM inherits plan, operating system, and project from the backup; `name`, `site`, and `billing` may still be set. Conflicts with `operating_system`, `marketplace_app`, and `ssh_keys`. The API does not return the source backup, so this is kept from configuration and is null after import. The create timeout defaults to 60 minutes on this path. Changing this forces a new resource.",
+				Optional:            true,
+				Validators: []validator.String{
+					stringvalidator.ConflictsWith(
+						path.MatchRoot("operating_system"),
+						path.MatchRoot("marketplace_app"),
+						path.MatchRoot("ssh_keys"),
+					),
+				},
+				PlanModifiers: []planmodifier.String{
+					backupIDRequiresReplace(),
 				},
 			},
 			"site": schema.StringAttribute{
@@ -209,6 +237,11 @@ func (r *VirtualMachineResource) Create(ctx context.Context, req resource.Create
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !data.BackupID.IsNull() && !data.BackupID.IsUnknown() && data.BackupID.ValueString() != "" {
+		r.createFromBackup(ctx, &data, resp)
 		return
 	}
 
@@ -689,4 +722,275 @@ func (r *VirtualMachineResource) readVirtualMachine(ctx context.Context, data *V
 	if data.SSHKeys.IsUnknown() {
 		data.SSHKeys = types.ListNull(types.StringType)
 	}
+}
+
+// vmRestoreReadyPollInterval is a var so the mock-backed lifecycle tests can
+// shorten it; a real restore takes tens of minutes.
+var vmRestoreReadyPollInterval = 15 * time.Second
+
+// vmFromBackupCreateTimeout is the default create timeout when restoring from
+// a backup. The restore alone was observed to take ~35 minutes live, well past
+// the plan-based default of 10.
+const vmFromBackupCreateTimeout = 60 * time.Minute
+
+// backupIDRequiresReplace forces a new VM when backup_id changes after create,
+// but not when it is first recorded on an imported VM (state null): the API
+// never returns the source backup, so an imported VM has nothing to compare
+// against and replacing it would destroy the very machine being adopted.
+func backupIDRequiresReplace() planmodifier.String {
+	return stringplanmodifier.RequiresReplaceIf(
+		func(ctx context.Context, req planmodifier.StringRequest, resp *stringplanmodifier.RequiresReplaceIfFuncResponse) {
+			resp.RequiresReplace = !req.StateValue.IsNull()
+		},
+		"Changing backup_id forces a new virtual machine, except when first set on an imported one.",
+		"Changing `backup_id` forces a new virtual machine, except when first set on an imported one.",
+	)
+}
+
+// createFromBackup provisions the VM by restoring a backup: the VM create
+// endpoint has no backup source, so the restore endpoint is the only way to
+// build a VM from one. The restore only reveals the new VM's id once it is
+// Ready, so unlike the plan-based path the id cannot be persisted right after
+// the POST; every diagnostic names the restore id so a timed-out apply can be
+// recovered by importing the VM the restore produced.
+func (r *VirtualMachineResource) createFromBackup(ctx context.Context, data *VirtualMachineResourceModel, resp *resource.CreateResponse) {
+	backupID := data.BackupID.ValueString()
+
+	// Pre-flight the backup. A missing or non-Ready backup would otherwise
+	// surface from the restore endpoint as an opaque 4xx, and a project
+	// mismatch only after a 30+ minute restore, as an inconsistent result.
+	backup, err := r.client.VirtualMachineBackups.Get(ctx, backupID)
+	if err != nil {
+		var apiErr *components.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+			resp.Diagnostics.AddError("Backup Not Found", fmt.Sprintf("No virtual machine backup exists with ID %q.", backupID))
+			return
+		}
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read virtual machine backup %q: %s", backupID, err.Error()))
+		return
+	}
+	if backup.VirtualMachineBackup == nil || backup.VirtualMachineBackup.Data == nil || backup.VirtualMachineBackup.Data.Attributes == nil {
+		resp.Diagnostics.AddError("Backup Not Found", fmt.Sprintf("No virtual machine backup exists with ID %q.", backupID))
+		return
+	}
+	battrs := backup.VirtualMachineBackup.Data.Attributes
+	if battrs.Status == nil || *battrs.Status != components.VirtualMachineBackupAttributesStatusReady {
+		status := "unknown"
+		if battrs.Status != nil {
+			status = string(*battrs.Status)
+		}
+		resp.Diagnostics.AddError("Backup Not Ready", fmt.Sprintf("Backup %q has status %q; only a Ready backup can be restored.", backupID, status))
+		return
+	}
+	if !data.Project.IsNull() && !data.Project.IsUnknown() && data.Project.ValueString() != "" && battrs.Project != nil {
+		if !projectMatches(data.Project.ValueString(), battrs.Project) {
+			resp.Diagnostics.AddError("Project Mismatch", fmt.Sprintf(
+				"Backup %q belongs to project %q. A restored virtual machine always lands in the backup's project, so `project` must match it or be omitted.",
+				backupID, projectLabel(battrs.Project)))
+			return
+		}
+	}
+
+	restoreAttrs := &components.VirtualMachineRestorePayloadAttributes{Backup: &backupID}
+	if !data.Name.IsNull() && !data.Name.IsUnknown() && data.Name.ValueString() != "" {
+		name := data.Name.ValueString()
+		restoreAttrs.Name = &name
+	}
+	if !data.Site.IsNull() && !data.Site.IsUnknown() && data.Site.ValueString() != "" {
+		site := strings.ToUpper(data.Site.ValueString())
+		restoreAttrs.Site = &site
+	}
+
+	res, err := r.client.VirtualMachineRestores.Create(ctx, components.VirtualMachineRestorePayload{
+		Data: &components.VirtualMachineRestorePayloadData{
+			Type:       components.VirtualMachineRestorePayloadTypeVirtualMachineRestores.ToPointer(),
+			Attributes: restoreAttrs,
+		},
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to restore virtual machine backup %q, got error: %s", backupID, err.Error()))
+		return
+	}
+	if res.VirtualMachineRestore == nil || res.VirtualMachineRestore.Data == nil || res.VirtualMachineRestore.Data.ID == nil {
+		resp.Diagnostics.AddError("API Error", "Failed to get virtual machine restore ID from response")
+		return
+	}
+	restoreID := *res.VirtualMachineRestore.Data.ID
+
+	createTimeout, diags := data.Timeouts.Create(ctx, vmFromBackupCreateTimeout)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	deadline := time.Now().Add(createTimeout)
+
+	vmID := r.waitForRestoreReady(ctx, restoreID, createTimeout, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Persist the id the moment it is known, for the same reason as the
+	// plan-based path: from here on a timeout must not orphan the VM.
+	data.ID = types.StringValue(vmID)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), vmID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("backup_id"), backupID)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// The boot gets whatever is left of the create timeout.
+	remaining := time.Until(deadline)
+	if remaining < time.Minute {
+		remaining = time.Minute
+	}
+	r.waitForVMReady(ctx, vmID, remaining, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// readVirtualMachine overwrites billing with what the VM came up with, so
+	// remember what was configured before reading.
+	configuredBilling := data.Billing
+
+	r.readVirtualMachine(ctx, data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	r.reconcileBillingAfterRestore(ctx, data, configuredBilling, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
+}
+
+// waitForRestoreReady polls the restore until it is Ready and returns the id
+// of the virtual machine it produced. Failed is terminal (the API exposes no
+// failure reason for restores). Diagnostics name the restore id so an operator
+// can inspect it and import the VM if the apply had to give up.
+func (r *VirtualMachineResource) waitForRestoreReady(ctx context.Context, restoreID string, timeout time.Duration, diags *diag.Diagnostics) string {
+	const maxConsecutiveErrors = 5
+	pollInterval := vmRestoreReadyPollInterval
+
+	deadline := time.Now().Add(timeout)
+	lastStatus := ""
+	consecutiveErrors := 0
+
+	for time.Now().Before(deadline) {
+		result, err := r.client.VirtualMachineRestores.Get(ctx, restoreID)
+		if err != nil {
+			// A 404 right after create and 5xx responses are transient: keep
+			// polling. Other API errors (401/403/422/...) will not resolve by
+			// waiting, so fail immediately instead of burning the timeout.
+			var apiErr *components.APIError
+			if errors.As(err, &apiErr) && apiErr.StatusCode != http.StatusNotFound && apiErr.StatusCode < 500 {
+				diags.AddError("Client Error", fmt.Sprintf("Unable to check virtual machine restore %q status: %s", restoreID, err.Error()))
+				return ""
+			}
+			consecutiveErrors++
+			if consecutiveErrors >= maxConsecutiveErrors {
+				diags.AddError("Client Error", fmt.Sprintf("Unable to check virtual machine restore %q status after %d consecutive attempts, last error: %s", restoreID, consecutiveErrors, err.Error()))
+				return ""
+			}
+			select {
+			case <-ctx.Done():
+				diags.AddError("Client Error", fmt.Sprintf("Context cancelled while waiting for virtual machine restore %q: %s", restoreID, ctx.Err().Error()))
+				return ""
+			case <-time.After(pollInterval):
+				continue
+			}
+		}
+		consecutiveErrors = 0
+
+		if result.VirtualMachineRestore != nil && result.VirtualMachineRestore.Data != nil && result.VirtualMachineRestore.Data.Attributes != nil {
+			attrs := result.VirtualMachineRestore.Data.Attributes
+			if attrs.Status != nil {
+				lastStatus = string(*attrs.Status)
+				switch *attrs.Status {
+				case components.VirtualMachineRestoreAttributesStatusReady:
+					if attrs.VirtualMachine == nil || attrs.VirtualMachine.ID == nil || *attrs.VirtualMachine.ID == "" {
+						diags.AddError("API Error", fmt.Sprintf("Virtual machine restore %q is Ready but the response carries no virtual machine id.", restoreID))
+						return ""
+					}
+					return *attrs.VirtualMachine.ID
+				case components.VirtualMachineRestoreAttributesStatusFailed:
+					diags.AddError("Virtual Machine Restore Failed", fmt.Sprintf("Restore %q did not complete: the API reports status Failed. No virtual machine was adopted.", restoreID))
+					return ""
+				}
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			diags.AddError("Client Error", fmt.Sprintf("Context cancelled while waiting for virtual machine restore %q: %s", restoreID, ctx.Err().Error()))
+			return ""
+		case <-time.After(pollInterval):
+		}
+	}
+
+	diags.AddError(
+		"Timeout waiting for virtual machine restore",
+		fmt.Sprintf("Virtual machine restore %q did not reach Ready within %s (last status: %q). The restore keeps running server-side; once it is Ready, import the virtual machine it produced (its id is on the restore) and re-run apply.", restoreID, timeout, lastStatus),
+	)
+	return ""
+}
+
+// reconcileBillingAfterRestore applies a configured billing that differs from
+// what the restored VM came up with. The restore endpoint has no billing
+// input, so the VM inherits the backup's; leaving a differing configuration
+// unapplied would make Terraform reject the apply as an inconsistent result.
+func (r *VirtualMachineResource) reconcileBillingAfterRestore(ctx context.Context, data *VirtualMachineResourceModel, configured types.String, diags *diag.Diagnostics) {
+	if configured.IsNull() || configured.IsUnknown() || configured.ValueString() == "" {
+		return
+	}
+	current, want := data.Billing.ValueString(), configured.ValueString()
+	if current == want {
+		return
+	}
+	if err := validators.ValidateBillingChange(current, want); err != nil {
+		diags.AddError("Billing Change Validation Error", fmt.Sprintf("The restored virtual machine came up with billing %q (inherited from the backup): %s", current, err.Error()))
+		return
+	}
+
+	id := data.ID.ValueString()
+	billing := components.VirtualMachineUpdatePayloadBilling(want)
+	payload := components.VirtualMachineUpdatePayload{
+		Data: components.VirtualMachineUpdatePayloadData{
+			Type:       components.VirtualMachineUpdatePayloadTypeVirtualMachines,
+			ID:         &id,
+			Attributes: components.VirtualMachineUpdatePayloadAttributes{Billing: &billing},
+		},
+	}
+	if _, err := r.client.VirtualMachines.UpdateVirtualMachine(ctx, id, payload); err != nil {
+		diags.AddError("Client Error", "Unable to set billing on the restored virtual machine, got error: "+err.Error())
+		return
+	}
+	r.readVirtualMachine(ctx, data, diags)
+}
+
+// projectMatches reports whether want (an id or slug, as accepted by the
+// `project` attribute) identifies the given project include.
+func projectMatches(want string, p *components.ProjectInclude) bool {
+	if p == nil {
+		return false
+	}
+	if p.ID != nil && *p.ID == want {
+		return true
+	}
+	return p.Slug != nil && strings.EqualFold(*p.Slug, want)
+}
+
+// projectLabel returns the project's slug, falling back to its id.
+func projectLabel(p *components.ProjectInclude) string {
+	if p == nil {
+		return ""
+	}
+	if p.Slug != nil && *p.Slug != "" {
+		return *p.Slug
+	}
+	if p.ID != nil {
+		return *p.ID
+	}
+	return ""
 }
