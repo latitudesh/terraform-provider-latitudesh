@@ -116,6 +116,11 @@ resource — name it in the handoff and in `notes:` under `{{GROUP}}` in
   `examples/**`, `docs/**` — plus `/tmp/drift-handoff.md`, the one write allowed
   outside the repository. Not `go.mod`, not `cmd/`, not `internal/`, not
   `.github/`.
+- If you `Write` a Go file to the wrong path — a mis-named or stray
+  `latitudesh/*.go` not matching the list above — delete it with
+  `scripts/scaffold-rm.sh latitudesh/<name>.go`. That is the **only** way to
+  remove a file: `Write`/`Edit`/`MultiEdit` cannot, and a leftover out-of-scope
+  file fails the gate. Never leave a "delete before merge" stub behind.
 - Sync the lock **only** with
   `go run ./cmd/sdkcoverage fields -write -group {{GROUP}}` — never hand-edit
   it, and never a full `fields -write`: that would silently accept every other

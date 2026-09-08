@@ -189,6 +189,12 @@ Do not run acceptance tests and do not record cassettes. Cassettes live in
   `latitudesh/provider.go`, `sdk-coverage.yaml`, `templates/**`, `examples/**`, `docs/**` —
   plus the handoff file `/tmp/scaffold-handoff.md`, which is the one write allowed
   outside the repository. Not `go.mod`, not `cmd/`, not `internal/`, not `.github/`.
+- If you `Write` a Go file to the wrong path — a mis-named or stray
+  `latitudesh/*.go` not matching the list above (e.g. `latitudesh/foo_mapping.go`
+  instead of `latitudesh/resource_foo_mapping.go`) — delete it with
+  `scripts/scaffold-rm.sh latitudesh/<name>.go`. That is the **only** way to remove
+  a file: `Write`/`Edit`/`MultiEdit` cannot, and a leftover out-of-scope file fails
+  the gate's first check. Never leave a "delete before merge" stub behind — fix it.
 - Never add a `go:generate` directive.
 - Never reach the network, provision infrastructure, run acceptance tests, or record cassettes.
 - Never write a token, key, or secret anywhere.
