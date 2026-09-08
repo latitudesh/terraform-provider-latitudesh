@@ -209,6 +209,9 @@ groups:
   Projects:
     implemented_by: [latitudesh_project]
 
+  PublicNetworks:
+    implemented_by: [latitudesh_public_network]
+
   Regions:
     implemented_by: [latitudesh_region]
     notes: Data source. Reads a single region via Fetch, not Get.

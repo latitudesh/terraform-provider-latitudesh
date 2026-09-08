@@ -1,0 +1,49 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+**Preview.** Available at locations where the `public_network` feature is enabled.
+
+Provisions a [public network](https://www.latitude.sh/dashboard): an IPv4 block of the chosen size plus a paired IPv6 /64. The underlying API has no update endpoint, so changing any attribute forces a new resource. Deletion is only allowed while the network has no IPs in use.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+You can import a public network resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_public_network` resource can be imported by specifying the public network ID:
+
+```sh
+terraform import latitudesh_public_network.network <PUBLIC_NETWORK_ID>
+```
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration.
+
+```hcl
+import {
+  to = latitudesh_public_network.network
+  id = "<PUBLIC_NETWORK_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_public_network.tf
+```
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.

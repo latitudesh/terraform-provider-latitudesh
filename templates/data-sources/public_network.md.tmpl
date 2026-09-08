@@ -1,0 +1,18 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+**Preview.** Available at locations where the `public_network` feature is enabled.
+
+Retrieve a [public network](https://www.latitude.sh/dashboard) either by `id`, or by `project` and/or `site`. When looking up by `project`/`site`, the lookup fails if it matches more than one network — narrow it with `site` or switch to `id`.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
