@@ -696,11 +696,12 @@ jobs:
           github_token: ${{ github.token }}
           prompt: ${{ steps.render.outputs.prompt }}
           # Identical allowlist to scaffold: no gh, no git writes, no network,
-          # no free shell.
+          # no free shell — the one delete capability is the scoped
+          # scripts/scaffold-rm.sh, never a raw rm.
           claude_args: >-
             --model ${{ env.DRIFT_MODEL }}
             --max-turns ${{ env.DRIFT_MAX_TURNS }}
-            --allowedTools "Read,Glob,Grep,Edit,Write,MultiEdit,Bash(go build:*),Bash(go vet:*),Bash(go test:*),Bash(go doc:*),Bash(gofmt:*),Bash(go generate:*),Bash(go run ./cmd/sdkcoverage:*),Bash(jq:*),Bash(scripts/scaffold-validate.sh:*)"
+            --allowedTools "Read,Glob,Grep,Edit,Write,MultiEdit,Bash(go build:*),Bash(go vet:*),Bash(go test:*),Bash(go doc:*),Bash(gofmt:*),Bash(go generate:*),Bash(go run ./cmd/sdkcoverage:*),Bash(jq:*),Bash(scripts/scaffold-validate.sh:*),Bash(scripts/scaffold-rm.sh:*)"
 
       - name: Report agent cost and stats
         id: cost
@@ -1328,11 +1329,14 @@ jobs:
           # The allowlist mirrors scripts/eval-scaffold.sh exactly — the eval is
           # only evidence about production if both grant the same tools. No gh,
           # no git writes, no network, no free shell: commits and the PR are made
-          # by the deterministic steps below, never by the agent.
+          # by the deterministic steps below, never by the agent. The one delete
+          # capability, scripts/scaffold-rm.sh, is a committed script that removes
+          # a single flat latitudesh/*.go file and nothing else — the recovery
+          # path when the agent Writes a file to the wrong name.
           claude_args: >-
             --model ${{ env.SCAFFOLD_MODEL }}
             --max-turns ${{ env.SCAFFOLD_MAX_TURNS }}
-            --allowedTools "Read,Glob,Grep,Edit,Write,MultiEdit,Bash(go build:*),Bash(go vet:*),Bash(go test:*),Bash(go doc:*),Bash(gofmt:*),Bash(go generate:*),Bash(go run ./cmd/sdkcoverage:*),Bash(jq:*),Bash(scripts/scaffold-validate.sh:*)"
+            --allowedTools "Read,Glob,Grep,Edit,Write,MultiEdit,Bash(go build:*),Bash(go vet:*),Bash(go test:*),Bash(go doc:*),Bash(gofmt:*),Bash(go generate:*),Bash(go run ./cmd/sdkcoverage:*),Bash(jq:*),Bash(scripts/scaffold-validate.sh:*),Bash(scripts/scaffold-rm.sh:*)"
 
       # Cost and agent stats live HERE, in the run summary — deliberately not in
       # the PR body, which is the reviewer's surface, not the operator's.
