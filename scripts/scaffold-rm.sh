@@ -59,5 +59,17 @@ if [ ! -f "$p" ] || [ -L "$p" ]; then
 	exit 1
 fi
 
+# Only ever remove a file git does NOT track. The stray file is always untracked
+# — the agent just created it with Write and never committed it — so this costs
+# the real use case nothing, while it makes an erroneous call structurally unable
+# to delete a committed file. That matters because the pathname shape alone would
+# also admit an existing latitudesh/resource_*_test.go, whose deletion neither the
+# build nor `go test` would catch and the diff-scope gate (which accepts in-scope
+# deletions) would pass straight into the PR.
+if git ls-files --error-unmatch -- "$p" >/dev/null 2>&1; then
+	echo "refused: '$p' is tracked by git — this helper only removes stray untracked files" >&2
+	exit 1
+fi
+
 rm -f -- "$p"
 echo "removed $p"
