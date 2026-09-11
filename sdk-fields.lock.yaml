@@ -1739,6 +1739,79 @@ groups:
         doc: "cdaaa32a"
         fields:
           - {name: "Data", wire: "data", type: "*components.Project", optional: true}
+  PublicNetworks:
+    methods:
+      CreatePublicNetwork: {signature: "(context.Context, components.CreatePublicNetwork, ...operations.Option) (*operations.CreatePublicNetworkResponse, error)"}
+      DestroyPublicNetwork: {signature: "(context.Context, string, ...operations.Option) (*operations.DestroyPublicNetworkResponse, error)"}
+      GetPublicNetwork: {signature: "(context.Context, string, ...operations.Option) (*operations.GetPublicNetworkResponse, error)"}
+      GetPublicNetworks: {signature: "(context.Context, *string, *string, ...operations.Option) (*operations.GetPublicNetworksResponse, error)"}
+    models:
+      components.CreatePublicNetwork:
+        fields:
+          - {name: "Data", wire: "data", type: "CreatePublicNetworkData"}
+      components.CreatePublicNetworkAttributes:
+        fields:
+          - {name: "ProjectID", wire: "project_id", type: "string", doc: "81a62c87"}
+          - {name: "Site", wire: "site", type: "string", doc: "8b502621"}
+          - {name: "Size", wire: "size", type: "CreatePublicNetworkSize", doc: "7cc584e1"}
+      components.CreatePublicNetworkData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*CreatePublicNetworkAttributes", optional: true}
+          - {name: "Type", wire: "type", type: "CreatePublicNetworkType"}
+      components.CreatePublicNetworkType:
+        enum: ["public_networks"]
+      components.PublicNetwork:
+        fields:
+          - {name: "Data", wire: "data", type: "*PublicNetworkData", optional: true}
+      components.PublicNetworkData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*PublicNetworkDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*PublicNetworkDataType", optional: true}
+      components.PublicNetworkDataAttributes:
+        fields:
+          - {name: "Activated", wire: "activated", type: "*bool", optional: true, doc: "26018ce5"}
+          - {name: "Capacity", wire: "capacity", type: "*int64", optional: true, doc: "ff954974"}
+          - {name: "CreatedAt", wire: "created_at", type: "*time.Time", optional: true}
+          - {name: "IpsFree", wire: "ips_free", type: "*int64", optional: true}
+          - {name: "IpsUsed", wire: "ips_used", type: "*int64", optional: true}
+          - {name: "Ipv4", wire: "ipv4", type: "*string", optional: true, doc: "c5aafa0d"}
+          - {name: "Ipv6", wire: "ipv6", type: "*string", optional: true, doc: "2576ea61"}
+          - {name: "Project", wire: "project", type: "*PublicNetworkDataProject", optional: true}
+          - {name: "Region", wire: "region", type: "*PublicNetworkDataRegion", optional: true}
+          - {name: "Size", wire: "size", type: "*Size", optional: true, doc: "7cc584e1"}
+      components.PublicNetworkDataLocation:
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+      components.PublicNetworkDataProject:
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+      components.PublicNetworkDataRegion:
+        fields:
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Location", wire: "location", type: "*PublicNetworkDataLocation", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.PublicNetworkDataType:
+        enum: ["public_networks"]
+      components.PublicNetworks:
+        fields:
+          - {name: "Data", wire: "data", type: "[]PublicNetworkData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*PublicNetworksMeta", optional: true}
+      components.PublicNetworksMeta:
+      operations.CreatePublicNetworkResponse:
+        fields:
+          - {name: "PublicNetwork", type: "*components.PublicNetwork", optional: true, doc: "09de135b"}
+      operations.DestroyPublicNetworkResponse:
+      operations.GetPublicNetworkResponse:
+        fields:
+          - {name: "PublicNetwork", type: "*components.PublicNetwork", optional: true, doc: "85e4b82f"}
+      operations.GetPublicNetworksResponse:
+        fields:
+          - {name: "PublicNetworks", type: "*components.PublicNetworks", optional: true, doc: "85e4b82f"}
   Regions:
     methods:
       Fetch: {signature: "(context.Context, string, ...operations.Option) (*operations.GetRegionResponse, error)"}
