@@ -27,6 +27,8 @@ func TestAccRegion_Basic(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(
 						"data.latitudesh_region.test", "slug", testRegionSlug),
+					resource.TestCheckResourceAttrSet(
+						"data.latitudesh_region.test", "features.#"),
 				),
 			},
 			{
