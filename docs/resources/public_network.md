@@ -7,7 +7,7 @@ description: |-
 
 # latitudesh_public_network (Resource)
 
-**Preview.** Available at locations where the `public_network` feature is enabled.
+~> **Public preview.** Public networks are in preview. See the [public networks documentation](https://www.latitude.sh/docs/networking/public-networks) for details.
 
 Provisions a [public network](https://www.latitude.sh/dashboard): an IPv4 block of the chosen size plus a paired IPv6 /64. The underlying API has no update endpoint, so changing any attribute forces a new resource. Deletion is only allowed while the network has no IPs in use.
 
