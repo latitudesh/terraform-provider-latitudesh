@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
@@ -319,7 +320,8 @@ func (r *PublicNetworkResource) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 
-	data.ID = types.StringValue(*result.PublicNetwork.Data.ID)
+	id := *result.PublicNetwork.Data.ID
+	data.ID = types.StringValue(id)
 
 	computed := mapPublicNetworkAttributes(result.PublicNetwork.Data.Attributes)
 	data.Ipv4 = computed.Ipv4
@@ -330,6 +332,26 @@ func (r *PublicNetworkResource) Create(ctx context.Context, req resource.CreateR
 	data.IpsFree = computed.IpsFree
 	data.CreatedAt = computed.CreatedAt
 	data.RegionSlug = computed.RegionSlug
+
+	// Persist the ID before the reconciling GET so a failure there leaves a
+	// tainted resource in state rather than an orphaned, billed network.
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), id)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// The POST returns the allocated network, but reconcile with a GET as the
+	// sibling resources do, so state never holds nulls if the create envelope
+	// is ever sparse. Allocation is synchronous, so a not-found here is
+	// treated as replica lag and the POST payload is kept.
+	reconciled := data
+	r.readPublicNetworkInto(ctx, &reconciled, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if !reconciled.ID.IsNull() {
+		data = reconciled
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
