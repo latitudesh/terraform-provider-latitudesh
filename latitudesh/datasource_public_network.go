@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
@@ -49,6 +52,12 @@ func (d *PublicNetworkDataSource) Schema(ctx context.Context, req datasource.Sch
 				MarkdownDescription: "Public network ID to look up. Mutually exclusive with `project`/`site` based lookup.",
 				Optional:            true,
 				Computed:            true,
+				Validators: []validator.String{
+					stringvalidator.ConflictsWith(
+						path.MatchRoot("project"),
+						path.MatchRoot("site"),
+					),
+				},
 			},
 			"project": schema.StringAttribute{
 				MarkdownDescription: "The project (ID or slug) to filter by. Used together with `site` (or alone) when `id` is not set.",
@@ -192,7 +201,9 @@ func (d *PublicNetworkDataSource) Read(ctx context.Context, req datasource.ReadR
 	data.IpsFree = computed.IpsFree
 	data.CreatedAt = computed.CreatedAt
 	data.RegionSlug = computed.RegionSlug
-	if !computed.Project.IsNull() {
+	// Keep the configured selector (ID or slug) when one was given; only a
+	// lookup by `id` (or by `site` alone) needs the API's label filled in.
+	if data.Project.IsNull() || data.Project.IsUnknown() {
 		data.Project = computed.Project
 	}
 

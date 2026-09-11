@@ -2,7 +2,8 @@ package latitudesh
 
 import (
 	"context"
-	"strings"
+	"errors"
+	"net/http"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
@@ -130,9 +131,16 @@ func mapPublicNetworkAttributes(attrs *components.PublicNetworkDataAttributes) p
 		out.CreatedAt = types.StringNull()
 	}
 
-	if attrs.Project != nil && attrs.Project.ID != nil {
+	// Prefer the slug: it is what practitioners tend to write in `project` and
+	// what `terraform plan -generate-config-out` should emit after an import.
+	// Callers only apply this when `project` is not already set, so a configured
+	// ID (or slug) is never overwritten with the API's label.
+	switch {
+	case attrs.Project != nil && attrs.Project.Slug != nil && *attrs.Project.Slug != "":
+		out.Project = types.StringValue(*attrs.Project.Slug)
+	case attrs.Project != nil && attrs.Project.ID != nil:
 		out.Project = types.StringValue(*attrs.Project.ID)
-	} else {
+	default:
 		out.Project = types.StringNull()
 	}
 
@@ -322,9 +330,6 @@ func (r *PublicNetworkResource) Create(ctx context.Context, req resource.CreateR
 	data.IpsFree = computed.IpsFree
 	data.CreatedAt = computed.CreatedAt
 	data.RegionSlug = computed.RegionSlug
-	if !computed.Project.IsNull() {
-		data.Project = computed.Project
-	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -380,7 +385,7 @@ func (r *PublicNetworkResource) Delete(ctx context.Context, req resource.DeleteR
 
 	_, err := r.client.PublicNetworks.DestroyPublicNetwork(ctx, id)
 	if err != nil {
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not_found") {
+		if publicNetworkNotFound(err) {
 			return
 		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete public network, got error: "+err.Error())
@@ -402,14 +407,25 @@ func (r *PublicNetworkResource) ImportState(ctx context.Context, req resource.Im
 		return
 	}
 
+	if data.Site.IsNull() {
+		resp.Diagnostics.AddWarning(
+			"Site could not be determined",
+			"The API returned no region for public network "+req.ID+", so `site` was left unset. "+
+				"`site` forces replacement, so the first plan will propose replacing the network; "+
+				"add `lifecycle { ignore_changes = [site] }` to adopt it as-is.",
+		)
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 // readPublicNetworkInto issues a Get for data.ID and refreshes every computed
-// attribute plus `project` (Optional+Computed). It never touches `site` or
-// `size`: both are Required, RequiresReplace inputs with no update endpoint to
-// drift against, so echoing the API value back risks a spurious "inconsistent
-// result after apply" if formatting ever differs.
+// attribute. The inputs — `project`, `site` and `size` — are only filled in
+// when not already set, i.e. during import. All three are RequiresReplace
+// with no update endpoint to drift against, and the API labels `project`
+// differently from what a practitioner may have written (slug vs ID), so
+// echoing them back over a configured value would yield a spurious
+// "inconsistent result after apply" or a needless replacement.
 func (r *PublicNetworkResource) readPublicNetworkInto(ctx context.Context, data *PublicNetworkResourceModel, diags *diag.Diagnostics) {
 	id := data.ID.ValueString()
 	if id == "" {
@@ -419,7 +435,7 @@ func (r *PublicNetworkResource) readPublicNetworkInto(ctx context.Context, data 
 
 	result, err := r.client.PublicNetworks.GetPublicNetwork(ctx, id)
 	if err != nil {
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not_found") {
+		if publicNetworkNotFound(err) {
 			data.ID = types.StringNull()
 			return
 		}
@@ -445,7 +461,39 @@ func (r *PublicNetworkResource) readPublicNetworkInto(ctx context.Context, data 
 	data.IpsFree = computed.IpsFree
 	data.CreatedAt = computed.CreatedAt
 	data.RegionSlug = computed.RegionSlug
-	if !computed.Project.IsNull() {
+
+	if data.Project.IsNull() || data.Project.IsUnknown() {
 		data.Project = computed.Project
 	}
+	if data.Site.IsNull() || data.Site.IsUnknown() {
+		// The API has no `site` field; the location slug under `region` is the
+		// same slug practitioners pass as `site` (e.g. "CHI", "LAX2").
+		data.Site = computed.RegionSlug
+	}
+	if data.Size.IsNull() || data.Size.IsUnknown() {
+		data.Size = computed.Size
+	}
+}
+
+// publicNetworkNotFound reports whether err is a 404 from the public network
+// endpoints. GetPublicNetwork and DestroyPublicNetwork declare typed 403/404
+// responses, so the SDK returns a *components.ErrorObject (JSON:API errors,
+// status "404") rather than the generic *components.APIError; both shapes
+// must be recognized, and only a 404 counts — a 403 is a real error.
+func publicNetworkNotFound(err error) bool {
+	var apiErr *components.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode == http.StatusNotFound
+	}
+
+	var errObj *components.ErrorObject
+	if errors.As(err, &errObj) {
+		for _, e := range errObj.Errors {
+			if e.Status != nil && *e.Status == "404" {
+				return true
+			}
+		}
+	}
+
+	return false
 }
