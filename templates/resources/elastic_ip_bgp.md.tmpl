@@ -1,0 +1,95 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Reserves a static public IPv4 `/32` in a site and announces it over iBGP from one or more servers. Because the servers announce the address themselves, it can be shared, failed over or load-balanced between them — the usual building block for a virtual IP in front of a cluster.
+
+For an address that is simply routed to one server and moved between servers with an API call, use [`latitudesh_elastic_ip`](elastic_ip) instead. The two are different objects in the API and cannot be converted into each other.
+
+## Requirements
+
+- BGP must be enabled for the site. It is a per-site capability, not a per-team one.
+- Every announcing server must be deployed with `bgp_ready = true` (see [`latitudesh_server`](server)) and live in the same site as the address.
+- Up to 5 announcers per address by default. The cap is a team limit.
+
+## Example usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+Each server still has to run a BGP daemon and announce the address. `bgp_sessions[*].peer_address` is the neighbor to peer with, and the ASN is on `bgp_sessions[*].asn`:
+
+```hcl
+output "bird_config" {
+  value = {
+    for session in latitudesh_elastic_ip_bgp.vip.bgp_sessions : session.server_id => <<-EOT
+      protocol bgp latitudesh {
+        local as ${session.asn};
+        neighbor ${session.peer_address} as ${session.asn};
+        ipv4 { export filter { if net = ${latitudesh_elastic_ip_bgp.vip.address}/32 then accept; reject; }; };
+      }
+    EOT
+  }
+}
+```
+
+### Adding and removing announcers
+
+Changing `server_ids` opens or closes that server's session in place — the address is not reallocated, so the VIP survives the change:
+
+```hcl
+resource "latitudesh_elastic_ip_bgp" "vip" {
+  project    = latitudesh_project.project.id
+  site       = "DAL"
+  server_ids = [latitudesh_server.a.id, latitudesh_server.b.id, latitudesh_server.c.id]
+}
+```
+
+Sessions are closed before new ones are opened, so swapping an announcer works even when the address is already at the session limit.
+
+> **Note:** the API removes a session on its own when its server is deleted or recommissioned. That shows up as drift on the next refresh and the following plan re-opens it. If you are decommissioning a server for good, drop it from `server_ids` in the same change.
+
+### Allocating without announcers
+
+`server_ids` may be omitted to reserve the address first and announce it later:
+
+```hcl
+resource "latitudesh_elastic_ip_bgp" "reserved" {
+  project = latitudesh_project.project.id
+  site    = "DAL"
+}
+```
+
+### Customizing timeouts
+
+Override the default 15-minute timeouts per operation. Use `=` because `timeouts` is a nested attribute, not a block:
+
+```hcl
+resource "latitudesh_elastic_ip_bgp" "vip" {
+  project    = latitudesh_project.project.id
+  site       = "DAL"
+  server_ids = [latitudesh_server.a.id]
+
+  timeouts = {
+    create = "20m"
+    update = "20m"
+    delete = "10m"
+  }
+}
+```
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+BGP Elastic IPs are imported by ID. The announcing servers and their sessions are read back from the API, so `server_ids` does not need to be written first.
+
+```sh
+terraform import latitudesh_elastic_ip_bgp.vip ueip_XXXXXXXX
+```
+
+> **Note:** `project` comes back as the project ID. If your configuration refers to the project by slug, adjust it after importing — `project` forces a new resource, so a mismatch plans a replacement.

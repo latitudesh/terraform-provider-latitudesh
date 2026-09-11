@@ -180,6 +180,7 @@ func (p *latitudeshProvider) Resources(ctx context.Context) []func() resource.Re
 		NewServerResource,
 		NewVirtualMachineResource,
 		NewElasticIPResource,
+		NewElasticIPBgpResource,
 		NewSSHKeyResource,
 		NewUserDataResource,
 		NewVirtualNetworkResource,

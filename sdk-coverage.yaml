@@ -73,7 +73,7 @@ groups:
     implemented_by: [latitudesh_billing]
 
   ElasticIps:
-    implemented_by: [latitudesh_elastic_ip]
+    implemented_by: [latitudesh_elastic_ip, latitudesh_elastic_ip_bgp]
 
   Firewalls:
     implemented_by: [latitudesh_firewall, latitudesh_firewall_assignment]
