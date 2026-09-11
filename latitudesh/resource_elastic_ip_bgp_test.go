@@ -80,6 +80,12 @@ type mockBgpEIPAPI struct {
 	failSessionList        bool
 	failListAfterStuckOpen bool
 
+	// failNextGetAfterRelease answers the first read that follows a successful
+	// release with a 403, then heals. A provider that swallowed it would keep
+	// polling, hit the healed 404 and destroy cleanly — so the test only passes
+	// if the error is surfaced on the spot.
+	failNextGetAfterRelease bool
+
 	// stuckServer never lets its session leave `pending`, so the readiness poll
 	// runs out the operation deadline after the API already accepted it.
 	stuckServer string
@@ -305,6 +311,11 @@ func (m *mockBgpEIPAPI) handler(w http.ResponseWriter, r *http.Request) {
 		m.writeJSON(w, http.StatusOK, map[string]any{"data": m.listPage(r)})
 
 	case r.Method == http.MethodGet && r.URL.Path == "/elastic_ips/"+testBgpEIPID:
+		if m.released && m.failNextGetAfterRelease {
+			m.failNextGetAfterRelease = false
+			m.writeError(w, http.StatusForbidden, "FORBIDDEN", "token expired")
+			return
+		}
 		if !m.created || m.released {
 			m.writeError(w, http.StatusNotFound, "NOT_FOUND", "not found")
 			return
@@ -828,6 +839,34 @@ func TestAccElasticIPBgp_TimedOutSessionSurvivesFailedRefresh(t *testing.T) {
 						return nil
 					},
 				),
+			},
+		},
+	})
+}
+
+// Waiting for the address to disappear must not treat every non-404 as "not gone
+// yet". An expired token or any other 4xx will still be there when the timeout
+// expires, and reporting it as "the address is still present" sends the reader
+// after the wrong problem.
+func TestAccElasticIPBgp_DestroySurfacesPollingErrors(t *testing.T) {
+	withFastBgpPolling(t)
+	mock := newMockBgpEIPAPI()
+	mock.failNextGetAfterRelease = true
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMockBgpEIPReleased(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccElasticIPBgpConfig(`["sv_a"]`),
+				Check:  resource.TestCheckResourceAttr("latitudesh_elastic_ip_bgp.test_item", "server_ids.#", "1"),
+			},
+			{
+				Config:      testAccElasticIPBgpConfig(`["sv_a"]`),
+				Destroy:     true,
+				ExpectError: regexp.MustCompile(`poll the release of the BGP Elastic IP`),
 			},
 		},
 	})

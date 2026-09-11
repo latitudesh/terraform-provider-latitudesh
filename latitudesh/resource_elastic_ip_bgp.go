@@ -1203,6 +1203,14 @@ func (r *ElasticIPBgpResource) waitForGone(ctx context.Context, id string, deadl
 		if isElasticIPBgpNotFound(err) {
 			return
 		}
+		// Only a 404 means released, and only a transient error is worth another
+		// poll. Anything else — an expired token, a 4xx — will still be there in
+		// fifteen minutes, so surface it now instead of burning the timeout and
+		// then blaming the address for still existing.
+		if err != nil && !isTransientElasticIPBgpError(err) {
+			addElasticIPBgpError(diags, "poll the release of the BGP Elastic IP", err)
+			return
+		}
 		select {
 		case <-ctx.Done():
 			if elasticIPBgpTimedOut(ctx) {
