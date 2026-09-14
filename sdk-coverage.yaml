@@ -477,6 +477,17 @@ groups:
       lands in state — weigh that when reviewing.
 
   Traffic:
+    implemented_by: [latitudesh_traffic]
     notes: >-
-      Read-only reporting. The API changes its response shape based on a project
-      feature flag, so a data source needs to handle both.
+      Data source. Both methods are mapped: Get (consumption) and GetQuota
+      (quota) are fetched together and flattened onto the single
+      latitudesh_traffic data source — no methods are left unmapped. The
+      feature-flag-dependent response shape lives in
+      quota_per_project.*.quota_per_region: each region carries exactly one of
+      quota_in_tb or quota_in_mbps (components.QuotaInTb /
+      components.QuotaInMbps), depending on the project's billing method; both
+      are nil-checked independently so the unpopulated one comes back null
+      instead of a stale zero value. TrafficMeta and TrafficQuotaMeta are empty
+      envelope structs with no fields to map. Get's id/type and GetQuota's
+      id/type collide on name, so the quota ones are exposed as quota_id/
+      quota_type instead of the verbatim id/type.
