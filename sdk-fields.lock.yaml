@@ -2900,6 +2900,94 @@ groups:
       operations.GetTeamMembersResponse:
         fields:
           - {name: "TeamMembers", type: "*components.TeamMembers", optional: true, doc: "6d8303b0"}
+  Traffic:
+    methods:
+      Get: {signature: "(context.Context, string, string, *string, *string, ...operations.Option) (*operations.GetTrafficConsumptionResponse, error)"}
+      GetQuota: {signature: "(context.Context, *string, ...operations.Option) (*operations.GetTrafficQuotaResponse, error)"}
+    models:
+      components.QuotaInMbps:
+        fields:
+          - {name: "Additional", wire: "additional", type: "*int64", optional: true}
+          - {name: "Granted", wire: "granted", type: "*int64", optional: true}
+          - {name: "Total", wire: "total", type: "*int64", optional: true}
+      components.QuotaInTb:
+        fields:
+          - {name: "Additional", wire: "additional", type: "*int64", optional: true}
+          - {name: "Granted", wire: "granted", type: "*int64", optional: true}
+          - {name: "Total", wire: "total", type: "*int64", optional: true}
+      components.QuotaPerProject:
+        fields:
+          - {name: "BillingMethod", wire: "billing_method", type: "*string", optional: true}
+          - {name: "Price", wire: "price", type: "*int64", optional: true}
+          - {name: "ProjectID", wire: "project_id", type: "*string", optional: true}
+          - {name: "ProjectSlug", wire: "project_slug", type: "*string", optional: true}
+          - {name: "QuotaPerRegion", wire: "quota_per_region", type: "[]QuotaPerRegion", optional: true}
+      components.QuotaPerRegion:
+        fields:
+          - {name: "Price", wire: "price", type: "*int64", optional: true}
+          - {name: "QuotaInMbps", wire: "quota_in_mbps", type: "*QuotaInMbps", optional: true}
+          - {name: "QuotaInTb", wire: "quota_in_tb", type: "*QuotaInTb", optional: true}
+          - {name: "RegionID", wire: "region_id", type: "*string", optional: true}
+          - {name: "RegionSlug", wire: "region_slug", type: "*string", optional: true}
+      components.Traffic:
+        fields:
+          - {name: "Data", wire: "data", type: "*TrafficData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*TrafficMeta", optional: true}
+      components.TrafficAttributes:
+        fields:
+          - {name: "FromDate", wire: "from_date", type: "*int64", optional: true, doc: "35f93757"}
+          - {name: "Regions", wire: "regions", type: "[]TrafficRegions", optional: true}
+          - {name: "ToDate", wire: "to_date", type: "*int64", optional: true, doc: "7ae351fa"}
+          - {name: "TotalInbound95thPercentileMbps", wire: "total_inbound_95th_percentile_mbps", type: "*float64", optional: true, doc: "3009cac5"}
+          - {name: "TotalInboundGb", wire: "total_inbound_gb", type: "*int64", optional: true, doc: "dcd541fa"}
+          - {name: "TotalOutbound95thPercentileMbps", wire: "total_outbound_95th_percentile_mbps", type: "*float64", optional: true, doc: "fed1e228"}
+          - {name: "TotalOutboundGb", wire: "total_outbound_gb", type: "*int64", optional: true, doc: "dcd541fa"}
+      components.TrafficData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*TrafficAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*TrafficType", optional: true}
+      components.TrafficDataData:
+        fields:
+          - {name: "AvgInboundSpeedMbps", wire: "avg_inbound_speed_mbps", type: "*float64", optional: true, doc: "f7f149a1"}
+          - {name: "AvgOutboundSpeedMbps", wire: "avg_outbound_speed_mbps", type: "*float64", optional: true, doc: "f7f149a1"}
+          - {name: "Date", wire: "date", type: "*string", optional: true, doc: "d2ea0b47"}
+          - {name: "InboundGb", wire: "inbound_gb", type: "*int64", optional: true, doc: "dcd541fa"}
+          - {name: "InboundSpeedMbps", wire: "inbound_speed_mbps", type: "*float64", optional: true, doc: "f7f149a1"}
+          - {name: "OutboundGb", wire: "outbound_gb", type: "*int64", optional: true, doc: "dcd541fa"}
+          - {name: "OutboundSpeedMbps", wire: "outbound_speed_mbps", type: "*float64", optional: true, doc: "f7f149a1"}
+      components.TrafficMeta:
+      components.TrafficQuota:
+        fields:
+          - {name: "Data", wire: "data", type: "*TrafficQuotaData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*TrafficQuotaMeta", optional: true}
+      components.TrafficQuotaAttributes:
+        fields:
+          - {name: "QuotaPerProject", wire: "quota_per_project", type: "[]QuotaPerProject", optional: true}
+      components.TrafficQuotaData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*TrafficQuotaAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*TrafficQuotaType", optional: true}
+      components.TrafficQuotaMeta:
+      components.TrafficQuotaType:
+        enum: ["traffic_quota"]
+      components.TrafficRegions:
+        fields:
+          - {name: "Data", wire: "data", type: "[]TrafficDataData", optional: true}
+          - {name: "RegionSlug", wire: "region_slug", type: "*string", optional: true}
+          - {name: "TotalInbound95thPercentileMbps", wire: "total_inbound_95th_percentile_mbps", type: "*float64", optional: true, doc: "c179a9cb"}
+          - {name: "TotalInboundGb", wire: "total_inbound_gb", type: "*int64", optional: true, doc: "dcd541fa"}
+          - {name: "TotalOutbound95thPercentileMbps", wire: "total_outbound_95th_percentile_mbps", type: "*float64", optional: true, doc: "9767bee4"}
+          - {name: "TotalOutboundGb", wire: "total_outbound_gb", type: "*int64", optional: true, doc: "dcd541fa"}
+      components.TrafficType:
+        enum: ["traffic"]
+      operations.GetTrafficConsumptionResponse:
+        fields:
+          - {name: "Traffic", type: "*components.Traffic", optional: true, doc: "6d8303b0"}
+      operations.GetTrafficQuotaResponse:
+        fields:
+          - {name: "TrafficQuota", type: "*components.TrafficQuota", optional: true, doc: "6d8303b0"}
   UserData:
     methods:
       Create: {signature: "(context.Context, string, operations.PostProjectUserDataUserDataRequestBody, ...operations.Option) (*operations.PostProjectUserDataResponse, error)", deprecated: true}
