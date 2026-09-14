@@ -102,11 +102,23 @@ groups:
   ManagedDatabases:
     implemented_by: [latitudesh_managed_database_metrics]
     notes: >-
-      Data source. ShowManagedDatabaseMetrics is the only method on this
-      group (crud shape -R--) and it is the one mapped: managed_database_id,
-      period and queries drive the request, and from/to/metrics (a map keyed
-      by metric name, each entry carrying unit/current/points) back the
-      response. No methods are left unmapped.
+      Data source. ShowManagedDatabaseMetrics is the one method mapped by
+      latitudesh_managed_database_metrics: managed_database_id, period and
+      queries drive the request, and from/to/metrics (a map keyed by metric
+      name, each entry carrying unit/current/points) back the response.
+
+      As of SDK v1.19.24 the group also gained full CRUD
+      (CreateManagedDatabase, ShowManagedDatabase, ListManagedDatabases,
+      UpdateManagedDatabase, DestroyManagedDatabase) plus
+      ListManagedDatabaseBackups, none of which the metrics data source
+      touches — they back a managed-database resource/data-source that does
+      not exist yet in this provider. Flagged for the reviewer as a
+      candidate new `latitudesh_managed_database` resource; not built here
+      per task scope (drift reconciliation only). These methods, and the
+      component/operation models that support them (ManagedDatabase*,
+      AccessCredentials, Billing, Currency, Limits, Recovery, Supabase,
+      ProjectInclude, ProjectIncludeStats, TeamInclude, Backups,
+      ScheduledBackup, etc.), are deliberately left unmapped for now.
 
   MarketplaceApps:
     implemented_by: [latitudesh_marketplace_app, latitudesh_marketplace_apps]
