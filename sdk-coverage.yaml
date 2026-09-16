@@ -369,17 +369,6 @@ groups:
       stable, so scaffolding against it now would only churn. Revisit once the
       product ships.
 
-  BlockStorage:
-    ceiling: none
-    rationale: product_decision
-    notes: >-
-      Volume creation is paused on the platform right now, so a scaffolded
-      resource nobody can apply would only add review load. Revisit when creation
-      reopens. Shape context for that day: methods are HTTP-verb prefixed
-      (PostStorageVolumes, DeleteStorageVolumes), DeleteStorageVolumes deletes a
-      single volume despite the plural, and the API has no volume update, so the
-      CR-D shape is real and not a spec gap.
-
   FilesystemStorage:
     ceiling: none
     rationale: product_decision
@@ -475,6 +464,18 @@ groups:
     notes: >-
       Full CRUD, but managing API keys through Terraform means the key material
       lands in state — weigh that when reviewing.
+
+  BlockStorage:
+    notes: >-
+      Methods are HTTP-verb prefixed (PostStorageVolumes, DeleteStorageVolumes),
+      DeleteStorageVolumes deletes a single volume despite the plural, and the
+      API has no volume update, so the CR-D shape is real and not a spec gap.
+      Beyond that shape sit three attachment verbs the derived CRUD cannot
+      express: PostStorageVolumesMap and PostStorageVolumesUnmap (map a
+      high-performance volume to a server over NVMe-TCP, and unmap it) and
+      PostStorageVolumesMount (mount by adding the client to an allowed list).
+      Decide on review whether attachment belongs on the volume resource or on a
+      separate type.
 
   Traffic:
     notes: >-
