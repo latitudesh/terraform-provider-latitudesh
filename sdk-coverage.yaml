@@ -72,6 +72,37 @@ groups:
   Billing:
     implemented_by: [latitudesh_billing]
 
+  BlockStorage:
+    implemented_by: [latitudesh_block_storage, latitudesh_block_storages]
+    notes: >-
+      Methods are HTTP-verb prefixed (PostStorageVolumes, DeleteStorageVolumes),
+      DeleteStorageVolumes deletes a single volume despite the plural, and the
+      API has no volume update, so every resource attribute is RequiresReplace.
+      PostStorageVolumes/GetStorageVolume/GetStorageVolumes/DeleteStorageVolumes
+      back latitudesh_block_storage (resource + singular data source, lookup by
+      id or by name/project) and latitudesh_block_storages (plural, client-side
+      project filter, newest first). Unmapped: PostStorageVolumesMap (map a
+      high-performance volume to a server over NVMe-TCP) and
+      PostStorageVolumesMount (mount by adding a client to the volume's allowed
+      list) — both are actions on an existing volume, not creation, so neither
+      fits the derived CR-D shape; recommend a follow-up
+      latitudesh_block_storage_map (or _mount) resource/action pair modeled on
+      latitudesh_firewall_assignment once a reviewer confirms map/mount
+      lifecycle semantics against the live API. The pinned SDK
+      (v1.19.20) has no PostStorageVolumesUnmap method despite the pending-queue
+      notes describing one; the live API may still route it — flagged for
+      review, not assumed absent. Not exposed on the resource or singular data
+      source, by team decision: `keyring`/`cluster_user`/`volume_path` (SDK doc
+      comment: dashboard-origin responses only, always null for API-driven
+      requests), `initiators` and `block` (mount/map state — belongs with
+      whichever resource ends up owning those verbs, not this one), `created_at`
+      and the nested `team` envelope (presentation/account metadata, not
+      provisioning inputs) and region `city`/`country`/site `id`/`name`/
+      `facility` (only the site slug is round-tripped, same as
+      latitudesh_object_storage's `region`). The plural data source's `volumes[].created_at`
+      is the one exception, kept solely to order results newest-first as
+      latitudesh_virtual_machine_backups does.
+
   ElasticIps:
     implemented_by: [latitudesh_elastic_ip, latitudesh_elastic_ip_bgp]
 
@@ -464,18 +495,6 @@ groups:
     notes: >-
       Full CRUD, but managing API keys through Terraform means the key material
       lands in state — weigh that when reviewing.
-
-  BlockStorage:
-    notes: >-
-      Methods are HTTP-verb prefixed (PostStorageVolumes, DeleteStorageVolumes),
-      DeleteStorageVolumes deletes a single volume despite the plural, and the
-      API has no volume update, so the CR-D shape is real and not a spec gap.
-      Beyond that shape sit three attachment verbs the derived CRUD cannot
-      express: PostStorageVolumesMap and PostStorageVolumesUnmap (map a
-      high-performance volume to a server over NVMe-TCP, and unmap it) and
-      PostStorageVolumesMount (mount by adding the client to an allowed list).
-      Decide on review whether attachment belongs on the volume resource or on a
-      separate type.
 
   Traffic:
     notes: >-
