@@ -452,7 +452,7 @@ func (r *LksResource) Create(ctx context.Context, req resource.CreateRequest, re
 		return
 	}
 
-	r.waitForClusterReady(ctx, id, createTimeout, &resp.Diagnostics)
+	r.waitForClusterReady(ctx, id, "", createTimeout, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -494,6 +494,14 @@ func (r *LksResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		return
 	}
 
+	// The prior state is read only to tell an in-place control-plane upgrade
+	// apart from a name/description edit; see the wait below.
+	var state LksResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	id := data.ID.ValueString()
 
 	updateRequest := components.UpdateLksCluster{
@@ -519,10 +527,21 @@ func (r *LksResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		return
 	}
 
-	// A kubernetes_version change moves the cluster to "upgrading"; a
-	// name/description-only change is synchronous, so this returns
-	// immediately if status is already "ready".
-	r.waitForClusterReady(ctx, id, updateTimeout, &resp.Diagnostics)
+	// A kubernetes_version change is asynchronous *and* lazy: the platform
+	// accepts the PATCH while the cluster is still "ready" on the old version
+	// and only flips to "upgrading" a moment later. Waiting on status alone
+	// therefore returns on the very first poll and hands Terraform back the
+	// pre-upgrade version — "Provider produced inconsistent result after
+	// apply", with the old version left in state. So an upgrade waits for the
+	// requested version to actually land, not just for "ready" to be true.
+	// A name/description-only change is synchronous: no version to wait on,
+	// status is already "ready", and this returns immediately.
+	wantVersion := ""
+	if !data.KubernetesVersion.Equal(state.KubernetesVersion) {
+		wantVersion = data.KubernetesVersion.ValueString()
+	}
+
+	r.waitForClusterReady(ctx, id, wantVersion, updateTimeout, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -598,12 +617,20 @@ func (r *LksResource) ImportState(ctx context.Context, req resource.ImportStateR
 // No terminal failure status is documented for this operation (unlike VM
 // backups' "Failed"), so an unrecognized or stuck status is only ever a
 // timeout, never a fast-fail.
-func (r *LksResource) waitForClusterReady(ctx context.Context, id string, timeout time.Duration, diags *diag.Diagnostics) {
+//
+// wantVersion, when non-empty, additionally requires kubernetes_version to
+// have reached that value before the wait is satisfied. Create passes ""
+// (whatever version comes back is the one the cluster was built with); an
+// in-place upgrade passes the requested version, because the platform leaves
+// the cluster "ready" on the old version for a moment after accepting the
+// PATCH and a status-only check would return on that pre-upgrade read.
+func (r *LksResource) waitForClusterReady(ctx context.Context, id, wantVersion string, timeout time.Duration, diags *diag.Diagnostics) {
 	const maxConsecutiveErrors = 5
 	pollInterval := lksReadyPollInterval
 
 	deadline := time.Now().Add(timeout)
 	lastStatus := ""
+	lastVersion := ""
 	consecutiveErrors := 0
 
 	for time.Now().Before(deadline) {
@@ -629,9 +656,13 @@ func (r *LksResource) waitForClusterReady(ctx context.Context, id string, timeou
 		consecutiveErrors = 0
 
 		if result != nil && result.LksCluster != nil && result.LksCluster.Data != nil && result.LksCluster.Data.Attributes != nil {
-			if status := result.LksCluster.Data.Attributes.Status; status != nil {
+			attrs := result.LksCluster.Data.Attributes
+			if version := attrs.KubernetesVersion; version != nil {
+				lastVersion = *version
+			}
+			if status := attrs.Status; status != nil {
 				lastStatus = *status
-				if *status == "ready" {
+				if *status == "ready" && (wantVersion == "" || lastVersion == wantVersion) {
 					return
 				}
 			}
@@ -643,6 +674,14 @@ func (r *LksResource) waitForClusterReady(ctx context.Context, id string, timeou
 			return
 		case <-time.After(pollInterval):
 		}
+	}
+
+	if wantVersion != "" {
+		diags.AddError(
+			"Timeout waiting for LKS cluster upgrade",
+			fmt.Sprintf("LKS cluster %q did not reach status \"ready\" on kubernetes_version %q within %s (last status: %q, last version: %q).", id, wantVersion, timeout, lastStatus, lastVersion),
+		)
+		return
 	}
 
 	diags.AddError(
