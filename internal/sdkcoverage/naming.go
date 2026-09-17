@@ -114,11 +114,15 @@ func singularize(word string) string {
 	case len(lower) > 3 && strings.HasSuffix(lower, "ies"):
 		// Policies -> Policy
 		return word[:len(word)-3] + "y"
-	case hasAnySuffix(lower, "sses", "shes", "ches", "xes", "zes", "ses"):
-		// Addresses -> Address, Boxes -> Box
+	case hasAnySuffix(lower, "sses", "shes", "ches", "xes", "zes"):
+		// Addresses -> Address, Boxes -> Box. A bare "ses" is NOT in this list:
+		// Databases, Releases and Licenses end in a silent-e stem plus "s", so
+		// stripping two characters produced "Databas" (#243) — they take the
+		// plain "s" rule below.
 		return word[:len(word)-2]
 	case strings.HasSuffix(lower, "s") && !strings.HasSuffix(lower, "ss"):
-		// Keys -> Key, Firewalls -> Firewall; "ss" endings (none today) stay put.
+		// Keys -> Key, Firewalls -> Firewall, Databases -> Database; "ss"
+		// endings (none today) stay put.
 		return word[:len(word)-1]
 	default:
 		// Data, Storage, Traffic, VM: no plural to strip.
