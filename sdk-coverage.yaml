@@ -99,6 +99,38 @@ groups:
       read path maps the target from
       components.FirewallAssignmentDataAttributes.Server/.VirtualMachine.
 
+  Lks:
+    implemented_by: [latitudesh_lks, latitudesh_lks_clusters]
+    notes: >-
+      latitudesh_lks maps LksCluster's full lifecycle (Create/Get/Update/Delete,
+      plus ListLksClusters backing the plural latitudesh_lks_clusters, scoped by
+      project). LKS (Latitude Kubernetes Service) is an acronym, not a plural,
+      so the type keeps the trailing s and the list data source is spelled out
+      as latitudesh_lks_clusters rather than the usual singular+s pair —
+      SuggestTypeName's singularize rule would otherwise propose latitudesh_lk.
+      name, description and kubernetes_version are updatable
+      in-place (UpdateLksCluster); project, site and network carry
+      RequiresReplace — there is no update endpoint for them. Unmapped:
+      CreateLksNodePool/GetLksNodePool/UpdateLksNodePool/DeleteLksNodePool/
+      ListLksNodePools are LksNodePool's own full lifecycle, nested under a
+      cluster (parallel to how ElasticIps.CreateElasticIP sits next to the
+      BGP session lifecycle now under latitudesh_elastic_ip_bgp) —
+      recommended home is a future latitudesh_lks_node_pool resource, not
+      scaffolded here. GetLksClusterKubeconfig is a read of an existing
+      cluster's kubeconfig (409 NOT_READY until the control plane is up),
+      not a standalone type; recommended home is a future sensitive
+      latitudesh_lks_kubeconfig data source. ListLksAvailableVersions and
+      ListLksSites are global reference lookups (no project/cluster scope)
+      that back client-side validation of kubernetes_version and site at
+      the API layer; recommended home is a future latitudesh_lks_versions /
+      latitudesh_lks_sites data source pair, not scaffolded here since
+      neither has a project-scoped List this group's plural-datasource rule
+      would key off. Reviewer flag: KubernetesClusters below is capped
+      `ceiling: none, rationale: deprecated` for exactly this product
+      (managed Kubernetes) — confirm Lks is the intended non-deprecated
+      successor before merging, not a second implementation of the same
+      thing under a new SDK group name.
+
   ManagedDatabases:
     implemented_by: [latitudesh_managed_database_metrics]
     notes: >-

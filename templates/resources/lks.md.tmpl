@@ -1,0 +1,49 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Provisions an LKS (Latitude Kubernetes Service) cluster control plane. Worker capacity is added separately through node pools, which this provider does not yet support.
+
+`project`, `site` and `network` have no update endpoint and force a new resource if changed. `name`, `description` and `kubernetes_version` update in place; setting a newer `kubernetes_version` consents to an in-place control-plane upgrade.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+You can import an LKS cluster resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_lks` resource can be imported by specifying the cluster ID:
+
+```sh
+terraform import latitudesh_lks.example <LKS_CLUSTER_ID>
+```
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration.
+
+```hcl
+import {
+  to = latitudesh_lks.example
+  id = "<LKS_CLUSTER_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_lks.tf
+```
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.
