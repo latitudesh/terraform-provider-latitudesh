@@ -26,40 +26,40 @@ import (
 	providerpkg "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
 
-var _ resource.Resource = &LkResource{}
-var _ resource.ResourceWithImportState = &LkResource{}
-var _ resource.ResourceWithModifyPlan = &LkResource{}
+var _ resource.Resource = &LksResource{}
+var _ resource.ResourceWithImportState = &LksResource{}
+var _ resource.ResourceWithModifyPlan = &LksResource{}
 
 // Poll intervals for the async create/update/delete waits. Declared as vars
 // (not consts) so tests can shorten them; production keeps the defaults.
 var (
-	lkReadyPollInterval  = 10 * time.Second
-	lkDeletePollInterval = 5 * time.Second
+	lksReadyPollInterval  = 10 * time.Second
+	lksDeletePollInterval = 5 * time.Second
 )
 
-func NewLkResource() resource.Resource {
-	return &LkResource{}
+func NewLksResource() resource.Resource {
+	return &LksResource{}
 }
 
-type LkResource struct {
+type LksResource struct {
 	client         *latitudeshgosdk.Latitudesh
 	defaultProject string
 }
 
-// LkNetworkModel is the nested `network` object: cluster CIDR overrides.
-type LkNetworkModel struct {
+// LksNetworkModel is the nested `network` object: cluster CIDR overrides.
+type LksNetworkModel struct {
 	PodCidrs     types.Set `tfsdk:"pod_cidrs"`
 	ServiceCidrs types.Set `tfsdk:"service_cidrs"`
 	NodeCidrs    types.Set `tfsdk:"node_cidrs"`
 }
 
-var lkNetworkAttrTypes = map[string]attr.Type{
+var lksNetworkAttrTypes = map[string]attr.Type{
 	"pod_cidrs":     types.SetType{ElemType: types.StringType},
 	"service_cidrs": types.SetType{ElemType: types.StringType},
 	"node_cidrs":    types.SetType{ElemType: types.StringType},
 }
 
-type LkResourceModel struct {
+type LksResourceModel struct {
 	ID                   types.String   `tfsdk:"id"`
 	Project              types.String   `tfsdk:"project"`
 	Name                 types.String   `tfsdk:"name"`
@@ -78,10 +78,10 @@ type LkResourceModel struct {
 	Timeouts             timeouts.Value `tfsdk:"timeouts"`
 }
 
-// lkFields holds the fields read back from the API, shared between the
+// lksFields holds the fields read back from the API, shared between the
 // resource and the data sources so the nil-check-and-convert logic is
 // written, and tested, once.
-type lkFields struct {
+type lksFields struct {
 	Project              types.String
 	Name                 types.String
 	Site                 types.String
@@ -98,18 +98,18 @@ type lkFields struct {
 	UpdatedAt            types.String
 }
 
-// mapLkAttributes converts the SDK's attributes envelope into framework
+// mapLksAttributes converts the SDK's attributes envelope into framework
 // values, nil-checking every pointer field per house convention.
-func mapLkAttributes(attrs *components.LksClusterDataAttributes) (lkFields, diag.Diagnostics) {
+func mapLksAttributes(attrs *components.LksClusterDataAttributes) (lksFields, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
-	out := lkFields{
+	out := lksFields{
 		Project:              types.StringNull(),
 		Name:                 types.StringNull(),
 		Site:                 types.StringNull(),
 		KubernetesVersion:    types.StringNull(),
 		Description:          types.StringNull(),
-		Network:              types.ObjectNull(lkNetworkAttrTypes),
+		Network:              types.ObjectNull(lksNetworkAttrTypes),
 		Status:               types.StringNull(),
 		Message:              types.StringNull(),
 		Reason:               types.StringNull(),
@@ -129,7 +129,7 @@ func mapLkAttributes(attrs *components.LksClusterDataAttributes) (lkFields, diag
 	out.KubernetesVersion = types.StringPointerValue(attrs.KubernetesVersion)
 	out.Description = types.StringPointerValue(attrs.Description)
 
-	netObj, netDiags := mapLkNetwork(attrs.Network)
+	netObj, netDiags := mapLksNetwork(attrs.Network)
 	diags.Append(netDiags...)
 	out.Network = netObj
 
@@ -145,14 +145,14 @@ func mapLkAttributes(attrs *components.LksClusterDataAttributes) (lkFields, diag
 	return out, diags
 }
 
-// mapLkNetwork converts the API's network envelope (always present in
+// mapLksNetwork converts the API's network envelope (always present in
 // responses, per its doc comment) into the nested `network` object. The
 // three CIDR lists carry no order of their own, so they are sorted for a
 // stable state representation (see stringsToSet in resource_elastic_ip_bgp.go).
-func mapLkNetwork(n *components.Network) (types.Object, diag.Diagnostics) {
+func mapLksNetwork(n *components.Network) (types.Object, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	if n == nil {
-		return types.ObjectNull(lkNetworkAttrTypes), diags
+		return types.ObjectNull(lksNetworkAttrTypes), diags
 	}
 
 	pod, d := stringsToSet(n.GetPodCidrs())
@@ -162,10 +162,10 @@ func mapLkNetwork(n *components.Network) (types.Object, diag.Diagnostics) {
 	node, d := stringsToSet(n.GetNodeCidrs())
 	diags.Append(d...)
 	if diags.HasError() {
-		return types.ObjectNull(lkNetworkAttrTypes), diags
+		return types.ObjectNull(lksNetworkAttrTypes), diags
 	}
 
-	obj, objDiags := types.ObjectValue(lkNetworkAttrTypes, map[string]attr.Value{
+	obj, objDiags := types.ObjectValue(lksNetworkAttrTypes, map[string]attr.Value{
 		"pod_cidrs":     pod,
 		"service_cidrs": svc,
 		"node_cidrs":    node,
@@ -174,16 +174,16 @@ func mapLkNetwork(n *components.Network) (types.Object, diag.Diagnostics) {
 	return obj, diags
 }
 
-// lkNetworkFromObject converts the configured `network` object into the
+// lksNetworkFromObject converts the configured `network` object into the
 // create request's shape. A null or unknown object (network left unset)
 // yields a nil pointer, so the platform default is used.
-func lkNetworkFromObject(ctx context.Context, obj types.Object) (*components.CreateLksClusterNetwork, diag.Diagnostics) {
+func lksNetworkFromObject(ctx context.Context, obj types.Object) (*components.CreateLksClusterNetwork, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	if obj.IsNull() || obj.IsUnknown() {
 		return nil, diags
 	}
 
-	var model LkNetworkModel
+	var model LksNetworkModel
 	diags.Append(obj.As(ctx, &model, basetypes.ObjectAsOptions{})...)
 	if diags.HasError() {
 		return nil, diags
@@ -206,11 +206,11 @@ func lkNetworkFromObject(ctx context.Context, obj types.Object) (*components.Cre
 	}, diags
 }
 
-func (r *LkResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_lk"
+func (r *LksResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_lks"
 }
 
-func (r *LkResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *LksResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "LKS (Latitude Kubernetes Service) cluster resource. Provisions the control plane only; add worker capacity with a separate node pool (not yet supported by this provider — see the provider changelog).",
 		Attributes: map[string]schema.Attribute{
@@ -330,7 +330,7 @@ func (r *LkResource) Schema(ctx context.Context, req resource.SchemaRequest, res
 	}
 }
 
-func (r *LkResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *LksResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -342,12 +342,12 @@ func (r *LkResource) Configure(ctx context.Context, req resource.ConfigureReques
 	r.defaultProject = deps.DefaultProject
 }
 
-func (r *LkResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+func (r *LksResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		return // destroy
 	}
 
-	var cfg, plan LkResourceModel
+	var cfg, plan LksResourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -376,8 +376,8 @@ func (r *LkResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequ
 	)
 }
 
-func (r *LkResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data LkResourceModel
+func (r *LksResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data LksResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -404,7 +404,7 @@ func (r *LkResource) Create(ctx context.Context, req resource.CreateRequest, res
 		return
 	}
 
-	networkInput, netDiags := lkNetworkFromObject(ctx, data.Network)
+	networkInput, netDiags := lksNetworkFromObject(ctx, data.Network)
 	resp.Diagnostics.Append(netDiags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -457,7 +457,7 @@ func (r *LkResource) Create(ctx context.Context, req resource.CreateRequest, res
 		return
 	}
 
-	r.readLkInto(ctx, &data, &resp.Diagnostics)
+	r.readLksInto(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -465,14 +465,14 @@ func (r *LkResource) Create(ctx context.Context, req resource.CreateRequest, res
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *LkResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data LkResourceModel
+func (r *LksResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data LksResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	r.readLkInto(ctx, &data, &resp.Diagnostics)
+	r.readLksInto(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -487,8 +487,8 @@ func (r *LkResource) Read(ctx context.Context, req resource.ReadRequest, resp *r
 
 // Update only ever runs for name, description and kubernetes_version: every
 // other input attribute carries RequiresReplace.
-func (r *LkResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data LkResourceModel
+func (r *LksResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data LksResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -527,7 +527,7 @@ func (r *LkResource) Update(ctx context.Context, req resource.UpdateRequest, res
 		return
 	}
 
-	r.readLkInto(ctx, &data, &resp.Diagnostics)
+	r.readLksInto(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -535,8 +535,8 @@ func (r *LkResource) Update(ctx context.Context, req resource.UpdateRequest, res
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *LkResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data LkResourceModel
+func (r *LksResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data LksResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -549,7 +549,7 @@ func (r *LkResource) Delete(ctx context.Context, req resource.DeleteRequest, res
 
 	_, err := r.client.Lks.DeleteLksCluster(ctx, id)
 	if err != nil {
-		if lkClusterNotFound(err) {
+		if lksClusterNotFound(err) {
 			return
 		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete LKS cluster, got error: "+err.Error())
@@ -565,8 +565,8 @@ func (r *LkResource) Delete(ctx context.Context, req resource.DeleteRequest, res
 	r.waitForClusterDeleted(ctx, id, deleteTimeout, &resp.Diagnostics)
 }
 
-func (r *LkResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	var data LkResourceModel
+func (r *LksResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	var data LksResourceModel
 	data.ID = types.StringValue(req.ID)
 
 	// No timeouts block is set on import, so give the field an explicitly
@@ -581,7 +581,7 @@ func (r *LkResource) ImportState(ctx context.Context, req resource.ImportStateRe
 		}),
 	}
 
-	r.readLkInto(ctx, &data, &resp.Diagnostics)
+	r.readLksInto(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -598,9 +598,9 @@ func (r *LkResource) ImportState(ctx context.Context, req resource.ImportStateRe
 // No terminal failure status is documented for this operation (unlike VM
 // backups' "Failed"), so an unrecognized or stuck status is only ever a
 // timeout, never a fast-fail.
-func (r *LkResource) waitForClusterReady(ctx context.Context, id string, timeout time.Duration, diags *diag.Diagnostics) {
+func (r *LksResource) waitForClusterReady(ctx context.Context, id string, timeout time.Duration, diags *diag.Diagnostics) {
 	const maxConsecutiveErrors = 5
-	pollInterval := lkReadyPollInterval
+	pollInterval := lksReadyPollInterval
 
 	deadline := time.Now().Add(timeout)
 	lastStatus := ""
@@ -609,7 +609,7 @@ func (r *LkResource) waitForClusterReady(ctx context.Context, id string, timeout
 	for time.Now().Before(deadline) {
 		result, err := r.client.Lks.GetLksCluster(ctx, id)
 		if err != nil {
-			if !lkRetryableDuringPoll(err) {
+			if !lksRetryableDuringPoll(err) {
 				diags.AddError("Client Error", "Unable to check LKS cluster status: "+err.Error())
 				return
 			}
@@ -655,9 +655,9 @@ func (r *LkResource) waitForClusterReady(ctx context.Context, id string, timeout
 // "deleted". Which of the two actually happens is not confirmed live (see
 // handoff); both are treated as terminal so destroy does not spin until the
 // timeout either way.
-func (r *LkResource) waitForClusterDeleted(ctx context.Context, id string, timeout time.Duration, diags *diag.Diagnostics) {
+func (r *LksResource) waitForClusterDeleted(ctx context.Context, id string, timeout time.Duration, diags *diag.Diagnostics) {
 	const maxConsecutiveErrors = 5
-	pollInterval := lkDeletePollInterval
+	pollInterval := lksDeletePollInterval
 
 	deadline := time.Now().Add(timeout)
 	consecutiveErrors := 0
@@ -665,10 +665,10 @@ func (r *LkResource) waitForClusterDeleted(ctx context.Context, id string, timeo
 	for time.Now().Before(deadline) {
 		result, err := r.client.Lks.GetLksCluster(ctx, id)
 		if err != nil {
-			if lkClusterNotFound(err) {
+			if lksClusterNotFound(err) {
 				return
 			}
-			if !lkRetryableDuringPoll(err) {
+			if !lksRetryableDuringPoll(err) {
 				diags.AddError("Client Error", "Unable to check LKS cluster deletion: "+err.Error())
 				return
 			}
@@ -700,14 +700,14 @@ func (r *LkResource) waitForClusterDeleted(ctx context.Context, id string, timeo
 	)
 }
 
-// readLkInto issues a Get for data.ID and refreshes every attribute.
+// readLksInto issues a Get for data.ID and refreshes every attribute.
 // `project`, `site` and `network` are only filled in when not already set
 // (i.e. during import): they carry RequiresReplace with no update endpoint
 // to drift against, so echoing them back over a configured value would
 // yield a spurious "inconsistent result after apply" or a needless
 // replacement. `name`, `kubernetes_version` and `description` are
 // updatable, so the API is always the source of truth for them.
-func (r *LkResource) readLkInto(ctx context.Context, data *LkResourceModel, diags *diag.Diagnostics) {
+func (r *LksResource) readLksInto(ctx context.Context, data *LksResourceModel, diags *diag.Diagnostics) {
 	id := data.ID.ValueString()
 	if id == "" {
 		diags.AddError("Invalid ID", "LKS cluster ID is empty")
@@ -716,7 +716,7 @@ func (r *LkResource) readLkInto(ctx context.Context, data *LkResourceModel, diag
 
 	result, err := r.client.Lks.GetLksCluster(ctx, id)
 	if err != nil {
-		if lkClusterNotFound(err) {
+		if lksClusterNotFound(err) {
 			data.ID = types.StringNull()
 			return
 		}
@@ -734,7 +734,7 @@ func (r *LkResource) readLkInto(ctx context.Context, data *LkResourceModel, diag
 		data.ID = types.StringValue(*obj.ID)
 	}
 
-	fields, mapDiags := mapLkAttributes(obj.Attributes)
+	fields, mapDiags := mapLksAttributes(obj.Attributes)
 	diags.Append(mapDiags...)
 
 	if data.Project.IsNull() || data.Project.IsUnknown() {
@@ -771,7 +771,7 @@ func (r *LkResource) readLkInto(ctx context.Context, data *LkResourceModel, diag
 // create endpoint. The configured selector itself is never rewritten in
 // state. The list filter used by the plural data source does document slug
 // support, so no resolution is needed there.
-func (r *LkResource) resolveProjectID(ctx context.Context, selector string) (string, error) {
+func (r *LksResource) resolveProjectID(ctx context.Context, selector string) (string, error) {
 	if strings.HasPrefix(selector, "proj_") {
 		return selector, nil
 	}
@@ -786,13 +786,13 @@ func (r *LkResource) resolveProjectID(ctx context.Context, selector string) (str
 	return *res.Object.Data.ID, nil
 }
 
-// lkClusterNotFound reports whether err is a 404 from the LKS cluster
+// lksClusterNotFound reports whether err is a 404 from the LKS cluster
 // endpoints. GetLksCluster and DeleteLksCluster both declare typed
 // 403/404(/409/422)/502 responses, so the SDK returns a
 // *components.ErrorObject (JSON:API errors, status "404") rather than the
 // generic *components.APIError for those; both shapes must be recognized,
 // and only a 404 counts — a 403 or 409 is a real error.
-func lkClusterNotFound(err error) bool {
+func lksClusterNotFound(err error) bool {
 	var apiErr *components.APIError
 	if errors.As(err, &apiErr) {
 		return apiErr.StatusCode == http.StatusNotFound
@@ -810,13 +810,13 @@ func lkClusterNotFound(err error) bool {
 	return false
 }
 
-// lkRetryableDuringPoll reports whether err is worth retrying while polling
+// lksRetryableDuringPoll reports whether err is worth retrying while polling
 // GetLksCluster: a 404 right after create/delete (not yet queryable, or
 // already gone) or a 5xx (transient). Any other status (403, 409, 422, ...)
 // will not resolve by waiting, so the caller fails immediately instead of
 // burning the full timeout budget.
-func lkRetryableDuringPoll(err error) bool {
-	if lkClusterNotFound(err) {
+func lksRetryableDuringPoll(err error) bool {
+	if lksClusterNotFound(err) {
 		return true
 	}
 

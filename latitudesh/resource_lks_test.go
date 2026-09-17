@@ -18,8 +18,8 @@ import (
 
 // --- offline mapping unit tests ---------------------------------------------
 
-func TestMapLkAttributes_Nil(t *testing.T) {
-	fields, diags := mapLkAttributes(nil)
+func TestMapLksAttributes_Nil(t *testing.T) {
+	fields, diags := mapLksAttributes(nil)
 	if diags.HasError() {
 		t.Fatalf("unexpected diagnostics: %v", diags.Errors())
 	}
@@ -28,7 +28,7 @@ func TestMapLkAttributes_Nil(t *testing.T) {
 	}
 }
 
-func TestMapLkAttributes_Full(t *testing.T) {
+func TestMapLksAttributes_Full(t *testing.T) {
 	name := "prod"
 	projectID := "proj_abc"
 	site := "ASH"
@@ -50,7 +50,7 @@ func TestMapLkAttributes_Full(t *testing.T) {
 		},
 	}
 
-	fields, diags := mapLkAttributes(attrs)
+	fields, diags := mapLksAttributes(attrs)
 	if diags.HasError() {
 		t.Fatalf("unexpected diagnostics: %v", diags.Errors())
 	}
@@ -65,7 +65,7 @@ func TestMapLkAttributes_Full(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	var netModel LkNetworkModel
+	var netModel LksNetworkModel
 	if d := fields.Network.As(ctx, &netModel, basetypes.ObjectAsOptions{}); d.HasError() {
 		t.Fatalf("decoding network object: %v", d.Errors())
 	}
@@ -78,8 +78,8 @@ func TestMapLkAttributes_Full(t *testing.T) {
 	}
 }
 
-func TestMapLkNetwork_Nil(t *testing.T) {
-	obj, diags := mapLkNetwork(nil)
+func TestMapLksNetwork_Nil(t *testing.T) {
+	obj, diags := mapLksNetwork(nil)
 	if diags.HasError() {
 		t.Fatalf("unexpected diagnostics: %v", diags.Errors())
 	}
@@ -88,7 +88,7 @@ func TestMapLkNetwork_Nil(t *testing.T) {
 	}
 }
 
-func TestLkClusterNotFound(t *testing.T) {
+func TestLksClusterNotFound(t *testing.T) {
 	cases := []struct {
 		name string
 		err  error
@@ -102,14 +102,14 @@ func TestLkClusterNotFound(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := lkClusterNotFound(tc.err); got != tc.want {
-				t.Errorf("lkClusterNotFound(%v) = %v, want %v", tc.err, got, tc.want)
+			if got := lksClusterNotFound(tc.err); got != tc.want {
+				t.Errorf("lksClusterNotFound(%v) = %v, want %v", tc.err, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestLkRetryableDuringPoll(t *testing.T) {
+func TestLksRetryableDuringPoll(t *testing.T) {
 	cases := []struct {
 		name string
 		err  error
@@ -124,8 +124,8 @@ func TestLkRetryableDuringPoll(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := lkRetryableDuringPoll(tc.err); got != tc.want {
-				t.Errorf("lkRetryableDuringPoll(%v) = %v, want %v", tc.err, got, tc.want)
+			if got := lksRetryableDuringPoll(tc.err); got != tc.want {
+				t.Errorf("lksRetryableDuringPoll(%v) = %v, want %v", tc.err, got, tc.want)
 			}
 		})
 	}
@@ -133,11 +133,11 @@ func TestLkRetryableDuringPoll(t *testing.T) {
 
 // --- mock-backed resource.Test (IsUnitTest) ---------------------------------
 
-// mockLkAPI is a minimal in-memory LKS cluster store backing a full
+// mockLksAPI is a minimal in-memory LKS cluster store backing a full
 // create/read/update/delete cycle. The mock reaches "ready" immediately on
 // create so the resource's ready-poller returns on its very first GET,
 // keeping the test fast without touching the package-level poll intervals.
-type mockLkAPI struct {
+type mockLksAPI struct {
 	mu          sync.Mutex
 	exists      bool
 	deleted     bool
@@ -149,7 +149,7 @@ type mockLkAPI struct {
 	projectID   string
 }
 
-func (m *mockLkAPI) envelope() map[string]any {
+func (m *mockLksAPI) envelope() map[string]any {
 	attrs := map[string]any{
 		"name":               m.name,
 		"project_id":         m.projectID,
@@ -176,7 +176,7 @@ func (m *mockLkAPI) envelope() map[string]any {
 	}
 }
 
-func (m *mockLkAPI) handler(w http.ResponseWriter, r *http.Request) {
+func (m *mockLksAPI) handler(w http.ResponseWriter, r *http.Request) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	w.Header().Set("Content-Type", "application/vnd.api+json")
@@ -256,7 +256,7 @@ func (m *mockLkAPI) handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func testAccCheckMockLkDestroyed(m *mockLkAPI) resource.TestCheckFunc {
+func testAccCheckMockLksDestroyed(m *mockLksAPI) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		m.mu.Lock()
 		defer m.mu.Unlock()
@@ -267,13 +267,13 @@ func testAccCheckMockLkDestroyed(m *mockLkAPI) resource.TestCheckFunc {
 	}
 }
 
-func testAccLkConfig(version string) string {
+func testAccLksConfig(version string) string {
 	return fmt.Sprintf(`
 provider "latitudesh" {
   auth_token = "mock-token"
 }
 
-resource "latitudesh_lk" "test_item" {
+resource "latitudesh_lks" "test_item" {
   project             = "proj_mock_1"
   name                = "tf-test-cluster"
   site                = "ASH"
@@ -282,36 +282,36 @@ resource "latitudesh_lk" "test_item" {
 `, version)
 }
 
-func TestLk_CreateUpdateImport(t *testing.T) {
-	mock := &mockLkAPI{}
+func TestLks_CreateUpdateImport(t *testing.T) {
+	mock := &mockLksAPI{}
 	server := httptest.NewServer(http.HandlerFunc(mock.handler))
 	defer server.Close()
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
-		CheckDestroy:             testAccCheckMockLkDestroyed(mock),
+		CheckDestroy:             testAccCheckMockLksDestroyed(mock),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccLkConfig("1.31.0"),
+				Config: testAccLksConfig("1.31.0"),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("latitudesh_lk.test_item", "name", "tf-test-cluster"),
-					resource.TestCheckResourceAttr("latitudesh_lk.test_item", "site", "ASH"),
-					resource.TestCheckResourceAttr("latitudesh_lk.test_item", "kubernetes_version", "1.31.0"),
-					resource.TestCheckResourceAttr("latitudesh_lk.test_item", "status", "ready"),
-					resource.TestCheckResourceAttr("latitudesh_lk.test_item", "project", "proj_mock_1"),
+					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "name", "tf-test-cluster"),
+					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "site", "ASH"),
+					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "kubernetes_version", "1.31.0"),
+					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "status", "ready"),
+					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "project", "proj_mock_1"),
 				),
 			},
 			{
 				// In-place upgrade: kubernetes_version has no RequiresReplace, so
 				// this must PATCH rather than replace.
-				Config: testAccLkConfig("1.32.0"),
+				Config: testAccLksConfig("1.32.0"),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("latitudesh_lk.test_item", "kubernetes_version", "1.32.0"),
+					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "kubernetes_version", "1.32.0"),
 				),
 			},
 			{
-				ResourceName:      "latitudesh_lk.test_item",
+				ResourceName:      "latitudesh_lks.test_item",
 				ImportState:       true,
 				ImportStateVerify: true,
 			},

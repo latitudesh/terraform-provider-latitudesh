@@ -2,12 +2,12 @@
 page_title: "latitudesh_lks Data Source - latitudesh"
 subcategory: ""
 description: |-
-  LKS (Latitude Kubernetes Service) clusters data source - list every cluster in a project, optionally filtered by status.
+  LKS (Latitude Kubernetes Service) cluster data source - lookup a cluster by id. GetLksCluster has no name-based lookup, so id is the only selector.
 ---
 
 # latitudesh_lks (Data Source)
 
-Lists every LKS (Latitude Kubernetes Service) cluster in a project, optionally filtered by status.
+Looks up a single LKS (Latitude Kubernetes Service) cluster by id. The underlying API has no name-based lookup, so `id` is the only selector.
 
 ## Example Usage
 
@@ -16,21 +16,18 @@ Lists every LKS (Latitude Kubernetes Service) cluster in a project, optionally f
 # account's GET /lks/sites and GET /lks/available_versions — check both
 # before applying. See the provider's scaffold handoff for why.
 resource "latitudesh_project" "lks" {
-  name = "lks-list-example"
+  name = "lks-example"
 }
 
-resource "latitudesh_lk" "list_example" {
+resource "latitudesh_lks" "example" {
   project            = latitudesh_project.lks.id
   name               = "example-cluster"
   site               = "ASH"
   kubernetes_version = "1.31.0"
 }
 
-data "latitudesh_lks" "by_project" {
-  project = latitudesh_project.lks.id
-  status  = "ready"
-
-  depends_on = [latitudesh_lk.list_example]
+data "latitudesh_lks" "by_id" {
+  id = latitudesh_lks.example.id
 }
 ```
 
@@ -39,26 +36,30 @@ data "latitudesh_lks" "by_project" {
 
 ### Required
 
-- `project` (String) Project (ID or slug) to list clusters for. Clusters are always scoped to a project, so this is required.
-
-### Optional
-
-- `status` (String) Only return clusters with this status (case-insensitive), e.g. `ready` or `provisioning`. This is an open enum controlled by the platform, so no fixed set of values is enforced here.
+- `id` (String) LKS cluster identifier to look up.
 
 ### Read-Only
 
-- `clusters` (Attributes List) The matching clusters, in the order the API returns them. (see [below for nested schema](#nestedatt--clusters))
-- `id` (String) Synthetic identifier for this query: `project`, followed by `/<status>` when a status filter is set.
+- `control_plane_endpoint` (String) Kubernetes API server endpoint.
+- `created_at` (String) Timestamp when the cluster was created.
+- `description` (String) Customer description, if any.
+- `kubeconfig_url` (String) URL to fetch the cluster kubeconfig from once the control plane is ready.
+- `kubernetes_version` (String) Kubernetes patch version currently running.
+- `message` (String) Human-readable detail behind the current `status`.
+- `name` (String) Display name for the cluster.
+- `network` (Attributes) Cluster CIDR ranges. (see [below for nested schema](#nestedatt--network))
+- `platform_version` (String) Platform (LKS controller) version managing this cluster.
+- `project` (String) The project ID that owns the cluster.
+- `reason` (String) Machine-readable status reason (open enum).
+- `site` (String) Site slug the cluster is deployed to.
+- `status` (String) Cluster lifecycle status. Open enum sourced from the platform controller; values in use today are `provisioning`, `ready`, `updating`, `scaling`, `upgrading`, `paused`, `deleting` and `deleted`, and new ones may appear without notice.
+- `updated_at` (String) Timestamp when the cluster was last updated.
 
-<a id="nestedatt--clusters"></a>
-### Nested Schema for `clusters`
+<a id="nestedatt--network"></a>
+### Nested Schema for `network`
 
 Read-Only:
 
-- `control_plane_endpoint` (String) Kubernetes API server endpoint.
-- `created_at` (String) Timestamp when the cluster was created.
-- `id` (String) Cluster ID.
-- `kubernetes_version` (String) Kubernetes patch version currently running.
-- `name` (String) Display name for the cluster.
-- `site` (String) Site slug the cluster is deployed to.
-- `status` (String) Cluster lifecycle status.
+- `node_cidrs` (Set of String) Node CIDR ranges.
+- `pod_cidrs` (Set of String) Pod CIDR ranges.
+- `service_cidrs` (Set of String) Service CIDR ranges.

@@ -1,11 +1,11 @@
 ---
-page_title: "latitudesh_lk Resource - latitudesh"
+page_title: "latitudesh_lks Resource - latitudesh"
 subcategory: ""
 description: |-
   LKS (Latitude Kubernetes Service) cluster resource. Provisions the control plane only; add worker capacity with a separate node pool (not yet supported by this provider — see the provider changelog).
 ---
 
-# latitudesh_lk (Resource)
+# latitudesh_lks (Resource)
 
 Provisions an LKS (Latitude Kubernetes Service) cluster control plane. Worker capacity is added separately through node pools, which this provider does not yet support.
 
@@ -17,19 +17,19 @@ Provisions an LKS (Latitude Kubernetes Service) cluster control plane. Worker ca
 # NOTE: "ASH" and the kubernetes_version below are not confirmed against this
 # account's GET /lks/sites and GET /lks/available_versions — check both
 # before applying. See the provider's scaffold handoff for why.
-resource "latitudesh_project" "lk" {
+resource "latitudesh_project" "lks" {
   name = "lks-example"
 }
 
-resource "latitudesh_lk" "example" {
-  project            = latitudesh_project.lk.id
+resource "latitudesh_lks" "example" {
+  project            = latitudesh_project.lks.id
   name               = "example-cluster"
   site               = "ASH"
   kubernetes_version = "1.31.0"
 }
 
-data "latitudesh_lk" "by_id" {
-  id = latitudesh_lk.example.id
+data "latitudesh_lks" "by_id" {
+  id = latitudesh_lks.example.id
 }
 ```
 
@@ -86,10 +86,10 @@ You can import an LKS cluster resource using either the CLI method or the [exper
 
 **CLI Import**
 
-The `latitudesh_lk` resource can be imported by specifying the cluster ID:
+The `latitudesh_lks` resource can be imported by specifying the cluster ID:
 
 ```sh
-terraform import latitudesh_lk.example <LKS_CLUSTER_ID>
+terraform import latitudesh_lks.example <LKS_CLUSTER_ID>
 ```
 
 **Import Block (Experimental)**
@@ -98,7 +98,7 @@ Terraform v1.5.0 and later supports the experimental import block, which allows 
 
 ```hcl
 import {
-  to = latitudesh_lk.example
+  to = latitudesh_lks.example
   id = "<LKS_CLUSTER_ID>"
 }
 ```
@@ -106,7 +106,7 @@ import {
 Then run:
 
 ```sh
-terraform plan -generate-config-out=generated_lk.tf
+terraform plan -generate-config-out=generated_lks.tf
 ```
 
 > **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.
