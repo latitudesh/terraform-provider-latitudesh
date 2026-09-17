@@ -12,7 +12,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 )
 
@@ -75,6 +78,93 @@ func TestMapLksAttributes_Full(t *testing.T) {
 	}
 	if len(pods) != 1 || pods[0] != "10.0.0.0/16" {
 		t.Errorf("pod_cidrs = %v, want [10.0.0.0/16]", pods)
+	}
+}
+
+// readLksInto keeps `description` honest. It is Optional and not Computed, so
+// the API owns it: a description cleared or changed outside Terraform has to
+// land in state as drift instead of being masked by the value Terraform last
+// wrote. The only value that must NOT overwrite a null is "", which some
+// endpoints use for "unset" — collapsing it there keeps a config that omits
+// `description` from failing with "inconsistent result after apply".
+func TestReadLksInto_Description(t *testing.T) {
+	cases := []struct {
+		name  string
+		prior basetypes.StringValue
+		// body is the attributes fragment the API answers with.
+		body string
+		want basetypes.StringValue
+	}{
+		{
+			name:  "cleared upstream shows as drift",
+			prior: types.StringValue("old"),
+			body:  `"status":"ready"`,
+			want:  types.StringNull(),
+		},
+		{
+			name:  "emptied upstream shows as drift",
+			prior: types.StringValue("old"),
+			body:  `"status":"ready","description":""`,
+			want:  types.StringValue(""),
+		},
+		{
+			name:  "changed upstream shows as drift",
+			prior: types.StringValue("old"),
+			body:  `"status":"ready","description":"new"`,
+			want:  types.StringValue("new"),
+		},
+		{
+			name:  "unset stays null when the API omits it",
+			prior: types.StringNull(),
+			body:  `"status":"ready"`,
+			want:  types.StringNull(),
+		},
+		{
+			name:  "unset stays null when the API answers empty string",
+			prior: types.StringNull(),
+			body:  `"status":"ready","description":""`,
+			want:  types.StringNull(),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := lksResourceServing(t, tc.body)
+
+			data := LksResourceModel{
+				ID:          types.StringValue("lks_read_1"),
+				Description: tc.prior,
+			}
+			var diags diag.Diagnostics
+			r.readLksInto(context.Background(), &data, &diags)
+
+			if diags.HasError() {
+				t.Fatalf("unexpected diagnostics: %v", diags.Errors())
+			}
+			if !data.Description.Equal(tc.want) {
+				t.Fatalf("description = %s, want %s", data.Description, tc.want)
+			}
+		})
+	}
+}
+
+// lksResourceServing returns an LksResource whose client answers every cluster
+// GET with the given attributes fragment.
+func lksResourceServing(t *testing.T, attributes string) *LksResource {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprintf(w, `{"data":{"id":"lks_read_1","type":"lks_clusters","attributes":{%s}}}`, attributes)
+	}))
+	t.Cleanup(server.Close)
+
+	return &LksResource{
+		client: latitudeshgosdk.New(
+			latitudeshgosdk.WithSecurity("test"),
+			latitudeshgosdk.WithServerURL(server.URL),
+		),
 	}
 }
 

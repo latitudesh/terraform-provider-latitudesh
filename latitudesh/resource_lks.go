@@ -749,7 +749,18 @@ func (r *LksResource) readLksInto(ctx context.Context, data *LksResourceModel, d
 
 	data.Name = fields.Name
 	data.KubernetesVersion = fields.KubernetesVersion
-	if obj.Attributes != nil && obj.Attributes.Description != nil {
+
+	// `description` is Optional and not Computed, so the API is the source of
+	// truth for it exactly as it is for name and kubernetes_version. Assigning
+	// it only when the response carried a non-nil value pinned state to the
+	// last value Terraform had written: a description cleared (or changed to
+	// null) outside Terraform never surfaced as drift, and the stale value
+	// survived every refresh. The one real ambiguity is that an unset
+	// description may come back as either JSON null or "", which mean the same
+	// thing for a null-able Optional attribute — so "" collapses to null only
+	// when state already holds null, never when it holds a value to drift away
+	// from, and an explicitly configured "" still round-trips.
+	if !(data.Description.IsNull() && fields.Description.ValueString() == "") {
 		data.Description = fields.Description
 	}
 
