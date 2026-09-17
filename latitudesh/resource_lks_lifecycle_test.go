@@ -29,12 +29,15 @@ import (
 const mockLksClusterID = "lks_lifecycle1"
 
 // lksGetStep is one scripted answer to a GET of the cluster. When httpStatus
-// is 200 the mock returns a cluster with the given status; otherwise it
-// returns that HTTP error code, shaped as the typed JSON:API ErrorObject that
-// GetLksCluster declares for 403/404/502 (and the generic shape otherwise).
+// is 200 the mock returns a cluster with the given status, and with the given
+// kubernetes_version when one is set (the upgrade cases need to script the
+// version independently of the status); otherwise it returns that HTTP error
+// code, shaped as the typed JSON:API ErrorObject that GetLksCluster declares
+// for 403/404/502 (and the generic shape otherwise).
 type lksGetStep struct {
 	httpStatus int
 	status     string
+	version    string
 }
 
 // lksClusterMock answers GET /lks/clusters/{id} from a scripted sequence, one
@@ -81,8 +84,13 @@ func (m *lksClusterMock) handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprintf(w, `{"data":{"id":%q,"type":"lks_clusters","attributes":{"status":%q}}}`,
-		mockLksClusterID, step.status)
+	if step.version == "" {
+		_, _ = fmt.Fprintf(w, `{"data":{"id":%q,"type":"lks_clusters","attributes":{"status":%q}}}`,
+			mockLksClusterID, step.status)
+		return
+	}
+	_, _ = fmt.Fprintf(w, `{"data":{"id":%q,"type":"lks_clusters","attributes":{"status":%q,"kubernetes_version":%q}}}`,
+		mockLksClusterID, step.status, step.version)
 }
 
 // newLksClusterMock starts the mock, wires a resource whose client points at
@@ -122,7 +130,7 @@ func TestWaitForClusterReady_ReadyImmediately(t *testing.T) {
 	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "ready"})
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Second, &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected no error when the cluster is already ready, got: %v", diags.Errors())
@@ -140,7 +148,7 @@ func TestWaitForClusterReady_ProvisioningThenReady(t *testing.T) {
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, 5*time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", 5*time.Second, &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected success once the cluster reaches ready, got: %v", diags.Errors())
@@ -157,7 +165,7 @@ func TestWaitForClusterReady_TransientNotFoundThenReady(t *testing.T) {
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, 5*time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", 5*time.Second, &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected a 404 right after create to be treated as transient, got: %v", diags.Errors())
@@ -174,7 +182,7 @@ func TestWaitForClusterReady_TransientServerErrorThenReady(t *testing.T) {
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, 5*time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", 5*time.Second, &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected a 502 to be treated as transient, got: %v", diags.Errors())
@@ -191,7 +199,7 @@ func TestWaitForClusterReady_FatalErrorStopsImmediately(t *testing.T) {
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, 5*time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", 5*time.Second, &diags)
 
 	if !diags.HasError() {
 		t.Fatal("expected a 422 to fail immediately instead of retrying")
@@ -211,7 +219,7 @@ func TestWaitForClusterReady_ConsecutiveErrorCeiling(t *testing.T) {
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, time.Minute, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Minute, &diags)
 
 	if !diags.HasError() {
 		t.Fatal("expected the consecutive-error ceiling to fail the wait")
@@ -225,10 +233,74 @@ func TestWaitForClusterReady_Timeout(t *testing.T) {
 	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "provisioning"})
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, 30*time.Millisecond, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", 30*time.Millisecond, &diags)
 
 	if !diags.HasError() {
 		t.Fatal("expected a timeout error when the cluster never reaches ready")
+	}
+	if mock.gets() < 2 {
+		t.Fatalf("expected more than 1 poll before timing out, got %d", mock.gets())
+	}
+}
+
+// An accepted upgrade PATCH does not flip the status synchronously: the first
+// poll still sees a "ready" cluster on the old version. Waiting on status
+// alone returned there and left the pre-upgrade version in state, so the wait
+// must keep polling until the requested version is the one reported.
+func TestWaitForClusterReady_UpgradeLagsBehindStatus(t *testing.T) {
+	mock, r := newLksClusterMock(t,
+		lksGetStep{httpStatus: 200, status: "ready", version: "1.31.0"},
+		lksGetStep{httpStatus: 200, status: "upgrading", version: "1.31.0"},
+		lksGetStep{httpStatus: 200, status: "ready", version: "1.32.0"},
+	)
+
+	var diags diag.Diagnostics
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "1.32.0", 5*time.Second, &diags)
+
+	if diags.HasError() {
+		t.Fatalf("expected the wait to succeed once the upgrade lands, got: %v", diags.Errors())
+	}
+	if got := mock.gets(); got != 3 {
+		t.Fatalf("expected 3 polls (ready-on-old, upgrading, ready-on-new), got %d", got)
+	}
+}
+
+// The same sequence without a wanted version is what create does, and there
+// the first "ready" is the answer.
+func TestWaitForClusterReady_NoWantedVersionReturnsOnFirstReady(t *testing.T) {
+	mock, r := newLksClusterMock(t,
+		lksGetStep{httpStatus: 200, status: "ready", version: "1.31.0"},
+		lksGetStep{httpStatus: 200, status: "upgrading", version: "1.31.0"},
+		lksGetStep{httpStatus: 200, status: "ready", version: "1.32.0"},
+	)
+
+	var diags diag.Diagnostics
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", 5*time.Second, &diags)
+
+	if diags.HasError() {
+		t.Fatalf("expected no error, got: %v", diags.Errors())
+	}
+	if got := mock.gets(); got != 1 {
+		t.Fatalf("expected exactly 1 poll when no version is awaited, got %d", got)
+	}
+}
+
+// A cluster that stays ready on the old version is an upgrade that never
+// happened, and must time out rather than report success.
+func TestWaitForClusterReady_UpgradeNeverLandsTimesOut(t *testing.T) {
+	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "ready", version: "1.31.0"})
+
+	var diags diag.Diagnostics
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "1.32.0", 30*time.Millisecond, &diags)
+
+	if !diags.HasError() {
+		t.Fatal("expected a timeout when the requested version never lands")
+	}
+	if summary := diags.Errors()[0].Summary(); summary != "Timeout waiting for LKS cluster upgrade" {
+		t.Fatalf("expected the upgrade-specific timeout diagnostic, got %q", summary)
+	}
+	if detail := diags.Errors()[0].Detail(); !strings.Contains(detail, "1.32.0") || !strings.Contains(detail, "1.31.0") {
+		t.Fatalf("expected the timeout detail to name both the wanted and the last version, got %q", detail)
 	}
 	if mock.gets() < 2 {
 		t.Fatalf("expected more than 1 poll before timing out, got %d", mock.gets())
