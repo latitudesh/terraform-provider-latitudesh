@@ -128,8 +128,21 @@ with a `StatusCode`. Shapes differ within a group, but only the operations your
 code branches on need inspecting: the single-item Get (pollers read it too) and
 the Delete — look both up in one call and list the rest as uninspected under
 **API error codes**. Write one `<short>NotFound(err error) bool` that `errors.As`
-both shapes and accepts **only** 404 — copy `publicNetworkNotFound` in
-`latitudesh/resource_public_network.go`. Never match `err.Error()` against
+both shapes and accepts **only** 404:
+
+```go
+var apiErr *components.APIError
+if errors.As(err, &apiErr) { return apiErr.StatusCode == http.StatusNotFound }
+var errObj *components.ErrorObject
+if errors.As(err, &errObj) {
+	for _, e := range errObj.Errors { if e.Status != nil && *e.Status == "404" { return true } }
+}
+return false
+```
+
+The same helper already exists as `publicNetworkNotFound` in
+`latitudesh/resource_public_network.go` and `marketplaceAppNotFound` in
+`latitudesh/datasource_marketplace_app.go`. Never match `err.Error()` against
 `"404"` or `"not_found"`: a 403 or a transient 5xx then reads as "gone".
 
 ## House conventions — one exemplar per obligation
@@ -144,7 +157,8 @@ exemplar predates it) and `datasourcevalidator` from
 Two legacy patterns in these files are bugs, not conventions: (a) matching
 `err.Error()` against `"404"`/`"not_found"` in the `Delete` of most older
 resources (`resource_virtual_machine.go`, `resource_server.go`,
-`resource_user_data.go`, …) — write yours like `publicNetworkNotFound`;
+`resource_user_data.go`, …) — write yours like `publicNetworkNotFound` /
+`marketplaceAppNotFound`;
 (b) `ImportStateVerifyIgnore: … "project"` / `"plan"` in
 `resource_virtual_machine_site_test.go` — it papers over the slug/ID selector
 mismatch; keep the configured selector instead.
@@ -152,9 +166,9 @@ mismatch; keep the configured selector instead.
 | What you need | Read |
 |---|---|
 | Resource skeleton, CRUD, waiters | `latitudesh/resource_virtual_machine.go` |
-| Not-found helper across both SDK error shapes | `publicNetworkNotFound` in `latitudesh/resource_public_network.go` |
-| Create → persist ID → reconciling GET; slug→ID before POST; `project` defaulting (`effectiveProject`) | `Create` and `ModifyPlan` in `latitudesh/resource_public_network.go` |
-| Preserving configured inputs on read and import | `readPublicNetworkInto` / `ImportState` in `latitudesh/resource_public_network.go` |
+| Not-found helper across both SDK error shapes | `publicNetworkNotFound` in `latitudesh/resource_public_network.go`; same shape as `marketplaceAppNotFound` in `latitudesh/datasource_marketplace_app.go` |
+| Create → persist ID → reconciling GET; slug→ID before POST; `project` defaulting (`effectiveProject`) | `Create` and `ModifyPlan` in `latitudesh/resource_public_network.go`; ID-before-read also in `Create` of `latitudesh/resource_virtual_machine_backup.go`, `effectiveProject` + reconciling read also in `latitudesh/resource_elastic_ip.go` |
+| Preserving configured inputs on read and import | `readPublicNetworkInto` / `ImportState` in `latitudesh/resource_public_network.go`; the `IsNull() \|\| IsUnknown()` guards on `project`/`site` in `latitudesh/resource_elastic_ip_bgp.go` and `ImportState` of `latitudesh/resource_virtual_network.go` |
 | Unordered collections as `Set` | `sessionsToState` in `latitudesh/resource_elastic_ip_bgp.go` |
 | Data source skeleton, lookup by filter — its selectors predate the blank-selector rule: add `stringvalidator.LengthAtLeast(1)` to each one you copy | `latitudesh/datasource_ssh_key.go` |
 | Plural (list) data source, client-side filters, stable list sort | `latitudesh/datasource_virtual_machine_backups.go` |
@@ -186,13 +200,19 @@ Structure taken from those files, non-negotiable:
   same way. Put the split in a comment above the mapping, as
   `resource_object_storage.go` does.
 - **Selectors that accept a slug or an ID (`project`, `site`) keep what the
-  practitioner wrote.** Fill from the API only when null or unknown (import). If
-  the POST wants an ID and the config may carry a slug, resolve slug→ID first.
-  Never hide the mismatch with `ImportStateVerifyIgnore`.
-- **Create ends with the read.** After the POST, `SetAttribute` the ID into state,
-  then run `read<Name>Into` and keep its result: a sparse create envelope must
-  never leave nulls in state, and a failed reconcile must leave a tainted
-  resource, not an orphan.
+  practitioner wrote.** Assign from the API only behind
+  `if data.X.IsNull() || data.X.IsUnknown()` — i.e. on import. Some create
+  endpoints take an ID only (json tag `project_id`; a slug 404s — verified for
+  public networks) while others accept either: when the tag says ID and the
+  config may carry a slug, resolve first — return the selector unchanged when it
+  already carries the ID prefix (`proj_`), otherwise
+  `client.Projects.GetProject(ctx, selector)` — it accepts id-or-slug — and use
+  `Object.Data.ID`. Never hide the mismatch with `ImportStateVerifyIgnore`.
+- **Create ends with the read.** After the POST,
+  `resp.State.SetAttribute(ctx, path.Root("id"), id)`, then run `read<Name>Into`
+  and keep its result (`Create` in `resource_virtual_machine_backup.go`): a
+  sparse create envelope must never leave nulls in state, and a failed reconcile
+  must leave a tainted resource, not an orphan.
 - **Collections without an API-defined order are a `SetAttribute`, or a
   `ListAttribute` sorted by a stable key before `types.ListValueFrom`
   (recurring).** `allowed_ips`, `ssh_key_ids`, `platforms`, nested product rows:
