@@ -110,6 +110,15 @@ func splitWords(s string) []string {
 func singularize(word string) string {
 	lower := strings.ToLower(word)
 
+	// An acronym is not a plural. "Lks" (Latitude Kubernetes Service) is a
+	// product namespace whose trailing s belongs to "Service", so stripping it
+	// proposed latitudesh_lk for a group that ships as latitudesh_lks. No vowel
+	// means no syllable, and every English plural keeps a vowel in its stem, so
+	// this never fires on a real one (Keys, Addresses, Policies all carry one).
+	if !strings.ContainsAny(lower, "aeiouy") {
+		return word
+	}
+
 	switch {
 	case len(lower) > 3 && strings.HasSuffix(lower, "ies"):
 		// Policies -> Policy
