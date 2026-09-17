@@ -5,7 +5,7 @@
 # See CONTRIBUTING.md, "Field drift".
 version: 1
 sdk_module: github.com/latitudesh/latitudesh-go-sdk
-sdk_version: v1.19.20
+sdk_version: v1.19.27
 groups:
   Billing:
     methods:
@@ -488,6 +488,270 @@ groups:
       operations.CreateFirewallAssignmentResponse:
         fields:
           - {name: "FirewallServer", type: "*components.FirewallServer", optional: true, doc: "09de135b"}
+  Lks:
+    methods:
+      CreateLksCluster: {signature: "(context.Context, components.CreateLksCluster, ...operations.Option) (*operations.CreateLksClusterResponse, error)"}
+      CreateLksNodePool: {signature: "(context.Context, string, components.CreateLksNodePool, ...operations.Option) (*operations.CreateLksNodePoolResponse, error)"}
+      DeleteLksCluster: {signature: "(context.Context, string, ...operations.Option) (*operations.DeleteLksClusterResponse, error)"}
+      DeleteLksNodePool: {signature: "(context.Context, string, string, ...operations.Option) (*operations.DeleteLksNodePoolResponse, error)"}
+      GetLksCluster: {signature: "(context.Context, string, ...operations.Option) (*operations.GetLksClusterResponse, error)"}
+      GetLksClusterKubeconfig: {signature: "(context.Context, string, ...operations.Option) (*operations.GetLksClusterKubeconfigResponse, error)"}
+      GetLksNodePool: {signature: "(context.Context, string, string, ...operations.Option) (*operations.GetLksNodePoolResponse, error)"}
+      ListLksAvailableVersions: {signature: "(context.Context, ...operations.Option) (*operations.ListLksAvailableVersionsResponse, error)"}
+      ListLksClusters: {signature: "(context.Context, string, ...operations.Option) (*operations.ListLksClustersResponse, error)"}
+      ListLksNodePools: {signature: "(context.Context, string, ...operations.Option) (*operations.ListLksNodePoolsResponse, error)"}
+      ListLksSites: {signature: "(context.Context, ...operations.Option) (*operations.ListLksSitesResponse, error)"}
+      UpdateLksCluster: {signature: "(context.Context, string, components.UpdateLksCluster, ...operations.Option) (*operations.UpdateLksClusterResponse, error)"}
+      UpdateLksNodePool: {signature: "(context.Context, string, string, components.UpdateLksNodePool, ...operations.Option) (*operations.UpdateLksNodePoolResponse, error)"}
+    models:
+      components.Country:
+        fields:
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+      components.CreateLksCluster:
+        fields:
+          - {name: "Data", wire: "data", type: "CreateLksClusterData"}
+      components.CreateLksClusterAttributes:
+        fields:
+          - {name: "Description", wire: "description", type: "*string", optional: true, doc: "3bc3c681"}
+          - {name: "KubernetesVersion", wire: "kubernetes_version", type: "string", doc: "13725706"}
+          - {name: "Name", wire: "name", type: "string", doc: "f774a822"}
+          - {name: "Network", wire: "network", type: "*CreateLksClusterNetwork", optional: true, doc: "65a43da6"}
+          - {name: "ProjectID", wire: "project_id", type: "string", doc: "6a8c9d96"}
+          - {name: "Site", wire: "site", type: "string", doc: "2d7aebdc"}
+      components.CreateLksClusterData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "CreateLksClusterAttributes"}
+          - {name: "Type", wire: "type", type: "CreateLksClusterType"}
+      components.CreateLksClusterNetwork:
+        doc: "81477d3b"
+        fields:
+          - {name: "NodeCidrs", wire: "node_cidrs", type: "[]string", optional: true}
+          - {name: "PodCidrs", wire: "pod_cidrs", type: "[]string", optional: true}
+          - {name: "ServiceCidrs", wire: "service_cidrs", type: "[]string", optional: true}
+      components.CreateLksClusterType:
+        enum: ["lks_clusters"]
+      components.CreateLksNodePool:
+        fields:
+          - {name: "Data", wire: "data", type: "CreateLksNodePoolData"}
+      components.CreateLksNodePoolAttributes:
+        fields:
+          - {name: "Count", wire: "count", type: "int64", doc: "c1fbe8eb"}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "KubernetesVersion", wire: "kubernetes_version", type: "*string", optional: true, doc: "fe345744"}
+          - {name: "Labels", wire: "labels", type: "map[string]string", optional: true, doc: "5569ddca"}
+          - {name: "MaxPodsPerNode", wire: "max_pods_per_node", type: "*int64", optional: true, doc: "8a0d5c0e"}
+          - {name: "Name", wire: "name", type: "*string", optional: true, doc: "f097038b"}
+          - {name: "Plan", wire: "plan", type: "string", doc: "ea7fb52c"}
+          - {name: "Taints", wire: "taints", type: "[]LksNodePoolTaint", optional: true, doc: "339330cd"}
+          - {name: "Type", wire: "type", type: "*CreateLksNodePoolDataType", optional: true}
+      components.CreateLksNodePoolData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "CreateLksNodePoolAttributes"}
+          - {name: "Type", wire: "type", type: "CreateLksNodePoolType"}
+      components.CreateLksNodePoolDataType:
+        enum: ["bare_metal"]
+      components.CreateLksNodePoolType:
+        enum: ["lks_node_pools"]
+      components.Effect:
+        enum: ["NoExecute", "NoSchedule", "PreferNoSchedule"]
+      components.LksCluster:
+        fields:
+          - {name: "Data", wire: "data", type: "*LksClusterData", optional: true}
+      components.LksClusterData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*LksClusterDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*LksClusterDataType", optional: true}
+      components.LksClusterDataAttributes:
+        fields:
+          - {name: "ControlPlaneEndpoint", wire: "control_plane_endpoint", type: "*string", optional: true}
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "KubeconfigURL", wire: "kubeconfig_url", type: "*string", optional: true}
+          - {name: "KubernetesVersion", wire: "kubernetes_version", type: "*string", optional: true}
+          - {name: "Message", wire: "message", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Network", wire: "network", type: "*Network", optional: true, doc: "978485ef"}
+          - {name: "PlatformVersion", wire: "platform_version", type: "*string", optional: true}
+          - {name: "ProjectID", wire: "project_id", type: "*string", optional: true}
+          - {name: "Reason", wire: "reason", type: "*string", optional: true, doc: "ff54dc53"}
+          - {name: "Site", wire: "site", type: "*string", optional: true}
+          - {name: "Status", wire: "status", type: "*string", optional: true, doc: "dde8753a"}
+          - {name: "UpdatedAt", wire: "updated_at", type: "*string", optional: true}
+      components.LksClusterDataType:
+        enum: ["lks_clusters"]
+      components.LksClusterKubeconfig:
+        fields:
+          - {name: "Data", wire: "data", type: "*LksClusterKubeconfigData", optional: true}
+      components.LksClusterKubeconfigAttributes:
+        fields:
+          - {name: "Kubeconfig", wire: "kubeconfig", type: "*string", optional: true, doc: "56c294c2"}
+      components.LksClusterKubeconfigData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*LksClusterKubeconfigAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*LksClusterKubeconfigType", optional: true}
+      components.LksClusterKubeconfigType:
+        enum: ["lks_cluster_kubeconfigs"]
+      components.LksClusters:
+        fields:
+          - {name: "Data", wire: "data", type: "[]LksClusterData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*LksClustersMeta", optional: true}
+      components.LksClustersMeta:
+        fields:
+          - {name: "Total", wire: "total", type: "*int64", optional: true}
+      components.LksKubernetesVersionData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*LksKubernetesVersionDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*LksKubernetesVersionDataType", optional: true}
+      components.LksKubernetesVersionDataAttributes:
+        fields:
+          - {name: "AvailableForCreation", wire: "available_for_creation", type: "*bool", optional: true}
+          - {name: "AvailableForUpgrade", wire: "available_for_upgrade", type: "*bool", optional: true}
+          - {name: "Default", wire: "default", type: "*bool", optional: true}
+          - {name: "Version", wire: "version", type: "*string", optional: true}
+      components.LksKubernetesVersionDataType:
+        enum: ["lks_kubernetes_versions"]
+      components.LksKubernetesVersions:
+        fields:
+          - {name: "Data", wire: "data", type: "[]LksKubernetesVersionData", optional: true}
+      components.LksNodePool:
+        fields:
+          - {name: "Data", wire: "data", type: "*LksNodePoolData", optional: true}
+      components.LksNodePoolData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*LksNodePoolDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true}
+          - {name: "Type", wire: "type", type: "*LksNodePoolDataType", optional: true}
+      components.LksNodePoolDataAttributes:
+        fields:
+          - {name: "Count", wire: "count", type: "*int64", optional: true}
+          - {name: "CreatedAt", wire: "created_at", type: "*string", optional: true}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "KubernetesVersion", wire: "kubernetes_version", type: "*string", optional: true}
+          - {name: "Labels", wire: "labels", type: "map[string]string", optional: true}
+          - {name: "MaxPodsPerNode", wire: "max_pods_per_node", type: "*int64", optional: true, doc: "96f555ad"}
+          - {name: "Message", wire: "message", type: "*string", optional: true}
+          - {name: "Mode", wire: "mode", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Plan", wire: "plan", type: "*string", optional: true}
+          - {name: "PlatformVersion", wire: "platform_version", type: "*string", optional: true}
+          - {name: "ReadyNodes", wire: "ready_nodes", type: "*int64", optional: true}
+          - {name: "Reason", wire: "reason", type: "*string", optional: true, doc: "ff54dc53"}
+          - {name: "Status", wire: "status", type: "*string", optional: true}
+          - {name: "Taints", wire: "taints", type: "[]LksNodePoolTaint", optional: true}
+          - {name: "Type", wire: "type", type: "*string", optional: true}
+          - {name: "UpdatedAt", wire: "updated_at", type: "*string", optional: true}
+      components.LksNodePoolDataType:
+        enum: ["lks_node_pools"]
+      components.LksNodePoolTaint:
+        fields:
+          - {name: "Effect", wire: "effect", type: "Effect"}
+          - {name: "Key", wire: "key", type: "string"}
+          - {name: "Value", wire: "value", type: "*string", optional: true, doc: "2e7fc2c8"}
+      components.LksNodePools:
+        fields:
+          - {name: "Data", wire: "data", type: "[]LksNodePoolData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*LksNodePoolsMeta", optional: true}
+      components.LksNodePoolsMeta:
+        fields:
+          - {name: "Total", wire: "total", type: "*int64", optional: true}
+      components.LksSiteData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*LksSiteDataAttributes", optional: true}
+          - {name: "ID", wire: "id", type: "*string", optional: true, doc: "ce14873a"}
+          - {name: "Type", wire: "type", type: "*LksSiteDataType", optional: true}
+      components.LksSiteDataAttributes:
+        fields:
+          - {name: "Country", wire: "country", type: "*Country", optional: true}
+          - {name: "Facility", wire: "facility", type: "*string", optional: true}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Slug", wire: "slug", type: "*string", optional: true}
+      components.LksSiteDataType:
+        enum: ["lks_sites"]
+      components.LksSites:
+        fields:
+          - {name: "Data", wire: "data", type: "[]LksSiteData", optional: true}
+          - {name: "Meta", wire: "meta", type: "*LksSitesMeta", optional: true}
+      components.LksSitesMeta:
+        fields:
+          - {name: "Total", wire: "total", type: "*int64", optional: true}
+      components.Network:
+        doc: "666ec306"
+        fields:
+          - {name: "NodeCidrs", wire: "node_cidrs", type: "[]string", optional: true}
+          - {name: "PodCidrs", wire: "pod_cidrs", type: "[]string", optional: true}
+          - {name: "ServiceCidrs", wire: "service_cidrs", type: "[]string", optional: true}
+      components.UpdateLksCluster:
+        fields:
+          - {name: "Data", wire: "data", type: "UpdateLksClusterData"}
+      components.UpdateLksClusterAttributes:
+        doc: "575d2069"
+        fields:
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "KubernetesVersion", wire: "kubernetes_version", type: "*string", optional: true, doc: "ecf567b6"}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+      components.UpdateLksClusterData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*UpdateLksClusterAttributes", optional: true, doc: "ed360ad0"}
+          - {name: "Type", wire: "type", type: "UpdateLksClusterType"}
+      components.UpdateLksClusterType:
+        enum: ["lks_clusters"]
+      components.UpdateLksNodePool:
+        fields:
+          - {name: "Data", wire: "data", type: "UpdateLksNodePoolData"}
+      components.UpdateLksNodePoolAttributes:
+        doc: "db292778"
+        fields:
+          - {name: "Count", wire: "count", type: "*int64", optional: true, doc: "b6d40881"}
+          - {name: "Description", wire: "description", type: "*string", optional: true}
+          - {name: "KubernetesVersion", wire: "kubernetes_version", type: "*string", optional: true, doc: "b2b74ad5"}
+          - {name: "Labels", wire: "labels", type: "map[string]string", optional: true, doc: "f6eb34a2"}
+          - {name: "Name", wire: "name", type: "*string", optional: true}
+          - {name: "Taints", wire: "taints", type: "[]LksNodePoolTaint", optional: true, doc: "d9d63533"}
+      components.UpdateLksNodePoolData:
+        fields:
+          - {name: "Attributes", wire: "attributes", type: "*UpdateLksNodePoolAttributes", optional: true, doc: "933d3353"}
+          - {name: "Type", wire: "type", type: "UpdateLksNodePoolType"}
+      components.UpdateLksNodePoolType:
+        enum: ["lks_node_pools"]
+      operations.CreateLksClusterResponse:
+        fields:
+          - {name: "LksCluster", type: "*components.LksCluster", optional: true, doc: "09de135b"}
+      operations.CreateLksNodePoolResponse:
+        fields:
+          - {name: "LksNodePool", type: "*components.LksNodePool", optional: true, doc: "09de135b"}
+      operations.DeleteLksClusterResponse:
+      operations.DeleteLksNodePoolResponse:
+      operations.GetLksClusterKubeconfigResponse:
+        fields:
+          - {name: "LksClusterKubeconfig", type: "*components.LksClusterKubeconfig", optional: true, doc: "85e4b82f"}
+      operations.GetLksClusterResponse:
+        fields:
+          - {name: "LksCluster", type: "*components.LksCluster", optional: true, doc: "85e4b82f"}
+      operations.GetLksNodePoolResponse:
+        fields:
+          - {name: "LksNodePool", type: "*components.LksNodePool", optional: true, doc: "85e4b82f"}
+      operations.ListLksAvailableVersionsResponse:
+        fields:
+          - {name: "LksKubernetesVersions", type: "*components.LksKubernetesVersions", optional: true, doc: "85e4b82f"}
+      operations.ListLksClustersResponse:
+        fields:
+          - {name: "LksClusters", type: "*components.LksClusters", optional: true, doc: "85e4b82f"}
+      operations.ListLksNodePoolsResponse:
+        fields:
+          - {name: "LksNodePools", type: "*components.LksNodePools", optional: true, doc: "85e4b82f"}
+      operations.ListLksSitesResponse:
+        fields:
+          - {name: "LksSites", type: "*components.LksSites", optional: true, doc: "85e4b82f"}
+      operations.UpdateLksClusterResponse:
+        fields:
+          - {name: "LksCluster", type: "*components.LksCluster", optional: true, doc: "85e4b82f"}
+      operations.UpdateLksNodePoolResponse:
+        fields:
+          - {name: "LksNodePool", type: "*components.LksNodePool", optional: true, doc: "85e4b82f"}
   ManagedDatabases:
     methods:
       ShowManagedDatabaseMetrics: {signature: "(context.Context, string, *int64, *string, ...operations.Option) (*operations.ShowManagedDatabaseMetricsResponse, error)"}

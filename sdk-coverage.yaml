@@ -99,6 +99,34 @@ groups:
       read path maps the target from
       components.FirewallAssignmentDataAttributes.Server/.VirtualMachine.
 
+  Lks:
+    implemented_by: [latitudesh_lk, latitudesh_lks]
+    notes: >-
+      latitudesh_lk maps LksCluster's full lifecycle (Create/Get/Update/Delete,
+      plus ListLksClusters backing the plural latitudesh_lks, scoped by
+      project). name, description and kubernetes_version are updatable
+      in-place (UpdateLksCluster); project, site and network carry
+      RequiresReplace — there is no update endpoint for them. Unmapped:
+      CreateLksNodePool/GetLksNodePool/UpdateLksNodePool/DeleteLksNodePool/
+      ListLksNodePools are LksNodePool's own full lifecycle, nested under a
+      cluster (parallel to how ElasticIps.CreateElasticIP sits next to the
+      BGP session lifecycle now under latitudesh_elastic_ip_bgp) —
+      recommended home is a future latitudesh_lk_node_pool resource, not
+      scaffolded here. GetLksClusterKubeconfig is a read of an existing
+      cluster's kubeconfig (409 NOT_READY until the control plane is up),
+      not a standalone type; recommended home is a future sensitive
+      latitudesh_lk_kubeconfig data source. ListLksAvailableVersions and
+      ListLksSites are global reference lookups (no project/cluster scope)
+      that back client-side validation of kubernetes_version and site at
+      the API layer; recommended home is a future latitudesh_lk_versions /
+      latitudesh_lk_sites data source pair, not scaffolded here since
+      neither has a project-scoped List this group's plural-datasource rule
+      would key off. Reviewer flag: KubernetesClusters below is capped
+      `ceiling: none, rationale: deprecated` for exactly this product
+      (managed Kubernetes) — confirm Lks is the intended non-deprecated
+      successor before merging, not a second implementation of the same
+      thing under a new SDK group name.
+
   ManagedDatabases:
     implemented_by: [latitudesh_managed_database_metrics]
     notes: >-
