@@ -193,7 +193,7 @@ func (p *latitudeshProvider) Resources(ctx context.Context) []func() resource.Re
 		NewObjectStorageAccessKeyResource,
 		NewVirtualMachineBackupResource,
 		NewPublicNetworkResource,
-		NewLkResource,
+		NewLksResource,
 	}
 }
 
@@ -214,8 +214,8 @@ func (p *latitudeshProvider) DataSources(ctx context.Context) []func() datasourc
 		NewTagDataSource,
 		NewVirtualMachineBackupDataSource,
 		NewVirtualMachineBackupsDataSource,
-		NewLkDataSource,
 		NewLksDataSource,
+		NewLksClustersDataSource,
 	}
 }
 

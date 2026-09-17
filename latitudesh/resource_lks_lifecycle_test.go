@@ -26,27 +26,27 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 )
 
-const mockLkClusterID = "lks_lifecycle1"
+const mockLksClusterID = "lks_lifecycle1"
 
-// lkGetStep is one scripted answer to a GET of the cluster. When httpStatus
+// lksGetStep is one scripted answer to a GET of the cluster. When httpStatus
 // is 200 the mock returns a cluster with the given status; otherwise it
 // returns that HTTP error code, shaped as the typed JSON:API ErrorObject that
 // GetLksCluster declares for 403/404/502 (and the generic shape otherwise).
-type lkGetStep struct {
+type lksGetStep struct {
 	httpStatus int
 	status     string
 }
 
-// lkClusterMock answers GET /lks/clusters/{id} from a scripted sequence, one
+// lksClusterMock answers GET /lks/clusters/{id} from a scripted sequence, one
 // step per GET, repeating the last step so a non-terminal tail makes the
 // poller run until it times out.
-type lkClusterMock struct {
+type lksClusterMock struct {
 	mu       sync.Mutex
-	steps    []lkGetStep
+	steps    []lksGetStep
 	getCount int
 }
 
-func (m *lkClusterMock) next() lkGetStep {
+func (m *lksClusterMock) next() lksGetStep {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -58,13 +58,13 @@ func (m *lkClusterMock) next() lkGetStep {
 	return m.steps[idx]
 }
 
-func (m *lkClusterMock) gets() int {
+func (m *lksClusterMock) gets() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.getCount
 }
 
-func (m *lkClusterMock) handler(w http.ResponseWriter, r *http.Request) {
+func (m *lksClusterMock) handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/vnd.api+json")
 
 	if r.Method != http.MethodGet || !strings.HasPrefix(r.URL.Path, "/lks/clusters/") {
@@ -82,32 +82,32 @@ func (m *lkClusterMock) handler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	_, _ = fmt.Fprintf(w, `{"data":{"id":%q,"type":"lks_clusters","attributes":{"status":%q}}}`,
-		mockLkClusterID, step.status)
+		mockLksClusterID, step.status)
 }
 
-// newLkClusterMock starts the mock, wires a resource whose client points at
+// newLksClusterMock starts the mock, wires a resource whose client points at
 // it, and shortens both poll intervals so a scripted sequence costs
 // milliseconds instead of one 10s/5s sleep per transition.
-func newLkClusterMock(t *testing.T, steps ...lkGetStep) (*lkClusterMock, *LkResource) {
+func newLksClusterMock(t *testing.T, steps ...lksGetStep) (*lksClusterMock, *LksResource) {
 	t.Helper()
 
 	if len(steps) == 0 {
-		t.Fatal("newLkClusterMock requires at least one step")
+		t.Fatal("newLksClusterMock requires at least one step")
 	}
 
-	mock := &lkClusterMock{steps: steps}
+	mock := &lksClusterMock{steps: steps}
 	server := httptest.NewServer(http.HandlerFunc(mock.handler))
 	t.Cleanup(server.Close)
 
-	prevReady, prevDelete := lkReadyPollInterval, lkDeletePollInterval
-	lkReadyPollInterval = 5 * time.Millisecond
-	lkDeletePollInterval = 5 * time.Millisecond
+	prevReady, prevDelete := lksReadyPollInterval, lksDeletePollInterval
+	lksReadyPollInterval = 5 * time.Millisecond
+	lksDeletePollInterval = 5 * time.Millisecond
 	t.Cleanup(func() {
-		lkReadyPollInterval = prevReady
-		lkDeletePollInterval = prevDelete
+		lksReadyPollInterval = prevReady
+		lksDeletePollInterval = prevDelete
 	})
 
-	r := &LkResource{
+	r := &LksResource{
 		client: latitudeshgosdk.New(
 			latitudeshgosdk.WithSecurity("test"),
 			latitudeshgosdk.WithServerURL(server.URL),
@@ -119,10 +119,10 @@ func newLkClusterMock(t *testing.T, steps ...lkGetStep) (*lkClusterMock, *LkReso
 // --- waitForClusterReady -----------------------------------------------------
 
 func TestWaitForClusterReady_ReadyImmediately(t *testing.T) {
-	mock, r := newLkClusterMock(t, lkGetStep{httpStatus: 200, status: "ready"})
+	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "ready"})
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLkClusterID, time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, time.Second, &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected no error when the cluster is already ready, got: %v", diags.Errors())
@@ -133,14 +133,14 @@ func TestWaitForClusterReady_ReadyImmediately(t *testing.T) {
 }
 
 func TestWaitForClusterReady_ProvisioningThenReady(t *testing.T) {
-	mock, r := newLkClusterMock(t,
-		lkGetStep{httpStatus: 200, status: "provisioning"},
-		lkGetStep{httpStatus: 200, status: "provisioning"},
-		lkGetStep{httpStatus: 200, status: "ready"},
+	mock, r := newLksClusterMock(t,
+		lksGetStep{httpStatus: 200, status: "provisioning"},
+		lksGetStep{httpStatus: 200, status: "provisioning"},
+		lksGetStep{httpStatus: 200, status: "ready"},
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLkClusterID, 5*time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, 5*time.Second, &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected success once the cluster reaches ready, got: %v", diags.Errors())
@@ -151,13 +151,13 @@ func TestWaitForClusterReady_ProvisioningThenReady(t *testing.T) {
 }
 
 func TestWaitForClusterReady_TransientNotFoundThenReady(t *testing.T) {
-	mock, r := newLkClusterMock(t,
-		lkGetStep{httpStatus: 404},
-		lkGetStep{httpStatus: 200, status: "ready"},
+	mock, r := newLksClusterMock(t,
+		lksGetStep{httpStatus: 404},
+		lksGetStep{httpStatus: 200, status: "ready"},
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLkClusterID, 5*time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, 5*time.Second, &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected a 404 right after create to be treated as transient, got: %v", diags.Errors())
@@ -168,13 +168,13 @@ func TestWaitForClusterReady_TransientNotFoundThenReady(t *testing.T) {
 }
 
 func TestWaitForClusterReady_TransientServerErrorThenReady(t *testing.T) {
-	mock, r := newLkClusterMock(t,
-		lkGetStep{httpStatus: 502},
-		lkGetStep{httpStatus: 200, status: "ready"},
+	mock, r := newLksClusterMock(t,
+		lksGetStep{httpStatus: 502},
+		lksGetStep{httpStatus: 200, status: "ready"},
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLkClusterID, 5*time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, 5*time.Second, &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected a 502 to be treated as transient, got: %v", diags.Errors())
@@ -185,13 +185,13 @@ func TestWaitForClusterReady_TransientServerErrorThenReady(t *testing.T) {
 }
 
 func TestWaitForClusterReady_FatalErrorStopsImmediately(t *testing.T) {
-	mock, r := newLkClusterMock(t,
-		lkGetStep{httpStatus: 422},
-		lkGetStep{httpStatus: 200, status: "ready"},
+	mock, r := newLksClusterMock(t,
+		lksGetStep{httpStatus: 422},
+		lksGetStep{httpStatus: 200, status: "ready"},
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLkClusterID, 5*time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, 5*time.Second, &diags)
 
 	if !diags.HasError() {
 		t.Fatal("expected a 422 to fail immediately instead of retrying")
@@ -202,16 +202,16 @@ func TestWaitForClusterReady_FatalErrorStopsImmediately(t *testing.T) {
 }
 
 func TestWaitForClusterReady_ConsecutiveErrorCeiling(t *testing.T) {
-	mock, r := newLkClusterMock(t,
-		lkGetStep{httpStatus: 502},
-		lkGetStep{httpStatus: 502},
-		lkGetStep{httpStatus: 502},
-		lkGetStep{httpStatus: 502},
-		lkGetStep{httpStatus: 502},
+	mock, r := newLksClusterMock(t,
+		lksGetStep{httpStatus: 502},
+		lksGetStep{httpStatus: 502},
+		lksGetStep{httpStatus: 502},
+		lksGetStep{httpStatus: 502},
+		lksGetStep{httpStatus: 502},
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLkClusterID, time.Minute, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, time.Minute, &diags)
 
 	if !diags.HasError() {
 		t.Fatal("expected the consecutive-error ceiling to fail the wait")
@@ -222,10 +222,10 @@ func TestWaitForClusterReady_ConsecutiveErrorCeiling(t *testing.T) {
 }
 
 func TestWaitForClusterReady_Timeout(t *testing.T) {
-	mock, r := newLkClusterMock(t, lkGetStep{httpStatus: 200, status: "provisioning"})
+	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "provisioning"})
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLkClusterID, 30*time.Millisecond, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, 30*time.Millisecond, &diags)
 
 	if !diags.HasError() {
 		t.Fatal("expected a timeout error when the cluster never reaches ready")
@@ -238,10 +238,10 @@ func TestWaitForClusterReady_Timeout(t *testing.T) {
 // --- waitForClusterDeleted ---------------------------------------------------
 
 func TestWaitForClusterDeleted_NotFound(t *testing.T) {
-	mock, r := newLkClusterMock(t, lkGetStep{httpStatus: 404})
+	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 404})
 
 	var diags diag.Diagnostics
-	r.waitForClusterDeleted(context.Background(), mockLkClusterID, time.Second, &diags)
+	r.waitForClusterDeleted(context.Background(), mockLksClusterID, time.Second, &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected no error once the cluster 404s, got: %v", diags.Errors())
@@ -252,13 +252,13 @@ func TestWaitForClusterDeleted_NotFound(t *testing.T) {
 }
 
 func TestWaitForClusterDeleted_StatusDeleted(t *testing.T) {
-	mock, r := newLkClusterMock(t,
-		lkGetStep{httpStatus: 200, status: "deleting"},
-		lkGetStep{httpStatus: 200, status: "deleted"},
+	mock, r := newLksClusterMock(t,
+		lksGetStep{httpStatus: 200, status: "deleting"},
+		lksGetStep{httpStatus: 200, status: "deleted"},
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterDeleted(context.Background(), mockLkClusterID, 5*time.Second, &diags)
+	r.waitForClusterDeleted(context.Background(), mockLksClusterID, 5*time.Second, &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected status \"deleted\" to be treated as terminal, got: %v", diags.Errors())
@@ -269,10 +269,10 @@ func TestWaitForClusterDeleted_StatusDeleted(t *testing.T) {
 }
 
 func TestWaitForClusterDeleted_Timeout(t *testing.T) {
-	mock, r := newLkClusterMock(t, lkGetStep{httpStatus: 200, status: "deleting"})
+	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "deleting"})
 
 	var diags diag.Diagnostics
-	r.waitForClusterDeleted(context.Background(), mockLkClusterID, 30*time.Millisecond, &diags)
+	r.waitForClusterDeleted(context.Background(), mockLksClusterID, 30*time.Millisecond, &diags)
 
 	if !diags.HasError() {
 		t.Fatal("expected a timeout error when the cluster is never removed or marked deleted")

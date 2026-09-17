@@ -6,7 +6,7 @@ import (
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 )
 
-func TestLkMatchesStatus(t *testing.T) {
+func TestLksMatchesStatus(t *testing.T) {
 	ready := "ready"
 	cases := []struct {
 		name string
@@ -22,14 +22,14 @@ func TestLkMatchesStatus(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := lkMatchesStatus(tc.c, tc.want); got != tc.ok {
-				t.Errorf("lkMatchesStatus(..., %q) = %v, want %v", tc.want, got, tc.ok)
+			if got := lksMatchesStatus(tc.c, tc.want); got != tc.ok {
+				t.Errorf("lksMatchesStatus(..., %q) = %v, want %v", tc.want, got, tc.ok)
 			}
 		})
 	}
 }
 
-func TestLkItemValue(t *testing.T) {
+func TestLksClusterItemValue(t *testing.T) {
 	id := "lks_1"
 	name := "prod"
 	site := "ASH"
@@ -42,7 +42,7 @@ func TestLkItemValue(t *testing.T) {
 		},
 	}
 
-	item := lkItemValue(c)
+	item := lksClusterItemValue(c)
 	if item.ID.ValueString() != id {
 		t.Errorf("ID = %q, want %q", item.ID.ValueString(), id)
 	}

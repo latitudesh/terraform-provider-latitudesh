@@ -1,10 +1,10 @@
 package latitudesh
 
-// TestAccLk_Basic exercises the resource against the live API. It is
+// TestAccLks_Basic exercises the resource against the live API. It is
 // skipped unless TF_ACC and LATITUDESH_AUTH_TOKEN are set (via
 // testAccTokenCheck), so `go test ./latitudesh` never reaches the network.
 //
-// testAccLkSite and testAccLkKubernetesVersion are not confirmed against a
+// testAccLksSite and testAccLksKubernetesVersion are not confirmed against a
 // live account's GET /lks/sites / GET /lks/available_versions (neither is
 // mapped by this scaffold) — see the handoff for why. Update them before
 // running this test live.
@@ -19,26 +19,26 @@ import (
 )
 
 const (
-	testAccLkSite              = "ASH"
-	testAccLkKubernetesVersion = "1.31.0"
+	testAccLksSite              = "ASH"
+	testAccLksKubernetesVersion = "1.31.0"
 )
 
-func TestAccLk_Basic(t *testing.T) {
-	resourceName := "latitudesh_lk.test_item"
+func TestAccLks_Basic(t *testing.T) {
+	resourceName := "latitudesh_lks.test_item"
 	projectID := testAccProjectID()
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccTokenCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories(),
-		CheckDestroy:             testAccCheckLkDestroy,
+		CheckDestroy:             testAccCheckLksDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccLkConfigBasic(projectID, testAccLkSite, testAccLkKubernetesVersion),
+				Config: testAccLksConfigBasic(projectID, testAccLksSite, testAccLksKubernetesVersion),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "project", projectID),
-					resource.TestCheckResourceAttr(resourceName, "site", testAccLkSite),
-					resource.TestCheckResourceAttr(resourceName, "kubernetes_version", testAccLkKubernetesVersion),
+					resource.TestCheckResourceAttr(resourceName, "site", testAccLksSite),
+					resource.TestCheckResourceAttr(resourceName, "kubernetes_version", testAccLksKubernetesVersion),
 					resource.TestCheckResourceAttr(resourceName, "status", "ready"),
 				),
 			},
@@ -51,9 +51,9 @@ func TestAccLk_Basic(t *testing.T) {
 	})
 }
 
-func testAccLkConfigBasic(project, site, version string) string {
+func testAccLksConfigBasic(project, site, version string) string {
 	return fmt.Sprintf(`
-resource "latitudesh_lk" "test_item" {
+resource "latitudesh_lks" "test_item" {
   project             = %q
   name                = "tf-acc-lks-%s"
   site                = %q
@@ -67,14 +67,14 @@ resource "latitudesh_lk" "test_item" {
 `, project, testRunID, site, version)
 }
 
-func testAccCheckLkDestroy(s *terraform.State) error {
+func testAccCheckLksDestroy(s *terraform.State) error {
 	client, err := newSDKClientFromEnv()
 	if err != nil {
 		return err
 	}
 
 	for _, rs := range s.RootModule().Resources {
-		if rs.Type != "latitudesh_lk" {
+		if rs.Type != "latitudesh_lks" {
 			continue
 		}
 		id := rs.Primary.ID
@@ -86,7 +86,7 @@ func testAccCheckLkDestroy(s *terraform.State) error {
 		if err == nil {
 			return fmt.Errorf("LKS cluster still exists: %s", id)
 		}
-		if !lkClusterNotFound(err) {
+		if !lksClusterNotFound(err) {
 			return fmt.Errorf("unexpected error checking LKS cluster %s destroyed: %w", id, err)
 		}
 	}
