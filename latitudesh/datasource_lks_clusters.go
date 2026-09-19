@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
@@ -40,25 +41,46 @@ type LksClustersDataSourceModel struct {
 	Clusters types.List `tfsdk:"clusters"`
 }
 
+// LksClusterItemModel carries every attribute the list response already
+// contains. The API answers each cluster with the same envelope the singular
+// lookup returns, so dropping fields here would only force a second
+// latitudesh_lks data source per cluster to read what this call already
+// fetched.
 type LksClusterItemModel struct {
 	ID                   types.String `tfsdk:"id"`
+	Project              types.String `tfsdk:"project"`
 	Name                 types.String `tfsdk:"name"`
 	Site                 types.String `tfsdk:"site"`
 	KubernetesVersion    types.String `tfsdk:"kubernetes_version"`
+	Description          types.String `tfsdk:"description"`
+	Network              types.Object `tfsdk:"network"`
 	Status               types.String `tfsdk:"status"`
+	Message              types.String `tfsdk:"message"`
+	Reason               types.String `tfsdk:"reason"`
 	ControlPlaneEndpoint types.String `tfsdk:"control_plane_endpoint"`
+	KubeconfigURL        types.String `tfsdk:"kubeconfig_url"`
+	PlatformVersion      types.String `tfsdk:"platform_version"`
 	CreatedAt            types.String `tfsdk:"created_at"`
+	UpdatedAt            types.String `tfsdk:"updated_at"`
 }
 
 var lksClusterItemObjectType = types.ObjectType{
 	AttrTypes: map[string]attr.Type{
 		"id":                     types.StringType,
+		"project":                types.StringType,
 		"name":                   types.StringType,
 		"site":                   types.StringType,
 		"kubernetes_version":     types.StringType,
+		"description":            types.StringType,
+		"network":                types.ObjectType{AttrTypes: lksNetworkAttrTypes},
 		"status":                 types.StringType,
+		"message":                types.StringType,
+		"reason":                 types.StringType,
 		"control_plane_endpoint": types.StringType,
+		"kubeconfig_url":         types.StringType,
+		"platform_version":       types.StringType,
 		"created_at":             types.StringType,
+		"updated_at":             types.StringType,
 	},
 }
 
@@ -105,6 +127,10 @@ func (d *LksClustersDataSource) Schema(ctx context.Context, req datasource.Schem
 							MarkdownDescription: "Cluster ID.",
 							Computed:            true,
 						},
+						"project": schema.StringAttribute{
+							MarkdownDescription: "The project ID that owns the cluster.",
+							Computed:            true,
+						},
 						"name": schema.StringAttribute{
 							MarkdownDescription: "Display name for the cluster.",
 							Computed:            true,
@@ -117,16 +143,61 @@ func (d *LksClustersDataSource) Schema(ctx context.Context, req datasource.Schem
 							MarkdownDescription: "Kubernetes patch version currently running.",
 							Computed:            true,
 						},
+						"description": schema.StringAttribute{
+							MarkdownDescription: "Customer description, if any.",
+							Computed:            true,
+						},
+						"network": schema.SingleNestedAttribute{
+							MarkdownDescription: "Cluster CIDR ranges.",
+							Computed:            true,
+							Attributes: map[string]schema.Attribute{
+								"pod_cidrs": schema.SetAttribute{
+									MarkdownDescription: "Pod CIDR ranges.",
+									ElementType:         types.StringType,
+									Computed:            true,
+								},
+								"service_cidrs": schema.SetAttribute{
+									MarkdownDescription: "Service CIDR ranges.",
+									ElementType:         types.StringType,
+									Computed:            true,
+								},
+								"node_cidrs": schema.SetAttribute{
+									MarkdownDescription: "Node CIDR ranges.",
+									ElementType:         types.StringType,
+									Computed:            true,
+								},
+							},
+						},
 						"status": schema.StringAttribute{
 							MarkdownDescription: "Cluster lifecycle status.",
+							Computed:            true,
+						},
+						"message": schema.StringAttribute{
+							MarkdownDescription: "Human-readable detail behind the current `status`.",
+							Computed:            true,
+						},
+						"reason": schema.StringAttribute{
+							MarkdownDescription: "Machine-readable status reason (open enum).",
 							Computed:            true,
 						},
 						"control_plane_endpoint": schema.StringAttribute{
 							MarkdownDescription: "Kubernetes API server endpoint.",
 							Computed:            true,
 						},
+						"kubeconfig_url": schema.StringAttribute{
+							MarkdownDescription: "URL to fetch the cluster kubeconfig from. It only resolves once `status` is `ready`.",
+							Computed:            true,
+						},
+						"platform_version": schema.StringAttribute{
+							MarkdownDescription: "Platform (LKS controller) version managing this cluster.",
+							Computed:            true,
+						},
 						"created_at": schema.StringAttribute{
 							MarkdownDescription: "Timestamp when the cluster was created.",
+							Computed:            true,
+						},
+						"updated_at": schema.StringAttribute{
+							MarkdownDescription: "Timestamp when the cluster was last updated.",
 							Computed:            true,
 						},
 					},
@@ -186,7 +257,12 @@ func (d *LksClustersDataSource) Read(ctx context.Context, req datasource.ReadReq
 
 	items := make([]LksClusterItemModel, 0, len(clusters))
 	for i := range clusters {
-		items = append(items, lksClusterItemValue(&clusters[i]))
+		item, itemDiags := lksClusterItemValue(&clusters[i])
+		resp.Diagnostics.Append(itemDiags...)
+		items = append(items, item)
+	}
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	list, diags := types.ListValueFrom(ctx, lksClusterItemObjectType, items)
@@ -201,17 +277,25 @@ func (d *LksClustersDataSource) Read(ctx context.Context, req datasource.ReadReq
 
 // lksClusterItemValue maps one SDK cluster into the list item model. It shares the
 // attribute mapper with the singular data source and resource.
-func lksClusterItemValue(c *components.LksClusterData) LksClusterItemModel {
-	fields, _ := mapLksAttributes(c.Attributes)
+func lksClusterItemValue(c *components.LksClusterData) (LksClusterItemModel, diag.Diagnostics) {
+	fields, diags := mapLksAttributes(c.Attributes)
 	return LksClusterItemModel{
 		ID:                   types.StringPointerValue(c.ID),
+		Project:              fields.Project,
 		Name:                 fields.Name,
 		Site:                 fields.Site,
 		KubernetesVersion:    fields.KubernetesVersion,
+		Description:          fields.Description,
+		Network:              fields.Network,
 		Status:               fields.Status,
+		Message:              fields.Message,
+		Reason:               fields.Reason,
 		ControlPlaneEndpoint: fields.ControlPlaneEndpoint,
+		KubeconfigURL:        fields.KubeconfigURL,
+		PlatformVersion:      fields.PlatformVersion,
 		CreatedAt:            fields.CreatedAt,
-	}
+		UpdatedAt:            fields.UpdatedAt,
+	}, diags
 }
 
 // lksMatchesStatus applies the optional, case-insensitive status filter. An

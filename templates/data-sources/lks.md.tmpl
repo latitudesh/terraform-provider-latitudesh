@@ -7,10 +7,10 @@ description: |-
 
 # {{.Name}} ({{.Type}})
 
-Looks up a single LKS (Latitude Kubernetes Service) cluster by id. The underlying API has no name-based lookup, so `id` is the only selector.
+Looks up a single LKS (Latitude Kubernetes Service) cluster by id. The underlying API has no name-based lookup, so `id` is the only selector — take it from [`latitudesh_lks_clusters`](lks_clusters.md), from a [`latitudesh_lks`](../resources/lks.md) resource in the same configuration, or paste it in.
 
 ## Example Usage
 
-{{ tffile (printf "examples/%s.tf" .Name) }}
+{{ tffile "examples/latitudesh_lks_data_source.tf" }}
 
 {{ .SchemaMarkdown | trimspace }}

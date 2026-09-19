@@ -1,0 +1,20 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Lists the Kubernetes versions the platform offers, and which of them a cluster can be created with or upgraded to. This is the authoritative source for [`latitudesh_lks`](../resources/lks.md)'s `kubernetes_version` argument.
+
+A version can be listed but unavailable for new clusters, for upgrades, or for both, so filter on `available_for_creation` / `available_for_upgrade` rather than taking the whole list. The platform rejects a downgrade with 422 `DOWNGRADE_NOT_ALLOWED` — [`latitudesh_lks`](../resources/lks.md) rejects one at plan time for the same reason.
+
+The lookup is global: it takes no arguments and is not scoped to a project.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}

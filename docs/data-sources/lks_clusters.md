@@ -12,25 +12,18 @@ Lists every LKS (Latitude Kubernetes Service) cluster in a project, optionally f
 ## Example Usage
 
 ```terraform
-# NOTE: "ASH" and the kubernetes_version below are not confirmed against this
-# account's GET /lks/sites and GET /lks/available_versions — check both
-# before applying. See the provider's scaffold handoff for why.
-resource "latitudesh_project" "lks_clusters" {
-  name = "lks-clusters-example"
-}
-
-resource "latitudesh_lks" "list_example" {
-  project            = latitudesh_project.lks_clusters.id
-  name               = "example-cluster"
-  site               = "ASH"
-  kubernetes_version = "1.31.0"
-}
-
-data "latitudesh_lks_clusters" "by_project" {
-  project = latitudesh_project.lks_clusters.id
+# Every LKS cluster in a project. `status` is optional: drop it to see clusters
+# still provisioning, or being deleted, alongside the ready ones.
+data "latitudesh_lks_clusters" "in_project" {
+  project = "<project-id-or-slug>"
   status  = "ready"
+}
 
-  depends_on = [latitudesh_lks.list_example]
+output "lks_cluster_endpoints" {
+  value = {
+    for cluster in data.latitudesh_lks_clusters.in_project.clusters :
+    cluster.name => cluster.control_plane_endpoint
+  }
 }
 ```
 
@@ -57,8 +50,25 @@ Read-Only:
 
 - `control_plane_endpoint` (String) Kubernetes API server endpoint.
 - `created_at` (String) Timestamp when the cluster was created.
+- `description` (String) Customer description, if any.
 - `id` (String) Cluster ID.
+- `kubeconfig_url` (String) URL to fetch the cluster kubeconfig from. It only resolves once `status` is `ready`.
 - `kubernetes_version` (String) Kubernetes patch version currently running.
+- `message` (String) Human-readable detail behind the current `status`.
 - `name` (String) Display name for the cluster.
+- `network` (Attributes) Cluster CIDR ranges. (see [below for nested schema](#nestedatt--clusters--network))
+- `platform_version` (String) Platform (LKS controller) version managing this cluster.
+- `project` (String) The project ID that owns the cluster.
+- `reason` (String) Machine-readable status reason (open enum).
 - `site` (String) Site slug the cluster is deployed to.
 - `status` (String) Cluster lifecycle status.
+- `updated_at` (String) Timestamp when the cluster was last updated.
+
+<a id="nestedatt--clusters--network"></a>
+### Nested Schema for `clusters.network`
+
+Read-Only:
+
+- `node_cidrs` (Set of String) Node CIDR ranges.
+- `pod_cidrs` (Set of String) Pod CIDR ranges.
+- `service_cidrs` (Set of String) Service CIDR ranges.
