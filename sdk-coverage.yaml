@@ -100,32 +100,180 @@ groups:
       components.FirewallAssignmentDataAttributes.Server/.VirtualMachine.
 
   Lks:
-    implemented_by: [latitudesh_lks, latitudesh_lks_clusters]
+    implemented_by: [latitudesh_lks, latitudesh_lks_clusters, latitudesh_lks_node_pool,
+      latitudesh_lks_node_pools, latitudesh_lks_kubeconfig, latitudesh_lks_sites,
+      latitudesh_lks_versions]
     notes: >-
-      latitudesh_lks maps LksCluster's full lifecycle (Create/Get/Update/Delete,
-      plus ListLksClusters backing the plural latitudesh_lks_clusters, scoped by
-      project). LKS (Latitude Kubernetes Service) is an acronym, not a plural,
-      so the type keeps the trailing s and the list data source is spelled out
-      as latitudesh_lks_clusters rather than the usual singular+s pair —
-      SuggestTypeName's singularize rule would otherwise propose latitudesh_lk.
-      name, description and kubernetes_version are updatable
-      in-place (UpdateLksCluster); project, site and network carry
-      RequiresReplace — there is no update endpoint for them. Unmapped:
-      CreateLksNodePool/GetLksNodePool/UpdateLksNodePool/DeleteLksNodePool/
-      ListLksNodePools are LksNodePool's own full lifecycle, nested under a
-      cluster (parallel to how ElasticIps.CreateElasticIP sits next to the
-      BGP session lifecycle now under latitudesh_elastic_ip_bgp) —
-      recommended home is a future latitudesh_lks_node_pool resource, not
-      scaffolded here. GetLksClusterKubeconfig is a read of an existing
-      cluster's kubeconfig (409 NOT_READY until the control plane is up),
-      not a standalone type; recommended home is a future sensitive
-      latitudesh_lks_kubeconfig data source. ListLksAvailableVersions and
-      ListLksSites are global reference lookups (no project/cluster scope)
-      that back client-side validation of kubernetes_version and site at
-      the API layer; recommended home is a future latitudesh_lks_versions /
-      latitudesh_lks_sites data source pair, not scaffolded here since
-      neither has a project-scoped List this group's plural-datasource rule
-      would key off. Reviewer flag: KubernetesClusters below is capped
+      Fully mapped: all 13 methods. LKS (Latitude Kubernetes Service) is an
+      acronym, not a plural, so the types keep the trailing s and the two
+      list data sources are spelled out (latitudesh_lks_clusters,
+      latitudesh_lks_node_pools) rather than following the usual singular+s
+      pair — SuggestTypeName's singularize rule would otherwise propose
+      latitudesh_lk.
+
+      Two products live in this one SDK group and each gets its own
+      resource, because a cluster with no node pool is a control plane that
+      schedules nothing:
+      - latitudesh_lks maps LksCluster (Create/Get/Update/Delete, plus
+        ListLksClusters behind latitudesh_lks_clusters, project-scoped). It
+        also carries a REQUIRED default_node_pool block, which is structural
+        rather than stylistic: a cluster converges only once it has a node
+        pool, CreateLksClusterAttributes takes none inline, and Terraform
+        will not start a separate pool resource until this Create returns —
+        so the first pool must be created inside this Create, or the cluster
+        could never be waited on at all (confirmed by the team,
+        2026-09-17). Folding it in makes the requirement enforceable at plan
+        time AND lets Create legitimately wait for status "ready"; pinned by
+        TestLks_CreateWaitsForReadyViaDefaultNodePool, whose mock reports
+        "ready" only after a pool has been POSTed. Same split as
+        azurerm_kubernetes_cluster.default_node_pool and
+        digitalocean_kubernetes_cluster.node_pool. Changing plan or
+        max_pods_per_node inside the block replaces the POOL, not the
+        cluster, building the replacement before removing the old one —
+        deliberately better than azurerm, where that edit rebuilds the whole
+        cluster. On the cluster itself, name/description/kubernetes_version
+        update in place; project, site and network carry RequiresReplace.
+      - latitudesh_lks_node_pool maps LksNodePool (Create/Get/Update/Delete,
+        plus ListLksNodePools behind latitudesh_lks_node_pools,
+        cluster-scoped) for every pool BEYOND the first. node_count (named
+        around Terraform's reserved `count` meta-argument), name,
+        description, kubernetes_version, labels and taints update in place;
+        cluster_id, plan and max_pods_per_node carry RequiresReplace — the
+        last because the API rejects a PATCH carrying it with 422. Apply
+        waits on ready_nodes reaching node_count rather than on a status
+        value: this endpoint documents no status enum, and a scale is
+        asynchronous. latitudesh_lks manages only the pool recorded in its
+        default_node_pool and ignores every other one, so the two resources
+        never contend for the same object — the ambiguity that makes
+        google_container_cluster.node_pool fight google_container_node_pool.
+
+      GetLksClusterKubeconfig ships as the latitudesh_lks_kubeconfig
+      EPHEMERAL resource, not a data source: a kubeconfig is cluster-admin
+      credentials, and a data source would write them to state and to every
+      plan file. The endpoint answers 409 NOT_READY until the control plane
+      is up — a window the cluster's own create already closes, so depending
+      on latitudesh_lks is enough to order the read. An LKS kubeconfig does
+      not expire (confirmed by the team,
+      2026-09-17), so the ephemeral implements neither Close nor Renew:
+      there is nothing to revoke and nothing to refresh mid-apply, unlike
+      aws_eks_cluster_auth (15-minute token, and an open renewal bug) or
+      DigitalOcean's 7-day default. The response model carries no expires_at
+      either, which is consistent. Non-expiry is also the argument FOR
+      keeping this off state rather than against it: a leaked copy stays
+      valid forever.
+
+      Its schema is one attribute, `kubeconfig`, because that is the whole
+      of LksClusterKubeconfigAttributes ("Full kubeconfig YAML"). A first
+      revision also published host/cluster_ca_certificate/client_certificate/
+      client_key/token parsed out of the document, mirroring
+      upcloud_kubernetes_cluster and digitalocean_kubernetes_cluster.
+      kube_config. It was removed on review: the API documents nothing about
+      which authentication method LKS issues, so a schema offering both a
+      certificate pair and a token — each described as "null when the
+      cluster uses the other" — would have been presenting a guess as
+      contract, in generated docs that read as authoritative. Callers
+      yamldecode() the document instead, which puts the assumption in their
+      configuration where it is visible. Revisit only if the API starts
+      specifying the fields.
+
+      ListLksSites and ListLksAvailableVersions are global reference lookups
+      (no project/cluster scope, no parameters, no pagination) and ship as
+      latitudesh_lks_sites / latitudesh_lks_versions. They are the only
+      source of the valid values for site and kubernetes_version: both are
+      open strings the API validates, so no OneOf validator is possible and
+      a typo would only fail at apply. The family's third reference lookup,
+      latitudesh_lks_plans, is generated into the Plans group instead
+      (Plans.GetLksPlans, GET /plans/lks) and is recorded there — a node
+      pool needs all three: a site, a version and a plan.
+
+      Update rules, read out of the API and dashboard repos 2026-09-18 — none
+      of these are in the swagger the SDK is generated from, and each one
+      breaks an obvious implementation:
+
+      - A scale and an upgrade may NOT share a PATCH. `count` together with
+        `kubernetes_version` is a 422 (NodePoolUpdater raises
+        DisruptiveOpConflict); the dashboard guards against it client-side.
+        Because kubernetes_version is Optional+Computed with
+        UseStateForUnknown, the plan always carries a known value after
+        create, so sending both unconditionally fails EVERY update, not just
+        the combined one. lksPatchNodePool splits them: metadata+count first,
+        then the version, waiting in between — which also keeps the second
+        request clear of the admission check's 422 "operation in progress".
+      - labels/taints are a declarative whole-collection REPLACE. An absent
+        key leaves them unchanged; `{}` / `[]` clears; a populated value
+        replaces rather than merges. The swagger says so in prose. But the
+        SDK cannot send an empty one: both fields are tagged `omitempty`, and
+        Go drops nil and empty alike, so removing a taint PATCHed nothing and
+        the apply died on the read-back (hit live). Worked around in
+        latitudesh/lks_clear_transport.go, which injects the empty collection
+        into the outgoing PATCH, signalled through the request context and
+        scoped by regex to the node pool path. The dashboard sends exactly
+        the same `{"labels":{},"taints":[]}` on update while omitting them on
+        create, which is also what this provider does.
+        TestLksNodePoolUpdateCannotClearCollections fails when the SDK marks
+        the fields nullable, which is the signal to delete the workaround.
+      - `description` CANNOT be cleared at all, and it is not the same case
+        despite an identical symptom. The SDK could send it — `omitempty` on
+        a *string drops only nil, so a pointer to "" does reach the wire —
+        but both update contracts declare
+        `optional(:description).filled(:string)`, so "" is a 422 ("must be
+        filled"), and an explicit null is dropped by the controller's
+        `.compact` before reaching the writer. Sending "" on every update
+        where the attribute is null would therefore fail every update. The
+        provider sends nothing, and removing a description from
+        configuration still cannot converge — an API limitation, not a
+        provider one. Revisit if `filled` is relaxed.
+      - `max_pods_per_node` in a PATCH is always a 422 ("cannot be changed
+        after the node pool is created"), which is why it carries
+        RequiresReplace and is absent from every update payload.
+      - Waits key off LKSService::MutationAdmission's IN_PROGRESS_STATES
+        (provisioning/updating/scaling/upgrading), not a literal terminal
+        string. Comparing against "ready" is a guess that hangs a healthy
+        cluster the moment the platform reports anything else, and
+        `ready_nodes` is a bare passthrough on the API side with no default,
+        so it can be absent entirely — a wait gated only on that number polls
+        until its timeout on a pool that is demonstrably up. Settled status
+        is the authority; the count refines it when reported. paused,
+        deleting and deleted fail fast, since no amount of waiting reaches
+        ready from there.
+      - The DEFAULT pool must stay schedulable: a NoSchedule or NoExecute
+        taint on latitudesh_lks.default_node_pool leaves the cluster's own
+        system workloads with nowhere to run, so it never leaves
+        "provisioning" (confirmed by the team, 2026-09-18). The API accepts
+        the taint and the apply reports success, so the only symptom is a
+        readiness wait that times out — which is why
+        lksDefaultPoolTaintsValidator rejects it at plan time instead.
+        PreferNoSchedule is allowed (soft), and latitudesh_lks_node_pool is
+        deliberately unrestricted: a hard taint on an additional pool is the
+        normal way to reserve one.
+      - An unset `description` comes back as "" rather than absent (seen live
+        2026-09-18 on a node pool whose config never gave one). Copied into
+        state verbatim that is a diff that can NEVER converge, since the API
+        rejects "" on the way back in and ignores null — so
+        lksDescriptionFromAPI collapses "" to null, but only when the
+        configured value is already null, which keeps a genuine out-of-band
+        change visible.
+      - The node pool serializer defaults labels to {} and taints to [] on
+        READ, never null — which is why mapLksNodePoolAttributes maps an
+        empty collection back to null, so a config that omits them sees no
+        perpetual diff.
+      - Client-side validation matches V3::LKS::NodePoolMetadataRules on the
+        50-entry cap, the reserved prefixes and the taint effects. NOT yet
+        mirrored: the key/value format rules (63-char name, 253-char prefix,
+        DNS-label prefixes) — those still fail server-side with a 422.
+
+      API error shape, observed live 2026-09-18: JSON:API prescribes `status`
+      as the HTTP code as a string, and the SDK's examples use "404", but the
+      live LKS endpoints render it snake_case ("not_found") with a matching
+      `code` ("NOT_FOUND"). lksClusterNotFound accepts both spellings on
+      either field — it backs every Read, Delete and poller for clusters and
+      node pools, and matching only "404" made destroy fail on a cluster it
+      had just successfully deleted. Whether 5xx is spelled the same way has
+      NOT been observed, so lksRetryableDuringPoll still only recognizes the
+      numeric form there; missing one costs a fast failure instead of a
+      retry, which is visible rather than silent.
+
+      Reviewer flag: KubernetesClusters below is capped
       `ceiling: none, rationale: deprecated` for exactly this product
       (managed Kubernetes) — confirm Lks is the intended non-deprecated
       successor before merging, not a second implementation of the same
@@ -171,12 +319,31 @@ groups:
       match is found or pages are exhausted.
 
   Plans:
-    implemented_by: [latitudesh_plan]
+    implemented_by: [latitudesh_plan, latitudesh_lks_plans]
     notes: >-
       Data source. UpdateBandwidth is not wired up, hence the -RU- shape.
       GetBandwidth, GetManagedDatabasePlans and ListStorage are likewise
       unmapped — latitudesh_plan only calls Get and List. StoragePlanData
       (the model behind ListStorage) has no backing Terraform type at all.
+      GetLksPlans (GET /plans/lks) ships as latitudesh_lks_plans: it lives in
+      this SDK group but belongs to the LKS family by use, so it is named for
+      the family it serves rather than for the group it is generated into —
+      the slugs it returns are the only valid value for an LKS node pool's
+      plan and are NOT interchangeable with latitudesh_plan's server plans.
+      It is a list, not a lookup: the endpoint takes no selector. Pricing is
+      deliberately left unmapped there too, holding the same boundary
+      latitudesh_plan holds (see the v1.19.19 drift note below); the
+      regions[] it does expose carry locations.available / locations.in_stock
+      / locations.in_stock_count and stock_level, which is what makes a
+      site+plan pair buildable or not. That last one is also surfaced
+      flattened as plans[].in_stock_count, keyed by site slug (a site belongs
+      to exactly one region, so merging is lossless). The data source also
+      takes an optional `site`, and then answers with a top-level `stock`
+      map of slug -> node count containing only plans that can build there —
+      so choosing a plan for a site costs no loop and no filtering in
+      configuration, which is how every example and the manual scenario do
+      it. Same shape as latitudesh_marketplace_apps' `category` filter,
+      including the synthetic id reflecting the filter.
 
       v1.19.19 drift closure (lock synced 2026-09-02): no mapping change.
       components.PlanDataAttributes.Regions (and, on the storage side,

@@ -7,27 +7,25 @@ description: |-
 
 # latitudesh_lks (Data Source)
 
-Looks up a single LKS (Latitude Kubernetes Service) cluster by id. The underlying API has no name-based lookup, so `id` is the only selector.
+Looks up a single LKS (Latitude Kubernetes Service) cluster by id. The underlying API has no name-based lookup, so `id` is the only selector — take it from [`latitudesh_lks_clusters`](lks_clusters.md), from a [`latitudesh_lks`](../resources/lks.md) resource in the same configuration, or paste it in.
 
 ## Example Usage
 
 ```terraform
-# NOTE: "ASH" and the kubernetes_version below are not confirmed against this
-# account's GET /lks/sites and GET /lks/available_versions — check both
-# before applying. See the provider's scaffold handoff for why.
-resource "latitudesh_project" "lks" {
-  name = "lks-example"
-}
-
-resource "latitudesh_lks" "example" {
-  project            = latitudesh_project.lks.id
-  name               = "example-cluster"
-  site               = "ASH"
-  kubernetes_version = "1.31.0"
+# Looks up one cluster by id — the only selector the API offers. Take the id
+# from the cluster list, from a latitudesh_lks resource in the same
+# configuration, or paste it in.
+data "latitudesh_lks_clusters" "lookup_source" {
+  project = "<project-id-or-slug>"
+  status  = "ready"
 }
 
 data "latitudesh_lks" "by_id" {
-  id = latitudesh_lks.example.id
+  id = data.latitudesh_lks_clusters.lookup_source.clusters[0].id
+}
+
+output "lks_cluster_endpoint" {
+  value = data.latitudesh_lks.by_id.control_plane_endpoint
 }
 ```
 

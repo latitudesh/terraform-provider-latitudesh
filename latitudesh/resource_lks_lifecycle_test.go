@@ -353,3 +353,80 @@ func TestWaitForClusterDeleted_Timeout(t *testing.T) {
 		t.Fatalf("expected more than 1 poll before timing out, got %d", mock.gets())
 	}
 }
+
+// The platform decides when it has finished, and the provider must not second-
+// guess it with a hardcoded terminal string. lksSettled mirrors the API's
+// LKSService::MutationAdmission, which is the same rule the backend uses to
+// answer 422 "operation in progress".
+func TestLksSettled(t *testing.T) {
+	cases := []struct {
+		status   string
+		done     bool
+		hopeless bool
+	}{
+		// Nothing reported yet: keep polling, the record may be young.
+		{"", false, false},
+
+		// IN_PROGRESS_STATES — the platform is still working.
+		{"provisioning", false, false},
+		{"updating", false, false},
+		{"scaling", false, false},
+		{"upgrading", false, false},
+
+		// Waiting can never succeed from here, so fail fast instead of
+		// burning the whole timeout.
+		{"paused", false, true},
+		{"deleting", false, true},
+		{"deleted", false, true},
+
+		// Settled. "ready" is the one in use today, but anything outside the
+		// in-progress set counts — a new terminal state must not hang the
+		// poller on a perfectly healthy cluster.
+		{"ready", true, false},
+		{"active", true, false},
+		{"running", true, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.status, func(t *testing.T) {
+			done, hopeless := lksSettled(tc.status)
+			if done != tc.done || hopeless != tc.hopeless {
+				t.Errorf("lksSettled(%q) = (done=%v, hopeless=%v), want (%v, %v)",
+					tc.status, done, hopeless, tc.done, tc.hopeless)
+			}
+		})
+	}
+}
+
+// A paused cluster is not going to become ready, and a poller that keeps
+// asking just delays the error by its whole timeout.
+func TestWaitForClusterReady_PausedFailsFast(t *testing.T) {
+	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "paused"})
+
+	var diags diag.Diagnostics
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Minute, &diags)
+
+	if !diags.HasError() {
+		t.Fatal("expected a paused cluster to fail immediately")
+	}
+	if got := mock.gets(); got != 1 {
+		t.Fatalf("expected exactly 1 poll before failing fast, got %d", got)
+	}
+}
+
+// A terminal state the provider has never heard of must end the wait, not hang
+// it. This is the failure the literal "ready" comparison produced: a cluster
+// the dashboard showed as active, with apply still counting minutes.
+func TestWaitForClusterReady_UnknownTerminalStateEndsTheWait(t *testing.T) {
+	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "active"})
+
+	var diags diag.Diagnostics
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Second, &diags)
+
+	if diags.HasError() {
+		t.Fatalf("an unrecognized settled state must end the wait, got: %v", diags.Errors())
+	}
+	if got := mock.gets(); got != 1 {
+		t.Fatalf("expected exactly 1 poll, got %d", got)
+	}
+}

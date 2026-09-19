@@ -1,0 +1,20 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Lists every node pool in an LKS (Latitude Kubernetes Service) cluster, including pools created outside Terraform. Node pools are always scoped to a cluster, so `cluster_id` is required.
+
+Each pool comes back with everything the API reports about it, `labels` and `taints` included — those are what tell one pool apart from another.
+
+Read `status` to tell whether a pool has settled. `ready_nodes` is a count the platform does not always report: it is `null` on pools it does not track it for, which is not the same as zero, so comparing it against `node_count` can fail on a null.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}

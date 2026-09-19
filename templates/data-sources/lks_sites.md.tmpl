@@ -1,0 +1,18 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Lists the sites an LKS (Latitude Kubernetes Service) cluster can be deployed to. This is the authoritative source for [`latitudesh_lks`](../resources/lks.md)'s `site` argument — LKS runs in its own subset of locations, so `latitudesh_region` is not a substitute.
+
+The lookup is global: it takes no arguments and is not scoped to a project.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}

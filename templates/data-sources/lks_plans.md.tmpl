@@ -1,0 +1,39 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Lists the machine plans an LKS (Latitude Kubernetes Service) node pool can be built from, with per-region availability and stock.
+
+`GET /plans/lks` is its own catalog: a server plan slug from [`latitudesh_plan`](plan.md) is not interchangeable with one of these. Pricing is not exposed, matching `latitudesh_plan`.
+
+## Picking a plan for a site
+
+Set `site` and the data source answers directly: `stock` is plan slug → nodes available there, containing only plans that can actually build. No loop, no filtering in configuration.
+
+```terraform
+data "latitudesh_lks_plans" "at_site" {
+  site = "<site-slug>" # from latitudesh_lks_sites
+}
+
+# e.g. { "c2-medium-x86" = 7, "c3-large-x86" = 2 }
+output "buildable" {
+  value = data.latitudesh_lks_plans.at_site.stock
+}
+```
+
+`keys(...stock)` is the shortlist; `...stock["c2-medium-x86"]` is the count. An empty map means nothing can be built at that site right now — the cluster would come up and its node pool would not.
+
+Unfiltered, `plans` is the whole catalog and `stock` is null, since a count only means something for one site. Each plan still carries `in_stock_count` (the same map, per plan) and `regions[]`, which adds stock levels and `available_sites` — where a plan can run *at all*, a larger set than where it can run today.
+
+The lookup is never scoped to a project; `site` is its only argument.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
