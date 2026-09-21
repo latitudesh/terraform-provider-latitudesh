@@ -672,7 +672,7 @@ func TestLksWaitForNodesReady_SettlesWithoutReadyNodes(t *testing.T) {
 	)
 
 	var diags diag.Diagnostics
-	lksWaitForNodesReady(context.Background(), client, "lksc_1", "np_1", 3, time.Second, &diags)
+	lksWaitForNodesReady(context.Background(), client, "lksc_1", "np_1", 3, time.Now().Add(time.Second), &diags)
 
 	if diags.HasError() {
 		t.Fatalf("a settled pool must end the wait even without ready_nodes, got: %v", diags.Errors())
@@ -708,7 +708,7 @@ func TestLksWaitForNodesReady_ReadyNodesStillGates(t *testing.T) {
 	)
 
 	var diags diag.Diagnostics
-	lksWaitForNodesReady(context.Background(), client, "lksc_1", "np_1", 3, 5*time.Second, &diags)
+	lksWaitForNodesReady(context.Background(), client, "lksc_1", "np_1", 3, time.Now().Add(5*time.Second), &diags)
 
 	if diags.HasError() {
 		t.Fatalf("unexpected error: %v", diags.Errors())
