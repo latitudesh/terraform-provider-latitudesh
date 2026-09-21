@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
@@ -30,6 +32,7 @@ type RegionDataSourceModel struct {
 	Country     types.String `tfsdk:"country"`
 	CountryCode types.String `tfsdk:"country_code"`
 	City        types.String `tfsdk:"city"`
+	Features    types.List   `tfsdk:"features"`
 }
 
 func (d *RegionDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -65,6 +68,11 @@ func (d *RegionDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 			},
 			"city": schema.StringAttribute{
 				MarkdownDescription: "City name",
+				Computed:            true,
+			},
+			"features": schema.ListAttribute{
+				MarkdownDescription: "Location capabilities available at this region (e.g. `public_network`, `elastic_ip_bgp`).",
+				ElementType:         types.StringType,
 				Computed:            true,
 			},
 		},
@@ -131,9 +139,10 @@ func (d *RegionDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 						region = &components.RegionData{
 							ID: r.ID,
 							Attributes: &components.RegionAttributes{
-								Name:    r.Attributes.Name,
-								Slug:    r.Attributes.Slug,
-								Country: regionCountry,
+								Name:     r.Attributes.Name,
+								Slug:     r.Attributes.Slug,
+								Country:  regionCountry,
+								Features: r.Attributes.Features,
 							},
 						}
 						break
@@ -156,15 +165,24 @@ func (d *RegionDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
-	d.mapRegionDataToModel(region, &data)
+	resp.Diagnostics.Append(d.mapRegionDataToModel(ctx, region, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (d *RegionDataSource) mapRegionDataToModel(region *components.RegionData, data *RegionDataSourceModel) {
+func (d *RegionDataSource) mapRegionDataToModel(ctx context.Context, region *components.RegionData, data *RegionDataSourceModel) diag.Diagnostics {
+	var diags diag.Diagnostics
+
 	if region.ID != nil {
 		data.ID = types.StringValue(*region.ID)
 	}
+
+	// Always expose a known list so consumers can index features even when the
+	// region reports no capabilities.
+	data.Features = types.ListValueMust(types.StringType, []attr.Value{})
 
 	if region.Attributes != nil {
 		if region.Attributes.Name != nil {
@@ -183,5 +201,15 @@ func (d *RegionDataSource) mapRegionDataToModel(region *components.RegionData, d
 				data.CountryCode = types.StringValue(*region.Attributes.Country.Slug)
 			}
 		}
+
+		if region.Attributes.Features != nil {
+			list, d := types.ListValueFrom(ctx, types.StringType, region.Attributes.Features)
+			diags.Append(d...)
+			if !diags.HasError() {
+				data.Features = list
+			}
+		}
 	}
+
+	return diags
 }

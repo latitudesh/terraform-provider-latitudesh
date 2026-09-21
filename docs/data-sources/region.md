@@ -31,3 +31,4 @@ data "latitudesh_region" "region" {
 - `city` (String) City name
 - `country` (String) Country name
 - `country_code` (String) Country code
+- `features` (List of String) Location capabilities available at this region (e.g. `public_network`, `elastic_ip_bgp`).
