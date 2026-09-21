@@ -11,6 +11,8 @@ Creates and manages a persistent NVMe-TCP block storage volume on [Latitude.sh](
 
 There is no update endpoint for volumes, so changing any attribute forces a new resource. Mapping the volume to a server or mounting it to a client are separate lifecycle operations not managed by this resource.
 
+Destroying a volume returns as soon as the volume itself is gone, but its storage VLAN and IPs are released a few seconds later. Destroying the volume and its project in the same run therefore waits for that teardown before the project can be deleted.
+
 ## Example Usage
 
 {{ tffile (printf "examples/%s.tf" .Name) }}

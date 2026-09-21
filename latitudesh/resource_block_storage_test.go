@@ -42,10 +42,18 @@ type mockBlockStorageAPI struct {
 	mu      sync.Mutex
 	volumes map[string]*mockVolume
 	nextID  int
+
+	// hideFirstGets makes the first N single-volume GETs of each volume answer
+	// 404, modelling an API that accepts a create before the volume is
+	// readable. Delayed *removal* on delete is deliberately not modelled: the
+	// provider does not poll after DELETE, and whether it needs to is an open
+	// question only the live suite can settle.
+	hideFirstGets int
+	getMisses     map[string]int
 }
 
 func newMockBlockStorageAPI() *mockBlockStorageAPI {
-	return &mockBlockStorageAPI{volumes: map[string]*mockVolume{}}
+	return &mockBlockStorageAPI{volumes: map[string]*mockVolume{}, getMisses: map[string]int{}}
 }
 
 func (m *mockBlockStorageAPI) envelope(v *mockVolume) map[string]any {
@@ -117,6 +125,13 @@ func (m *mockBlockStorageAPI) handler(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/storage/volumes/"):
 		id := strings.TrimPrefix(r.URL.Path, "/storage/volumes/")
 		v, ok := m.volumes[id]
+		if ok && m.getMisses[id] < m.hideFirstGets {
+			m.getMisses[id]++
+			w.Header().Set("Content-Type", "application/vnd.api+json")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"errors":[{"status":"404"}]}`))
+			return
+		}
 		if !ok || v.deleted {
 			w.Header().Set("Content-Type", "application/vnd.api+json")
 			w.WriteHeader(http.StatusNotFound)
@@ -273,6 +288,34 @@ func TestBlockStorage_SizeChangeForcesReplacement(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "size_in_gb", "100"),
 					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "namespace_id", "ns_mock_2"),
+				),
+			},
+		},
+	})
+}
+
+// A volume that is not readable yet must still land in state from the create
+// response. Nulling the id there would make Terraform reject the apply as an
+// inconsistent result and leave a live, billing volume outside state.
+func TestBlockStorage_CreateSurvivesUnreadableVolume(t *testing.T) {
+	mock := newMockBlockStorageAPI()
+	mock.hideFirstGets = 1
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMockBlockStorageDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccBlockStorageConfig("test-project", "app-data", "ASH", 100),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet("latitudesh_block_storage.test_item", "id"),
+					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "name", "app-data"),
+					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "size_in_gb", "100"),
+					// Filled from the create response, not the read-back.
+					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "namespace_id", "ns_mock_1"),
 				),
 			},
 		},

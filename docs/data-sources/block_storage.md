@@ -41,8 +41,8 @@ data "latitudesh_block_storage" "by_name" {
 ### Optional
 
 - `id` (String) Volume identifier to look up.
-- `name` (String) Volume name to look up.
-- `project` (String) Project (ID or slug) to narrow a `name` lookup to (ignored when `id` is set). Also returned as the volume's owning project when looking up by `id`.
+- `name` (String) Volume name to look up. Names are not guaranteed unique; the first match wins, so narrow the search with `project` if the lookup is ambiguous.
+- `project` (String) Project (ID or slug) to narrow a `name` lookup to. Ignored when `id` is set: an `id` lookup always reports the owning project the API returns, whatever was configured here.
 
 ### Read-Only
 

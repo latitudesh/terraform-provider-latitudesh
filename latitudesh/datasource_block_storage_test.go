@@ -57,6 +57,49 @@ func TestBlockStorageDataSource_ByID(t *testing.T) {
 	})
 }
 
+// An `id` lookup must report the owning project the API returns, not whatever
+// `project` the config happens to carry: the value is a filter for the `name`
+// branch only, and echoing it back would hand callers a project the volume
+// does not belong to.
+func TestBlockStorageDataSource_ByIDReportsOwningProject(t *testing.T) {
+	mock := newMockBlockStorageAPI()
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	// The mock answers with project {id: <configured>, slug: "test-project"},
+	// so the owner's label is the slug either way.
+	config := `
+provider "latitudesh" {
+  auth_token = "mock-token"
+}
+
+resource "latitudesh_block_storage" "source" {
+  project    = "proj_abc"
+  name       = "app-data"
+  region     = "ASH"
+  size_in_gb = 100
+}
+
+data "latitudesh_block_storage" "by_id" {
+  id      = latitudesh_block_storage.source.id
+  project = "not-the-owning-project"
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.TestCheckResourceAttr(
+					"data.latitudesh_block_storage.by_id", "project", "test-project",
+				),
+			},
+		},
+	})
+}
+
 func testAccBlockStorageDataSourceByNameConfig(project, name, region string, sizeInGb int) string {
 	return fmt.Sprintf(`
 provider "latitudesh" {

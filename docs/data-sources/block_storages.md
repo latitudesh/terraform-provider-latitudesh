@@ -14,7 +14,7 @@ List [Latitude.sh](https://latitude.sh/) block storage volumes, optionally scope
 ```terraform
 # Every block storage volume in one project, newest first.
 data "latitudesh_block_storages" "by_project" {
-  project = latitudesh_project.block_storage.id
+  project = "proj_..." # project ID or slug; omit to list every volume in the team
 }
 
 output "latest_volume_id" {

@@ -101,7 +101,14 @@ groups:
       `facility` (only the site slug is round-tripped, same as
       latitudesh_object_storage's `region`). The plural data source's `volumes[].created_at`
       is the one exception, kept solely to order results newest-first as
-      latitudesh_virtual_machine_backups does.
+      latitudesh_virtual_machine_backups does. `namespace_id` breaks its own
+      swagger type: the live API emits it as a number on volumes provisioned
+      through the initiators/mount flow, and since one volume fails the whole
+      response body that takes down every list for the project, so
+      blockStorageSanitizerTransport coerces it to a string — same shape of
+      workaround as object storage's `retention_period`. Volumes created
+      through the current flow return `namespace_id` and `connector_id` as
+      null and carry mapping state under `block` instead.
 
   ElasticIps:
     implemented_by: [latitudesh_elastic_ip, latitudesh_elastic_ip_bgp]

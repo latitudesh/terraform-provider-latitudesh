@@ -161,9 +161,32 @@ func (r *BlockStorageResource) Create(ctx context.Context, req resource.CreateRe
 	data.ID = types.StringValue(*result.Object.Data.ID)
 	data.Project = types.StringValue(project)
 
-	r.readBlockStorageInto(ctx, &data, &resp.Diagnostics)
+	// The create response already carries the whole volume, so map it first:
+	// a read-back that has not caught up yet must not be able to drop what we
+	// already know about a volume that exists and is billing.
+	mapBlockStorageVolume(&data, result.Object.Data)
+
+	// Refresh from GET so anything the API fills in after the create lands in
+	// state. A 404 here only means the volume is not readable yet — keeping
+	// the create response is what stops that from writing a null id (which
+	// Terraform rejects as an inconsistent result, leaving the volume out of
+	// state entirely and leaking it).
+	refreshed := data
+	found := r.readBlockStorageInto(ctx, &refreshed, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+	if found {
+		data = refreshed
+	} else {
+		// Purely-computed attributes stay unknown if the create response had
+		// no `attributes` at all, and unknowns cannot be written to state.
+		if data.NamespaceID.IsUnknown() {
+			data.NamespaceID = types.StringNull()
+		}
+		if data.ConnectorID.IsUnknown() {
+			data.ConnectorID = types.StringNull()
+		}
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -177,12 +200,12 @@ func (r *BlockStorageResource) Read(ctx context.Context, req resource.ReadReques
 		return
 	}
 
-	r.readBlockStorageInto(ctx, &data, &resp.Diagnostics)
+	found := r.readBlockStorageInto(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if data.ID.IsNull() {
+	if !found {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -202,8 +225,13 @@ func (r *BlockStorageResource) Update(ctx context.Context, req resource.UpdateRe
 		return
 	}
 
-	r.readBlockStorageInto(ctx, &data, &resp.Diagnostics)
+	found := r.readBlockStorageInto(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	if !found {
+		resp.Diagnostics.AddError("Block storage volume not found",
+			"The volume no longer exists. Remove it from state (or refresh) and re-apply to recreate it.")
 		return
 	}
 
@@ -246,25 +274,30 @@ func blockStorageNotFound(err error) bool {
 	return false
 }
 
-func (r *BlockStorageResource) readBlockStorageInto(ctx context.Context, data *BlockStorageResourceModel, diags *diag.Diagnostics) {
+// readBlockStorageInto maps a fresh read of the volume into data, reporting
+// whether the volume was found. A miss (404 or an empty body) nulls the id so
+// callers that write data straight to state cannot keep a dangling resource,
+// but the boolean is what callers should branch on.
+func (r *BlockStorageResource) readBlockStorageInto(ctx context.Context, data *BlockStorageResourceModel, diags *diag.Diagnostics) bool {
 	id := data.ID.ValueString()
 
 	result, err := r.client.BlockStorage.GetStorageVolume(ctx, id)
 	if err != nil {
 		if blockStorageNotFound(err) {
 			data.ID = types.StringNull()
-			return
+			return false
 		}
 		diags.AddError("Client Error", "Unable to read block storage volume, got error: "+err.Error())
-		return
+		return false
 	}
 
 	if result.Object == nil || result.Object.Data == nil {
 		data.ID = types.StringNull()
-		return
+		return false
 	}
 
 	mapBlockStorageVolume(data, result.Object.Data)
+	return true
 }
 
 // mapBlockStorageVolume maps one components.VolumeData into the resource

@@ -75,7 +75,7 @@ func (d *BlockStorageDataSource) Schema(ctx context.Context, req datasource.Sche
 				},
 			},
 			"name": schema.StringAttribute{
-				MarkdownDescription: "Volume name to look up.",
+				MarkdownDescription: "Volume name to look up. Names are not guaranteed unique; the first match wins, so narrow the search with `project` if the lookup is ambiguous.",
 				Optional:            true,
 				Computed:            true,
 				Validators: []validator.String{
@@ -87,7 +87,7 @@ func (d *BlockStorageDataSource) Schema(ctx context.Context, req datasource.Sche
 				},
 			},
 			"project": schema.StringAttribute{
-				MarkdownDescription: "Project (ID or slug) to narrow a `name` lookup to (ignored when `id` is set). Also returned as the volume's owning project when looking up by `id`.",
+				MarkdownDescription: "Project (ID or slug) to narrow a `name` lookup to. Ignored when `id` is set: an `id` lookup always reports the owning project the API returns, whatever was configured here.",
 				Optional:            true,
 				Computed:            true,
 				Validators: []validator.String{
@@ -161,9 +161,17 @@ func (d *BlockStorageDataSource) Read(ctx context.Context, req datasource.ReadRe
 	}
 
 	model := BlockStorageResourceModel{
-		ID:      data.ID,
-		Project: data.Project,
-		Name:    data.Name,
+		ID:   data.ID,
+		Name: data.Name,
+	}
+	// mapBlockStorageVolume only backfills `project` when the model has
+	// nothing, which is what the resource needs (a configured slug must not
+	// read as drift on an attribute that forces replacement). A data source
+	// has no such constraint and must report what the API owns, so the
+	// configured value is only carried over on the `name` branch, where it
+	// scoped the lookup and therefore already matches.
+	if data.ID.IsNull() {
+		model.Project = data.Project
 	}
 	mapBlockStorageVolume(&model, volume)
 
@@ -201,7 +209,8 @@ func (d *BlockStorageDataSource) getByID(ctx context.Context, id string) (*compo
 
 // findByName lists volumes (optionally scoped to project, using the SDK's
 // FilterProject query parameter) and filters in memory by name: the API has
-// no filter-by-name query parameter.
+// no filter-by-name query parameter. The first match wins, matching
+// latitudesh_object_storage's own name lookup.
 func (d *BlockStorageDataSource) findByName(ctx context.Context, name, project string) (*components.VolumeData, error) {
 	var filterProject *string
 	if project != "" {
