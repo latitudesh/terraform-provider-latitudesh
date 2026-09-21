@@ -390,6 +390,7 @@ for kind in "${kinds[@]}"; do
 	resource) field="resources" registered_in="Resources()" ;;
 	datasource) field="datasources" registered_in="DataSources()" ;;
 	action) field="actions" registered_in="Actions()" ;;
+	ephemeral) field="ephemerals" registered_in="EphemeralResources()" ;;
 	esac
 	echo "$shipped" | jq -e --arg k "$field" --arg t "$TYPE_NAME" '.[$k] | index($t) != null' >/dev/null ||
 		fail "requested kind $kind: $TYPE_NAME is not registered in provider.go ($registered_in)"

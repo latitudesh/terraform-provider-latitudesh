@@ -1,0 +1,73 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Provisions an LKS (Latitude Kubernetes Service) cluster: the control plane **and its first node pool**, in one resource. Apply does not return until both are up and `status` is `ready`, so a create that succeeds leaves a cluster you can use.
+
+## `default_node_pool` is required
+
+A cluster with no node pool never finishes converging: `status` stays `provisioning` permanently, not slowly. And `POST /lks/clusters` takes no pool inline, so the pool is necessarily a second call.
+
+That combination rules out expressing the first pool as a separate resource: Terraform would not start it until this resource finished creating, so waiting for `ready` here would deadlock — the cluster waiting for a pool waiting for the cluster. Folding it into the schema as `default_node_pool` is what makes the requirement enforceable at plan time *and* lets create legitimately wait for a working cluster. It is the same split [`azurerm_kubernetes_cluster`](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/kubernetes_cluster) and [`digitalocean_kubernetes_cluster`](https://registry.terraform.io/providers/digitalocean/digitalocean/latest/docs/resources/kubernetes_cluster) arrived at.
+
+Every pool **beyond the first** is a [`latitudesh_lks_node_pool`](lks_node_pool.md), with its own lifecycle, timeouts and import. This resource manages only the pool whose `id` it recorded in `default_node_pool`, and ignores any other pool in the cluster — so the two never fight over the same object.
+
+Changing `plan` or `max_pods_per_node` inside the block replaces **the pool, not the cluster**: a new pool is built before the old one is removed, so the cluster is never left without one. That is the one place this deliberately improves on `azurerm_kubernetes_cluster`, where editing `default_node_pool` rebuilds the whole cluster.
+
+## Updating
+
+`project`, `site` and `network` have no update endpoint and force a new resource if changed. `name`, `description` and `kubernetes_version` update in place; setting a newer `kubernetes_version` consents to an in-place control-plane upgrade, and apply does not return until the new version is live. Lowering `kubernetes_version` is rejected at plan time — the platform allows no in-place downgrade (422 `DOWNGRADE_NOT_ALLOWED`), so the plan fails immediately instead of the apply an hour in.
+
+Inside `default_node_pool`, `node_count` (a scale), `name`, `description`, `kubernetes_version`, `labels` and `taints` update in place. A scale and an upgrade are issued as two sequential requests, because the API rejects them in one.
+
+Leave `default_node_pool.kubernetes_version` unset and the pool **tracks the cluster's version**: a control-plane upgrade upgrades this pool too, in the same apply, control plane first (so `VERSION_SKEW` cannot happen). Set it explicitly to pin the pool and opt out. Either way a version change recycles the pool's nodes.
+
+Apply waits until the platform reports no operation in progress, rather than until `status` equals a particular word — so a status this provider has never seen still ends the wait instead of hanging it. A cluster that is `paused`, `deleting` or `deleted` fails immediately, since waiting cannot reach ready from there.
+
+`default_node_pool` rejects `NoSchedule` and `NoExecute` taints. The cluster's own system workloads have nowhere to run but this pool, so a hard taint keeps them from scheduling and the cluster never leaves `provisioning` — the API accepts it, the apply reports success, and then the readiness wait times out on a cluster that was never going to converge. Use `PreferNoSchedule`, or put the taint on a separate [`latitudesh_lks_node_pool`](lks_node_pool.md), which is the usual way to reserve a pool for specific workloads.
+
+`description` — on the cluster and on the pool alike — cannot be **removed** once set: the API declares it `filled`, so an empty string is rejected and a null is ignored. Removing it from configuration leaves a diff that cannot converge; set a new value instead.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+You can import an LKS cluster resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_lks` resource can be imported by specifying the cluster ID:
+
+```sh
+terraform import latitudesh_lks.example <LKS_CLUSTER_ID>
+```
+
+Nothing marks a pool as "the default" server-side, so import adopts the **first** pool the cluster reports as `default_node_pool` and leaves the rest to be imported as [`latitudesh_lks_node_pool`](lks_node_pool.md). Check the result before the next apply. A cluster with no pool at all imports with a warning — `default_node_pool` is required, so the next apply creates one.
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration.
+
+```hcl
+import {
+  to = latitudesh_lks.example
+  id = "<LKS_CLUSTER_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_lks.tf
+```
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.

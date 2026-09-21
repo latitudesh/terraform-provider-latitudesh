@@ -134,7 +134,9 @@ func (p *latitudeshProvider) Configure(ctx context.Context, req provider.Configu
 	}
 	httpClient := &http.Client{
 		Transport: &userAgentTransport{
-			base:      &objectStorageSanitizerTransport{base: baseTransport},
+			base: &lksClearCollectionsTransport{
+				base: &objectStorageSanitizerTransport{base: baseTransport},
+			},
 			userAgent: userAgent,
 		},
 		Timeout:       baseClient.Timeout,
@@ -193,6 +195,8 @@ func (p *latitudeshProvider) Resources(ctx context.Context) []func() resource.Re
 		NewObjectStorageAccessKeyResource,
 		NewVirtualMachineBackupResource,
 		NewPublicNetworkResource,
+		NewLksResource,
+		NewLksNodePoolResource,
 	}
 }
 
@@ -213,6 +217,12 @@ func (p *latitudeshProvider) DataSources(ctx context.Context) []func() datasourc
 		NewTagDataSource,
 		NewVirtualMachineBackupDataSource,
 		NewVirtualMachineBackupsDataSource,
+		NewLksDataSource,
+		NewLksClustersDataSource,
+		NewLksSitesDataSource,
+		NewLksVersionsDataSource,
+		NewLksPlansDataSource,
+		NewLksNodePoolsDataSource,
 	}
 }
 
@@ -222,6 +232,7 @@ func (p *latitudeshProvider) DataSources(ctx context.Context) []func() datasourc
 func (p *latitudeshProvider) EphemeralResources(ctx context.Context) []func() ephemeral.EphemeralResource {
 	return []func() ephemeral.EphemeralResource{
 		NewObjectStorageAccessKeyEphemeral,
+		NewLksKubeconfigEphemeral,
 	}
 }
 

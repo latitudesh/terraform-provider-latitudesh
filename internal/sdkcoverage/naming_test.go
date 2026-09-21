@@ -24,6 +24,8 @@ func TestSuggestTypeName(t *testing.T) {
 		{"IPAddresses", "latitudesh_ip_address"},
 		{"KubernetesClusters", "latitudesh_kubernetes_cluster"},
 		{"Licenses", "latitudesh_license"},
+		// LKS is an acronym: the trailing s is "Service", not a plural marker.
+		{"Lks", "latitudesh_lks"},
 		{"ManagedDatabases", "latitudesh_managed_database"},
 		{"ObjectStorage", "latitudesh_object_storage"},
 		{"OperatingSystems", "latitudesh_operating_system"},

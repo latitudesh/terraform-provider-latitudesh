@@ -1,0 +1,62 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+An **additional** node pool for an LKS (Latitude Kubernetes Service) cluster.
+
+The *first* pool is not created here: it is required and lives inside [`latitudesh_lks`](lks.md) as `default_node_pool`, because a cluster with no pool never leaves `provisioning` and the cluster create call cannot take one inline. See that resource for why. Use this one for every pool beyond the first — a GPU pool, a pool on a different plan, a pool you want to scale or destroy without touching the cluster.
+
+`latitudesh_lks` manages only the pool recorded in its `default_node_pool`, so the two resources never contend for the same object.
+
+Two lookups feed a pool: [`latitudesh_lks_plans`](../data-sources/lks_plans.md) for `plan` and [`latitudesh_lks_versions`](../data-sources/lks_versions.md) for `kubernetes_version`. A pool has no site of its own — it is built wherever its cluster is — so filter the plan catalog by the **cluster's** `site`: a plan that is merely *available* there is not enough, it has to be in `stock`, or the pool has nothing to build on.
+
+`cluster_id`, `plan` and `max_pods_per_node` force a new resource; the API offers no update for the first two and rejects a PATCH carrying the third with 422. Everything else updates in place, including `node_count`, which is how a pool scales.
+
+## `kubernetes_version` tracks the cluster unless you pin it
+
+Leave `kubernetes_version` unset and the pool follows the cluster's control-plane version: upgrade `latitudesh_lks` and this pool upgrades to match. Because a standalone pool only knows its `cluster_id`, it learns the new version by reading the cluster during planning — so the follow lands on the **next** apply after the control plane is actually on the new version, not the same one that bumps it. Set `kubernetes_version` explicitly to pin the pool to a single version and opt out of tracking. Following recycles the pool's nodes, the same as any version change.
+
+Two API rules worth knowing before you meet them as a 422:
+
+* `kubernetes_version` must never be **newer** than the cluster's control plane (`VERSION_SKEW`). Upgrade `latitudesh_lks` first, then the pool — which tracking does for you.
+* Label and taint keys under `kubernetes.io`, `k8s.io`, `cluster.x-k8s.io`, `lks.latitude.sh` or their subdomains are reserved, and each collection is capped at 50 entries. This provider rejects both at plan time rather than letting the apply fail. Key and value *format* rules (63-character names, DNS-label prefixes) are still only enforced server-side.
+
+`labels` and `taints` are a declarative replace, not a merge: what you write is what the pool ends up with, and removing them all clears them.
+
+Unlike [`latitudesh_lks`](lks.md)'s `default_node_pool`, this resource accepts `NoSchedule` and `NoExecute` — reserving a pool for specific workloads is the usual reason to add one. The restriction exists only on the default pool, which has to stay schedulable for the cluster's own components.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+A node pool is addressed by its cluster **and** its own ID, so the import ID is both, separated by a colon. A bare pool ID is not enough — the API has no endpoint that reads a pool without its cluster.
+
+**CLI Import**
+
+```sh
+terraform import latitudesh_lks_node_pool.example <LKS_CLUSTER_ID>:<NODE_POOL_ID>
+```
+
+**Import Block (Experimental)**
+
+```hcl
+import {
+  to = latitudesh_lks_node_pool.example
+  id = "<LKS_CLUSTER_ID>:<NODE_POOL_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_lks_node_pool.tf
+```
