@@ -869,9 +869,15 @@ func (r *LksResource) Create(ctx context.Context, req resource.CreateRequest, re
 		return
 	}
 
+	// One absolute deadline for every wait in this create. The timeout is a
+	// budget for the whole operation — which is what the schema promises — not
+	// an allowance each sequential wait starts afresh, which would let the
+	// default 30 minutes run for 90 before failing.
+	deadline := time.Now().Add(createTimeout)
+
 	// The cluster record has to be queryable before anything can be hung off
 	// it: the POST answers before the GET necessarily succeeds.
-	r.waitForClusterExists(ctx, id, createTimeout, &resp.Diagnostics)
+	r.waitForClusterExists(ctx, id, deadline, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -904,14 +910,14 @@ func (r *LksResource) Create(ctx context.Context, req resource.CreateRequest, re
 	// pool has nodes, so this order reports the slow part as the slow part.
 	// Neither wait mutates the model, and both objects are already in state
 	// above, so a failure here needs no further write to stay recoverable.
-	lksWaitForNodesReady(ctx, r.client, id, poolID, pool.NodeCount.ValueInt64(), createTimeout, &resp.Diagnostics)
+	lksWaitForNodesReady(ctx, r.client, id, poolID, pool.NodeCount.ValueInt64(), deadline, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	// Now valid, unlike the pool-less design: the pool exists, so "ready" is
 	// reachable rather than a deadlock.
-	r.waitForClusterReady(ctx, id, "", createTimeout, &resp.Diagnostics)
+	r.waitForClusterReady(ctx, id, "", deadline, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -990,6 +996,10 @@ func (r *LksResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		return
 	}
 
+	// Shared by the control-plane wait and everything reconcileDefaultNodePool
+	// does after it — see the same note in Create.
+	deadline := time.Now().Add(updateTimeout)
+
 	// A kubernetes_version change is asynchronous *and* lazy: the platform
 	// accepts the PATCH while the cluster is still "ready" on the old version
 	// and only flips to "upgrading" a moment later. Waiting on status alone
@@ -1004,12 +1014,12 @@ func (r *LksResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		wantVersion = data.KubernetesVersion.ValueString()
 	}
 
-	r.waitForClusterReady(ctx, id, wantVersion, updateTimeout, &resp.Diagnostics)
+	r.waitForClusterReady(ctx, id, wantVersion, deadline, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	r.reconcileDefaultNodePool(ctx, id, &data, state, updateTimeout, &resp.Diagnostics)
+	r.reconcileDefaultNodePool(ctx, id, &data, state, deadline, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -1030,7 +1040,7 @@ func (r *LksResource) Update(ctx context.Context, req resource.UpdateRequest, re
 // BEFORE the old one is torn down, so the cluster is never momentarily without
 // a pool: it is the same allocate-then-release ordering resource_elastic_ip_bgp
 // uses to avoid orphaning.
-func (r *LksResource) reconcileDefaultNodePool(ctx context.Context, clusterID string, data *LksResourceModel, state LksResourceModel, timeout time.Duration, diags *diag.Diagnostics) {
+func (r *LksResource) reconcileDefaultNodePool(ctx context.Context, clusterID string, data *LksResourceModel, state LksResourceModel, deadline time.Time, diags *diag.Diagnostics) {
 	planned, d := lksDefaultNodePoolFromObject(ctx, data.DefaultNodePool)
 	diags.Append(d...)
 	current, d := lksDefaultNodePoolFromObject(ctx, state.DefaultNodePool)
@@ -1070,7 +1080,7 @@ func (r *LksResource) reconcileDefaultNodePool(ctx context.Context, clusterID st
 			return
 		}
 
-		lksWaitForNodesReady(ctx, r.client, clusterID, newID, planned.NodeCount.ValueInt64(), timeout, diags)
+		lksWaitForNodesReady(ctx, r.client, clusterID, newID, planned.NodeCount.ValueInt64(), deadline, diags)
 		if diags.HasError() {
 			return
 		}
@@ -1080,7 +1090,7 @@ func (r *LksResource) reconcileDefaultNodePool(ctx context.Context, clusterID st
 				diags.AddError("Client Error", "Replaced the default node pool but could not remove the old one ("+oldID+"): "+err.Error())
 				return
 			}
-			lksWaitForNodePoolDeleted(ctx, r.client, clusterID, oldID, timeout, diags)
+			lksWaitForNodePoolDeleted(ctx, r.client, clusterID, oldID, deadline, diags)
 		}
 		return
 	}
@@ -1099,7 +1109,7 @@ func (r *LksResource) reconcileDefaultNodePool(ctx context.Context, clusterID st
 		CountChanged:   !planned.NodeCount.Equal(current.NodeCount),
 		Version:        planned.KubernetesVersion,
 		VersionChanged: changed(planned.KubernetesVersion, current.KubernetesVersion),
-		Timeout:        timeout,
+		Deadline:       deadline,
 	}, diags)
 	if diags.HasError() {
 		return
@@ -1141,7 +1151,7 @@ func (r *LksResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 		return
 	}
 
-	r.waitForClusterDeleted(ctx, id, deleteTimeout, &resp.Diagnostics)
+	r.waitForClusterDeleted(ctx, id, time.Now().Add(deleteTimeout), &resp.Diagnostics)
 }
 
 func (r *LksResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
@@ -1245,13 +1255,12 @@ func lksSettled(status string) (done bool, hopeless bool) {
 // answers before the record is necessarily queryable, so a 404 (or a 5xx) in
 // the first moments is transient, exactly as it is for the readiness poll.
 //
-// The caller's create timeout is the ceiling, but this normally returns on the
+// The create's deadline is the ceiling, but this normally returns on the
 // first or second poll: it is waiting for a record to appear, not for hardware.
-func (r *LksResource) waitForClusterExists(ctx context.Context, id string, timeout time.Duration, diags *diag.Diagnostics) {
+func (r *LksResource) waitForClusterExists(ctx context.Context, id string, deadline time.Time, diags *diag.Diagnostics) {
 	const maxConsecutiveErrors = 5
 	pollInterval := lksReadyPollInterval
 
-	deadline := time.Now().Add(timeout)
 	consecutiveErrors := 0
 
 	for time.Now().Before(deadline) {
@@ -1280,7 +1289,7 @@ func (r *LksResource) waitForClusterExists(ctx context.Context, id string, timeo
 
 	diags.AddError(
 		"Timeout waiting for LKS cluster",
-		fmt.Sprintf("LKS cluster %q was created but never became readable within %s.", id, timeout),
+		fmt.Sprintf("LKS cluster %q was created but never became readable before the create timeout expired.", id),
 	)
 }
 
@@ -1295,11 +1304,13 @@ func (r *LksResource) waitForClusterExists(ctx context.Context, id string, timeo
 // in-place upgrade passes the requested version, because the platform leaves
 // the cluster "ready" on the old version for a moment after accepting the
 // PATCH and a status-only check would return on that pre-upgrade read.
-func (r *LksResource) waitForClusterReady(ctx context.Context, id, wantVersion string, timeout time.Duration, diags *diag.Diagnostics) {
+//
+// deadline is absolute and shared with every other wait of the same Create or
+// Update, so the configured timeout bounds the operation, not each wait.
+func (r *LksResource) waitForClusterReady(ctx context.Context, id, wantVersion string, deadline time.Time, diags *diag.Diagnostics) {
 	const maxConsecutiveErrors = 5
 	pollInterval := lksReadyPollInterval
 
-	deadline := time.Now().Add(timeout)
 	lastStatus := ""
 	lastVersion := ""
 	consecutiveErrors := 0
@@ -1359,14 +1370,14 @@ func (r *LksResource) waitForClusterReady(ctx context.Context, id, wantVersion s
 	if wantVersion != "" {
 		diags.AddError(
 			"Timeout waiting for LKS cluster upgrade",
-			fmt.Sprintf("LKS cluster %q did not reach status \"ready\" on kubernetes_version %q within %s (last status: %q, last version: %q).", id, wantVersion, timeout, lastStatus, lastVersion),
+			fmt.Sprintf("LKS cluster %q did not reach status \"ready\" on kubernetes_version %q before the timeout expired (last status: %q, last version: %q).", id, wantVersion, lastStatus, lastVersion),
 		)
 		return
 	}
 
 	diags.AddError(
 		"Timeout waiting for LKS cluster",
-		fmt.Sprintf("LKS cluster %q did not reach status \"ready\" within %s (last status: %q).", id, timeout, lastStatus),
+		fmt.Sprintf("LKS cluster %q did not reach status \"ready\" before the timeout expired (last status: %q).", id, lastStatus),
 	)
 }
 
@@ -1374,11 +1385,10 @@ func (r *LksResource) waitForClusterReady(ctx context.Context, id, wantVersion s
 // "deleted". Which of the two actually happens is not confirmed live (see
 // handoff); both are treated as terminal so destroy does not spin until the
 // timeout either way.
-func (r *LksResource) waitForClusterDeleted(ctx context.Context, id string, timeout time.Duration, diags *diag.Diagnostics) {
+func (r *LksResource) waitForClusterDeleted(ctx context.Context, id string, deadline time.Time, diags *diag.Diagnostics) {
 	const maxConsecutiveErrors = 5
 	pollInterval := lksDeletePollInterval
 
-	deadline := time.Now().Add(timeout)
 	consecutiveErrors := 0
 
 	for time.Now().Before(deadline) {
@@ -1415,7 +1425,7 @@ func (r *LksResource) waitForClusterDeleted(ctx context.Context, id string, time
 
 	diags.AddError(
 		"Timeout waiting for LKS cluster deletion",
-		fmt.Sprintf("LKS cluster %q was not removed or marked deleted after %s.", id, timeout),
+		fmt.Sprintf("LKS cluster %q was not removed or marked deleted before the delete timeout expired.", id),
 	)
 }
 

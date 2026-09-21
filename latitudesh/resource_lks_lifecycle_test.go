@@ -130,7 +130,7 @@ func TestWaitForClusterReady_ReadyImmediately(t *testing.T) {
 	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "ready"})
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Now().Add(time.Second), &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected no error when the cluster is already ready, got: %v", diags.Errors())
@@ -148,7 +148,7 @@ func TestWaitForClusterReady_ProvisioningThenReady(t *testing.T) {
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, "", 5*time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Now().Add(5*time.Second), &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected success once the cluster reaches ready, got: %v", diags.Errors())
@@ -165,7 +165,7 @@ func TestWaitForClusterReady_TransientNotFoundThenReady(t *testing.T) {
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, "", 5*time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Now().Add(5*time.Second), &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected a 404 right after create to be treated as transient, got: %v", diags.Errors())
@@ -182,7 +182,7 @@ func TestWaitForClusterReady_TransientServerErrorThenReady(t *testing.T) {
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, "", 5*time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Now().Add(5*time.Second), &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected a 502 to be treated as transient, got: %v", diags.Errors())
@@ -199,7 +199,7 @@ func TestWaitForClusterReady_FatalErrorStopsImmediately(t *testing.T) {
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, "", 5*time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Now().Add(5*time.Second), &diags)
 
 	if !diags.HasError() {
 		t.Fatal("expected a 422 to fail immediately instead of retrying")
@@ -219,7 +219,7 @@ func TestWaitForClusterReady_ConsecutiveErrorCeiling(t *testing.T) {
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Minute, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Now().Add(time.Minute), &diags)
 
 	if !diags.HasError() {
 		t.Fatal("expected the consecutive-error ceiling to fail the wait")
@@ -233,7 +233,7 @@ func TestWaitForClusterReady_Timeout(t *testing.T) {
 	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "provisioning"})
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, "", 30*time.Millisecond, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Now().Add(30*time.Millisecond), &diags)
 
 	if !diags.HasError() {
 		t.Fatal("expected a timeout error when the cluster never reaches ready")
@@ -255,7 +255,7 @@ func TestWaitForClusterReady_UpgradeLagsBehindStatus(t *testing.T) {
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, "1.32.0", 5*time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "1.32.0", time.Now().Add(5*time.Second), &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected the wait to succeed once the upgrade lands, got: %v", diags.Errors())
@@ -275,7 +275,7 @@ func TestWaitForClusterReady_NoWantedVersionReturnsOnFirstReady(t *testing.T) {
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, "", 5*time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Now().Add(5*time.Second), &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected no error, got: %v", diags.Errors())
@@ -291,7 +291,7 @@ func TestWaitForClusterReady_UpgradeNeverLandsTimesOut(t *testing.T) {
 	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "ready", version: "1.31.0"})
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, "1.32.0", 30*time.Millisecond, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "1.32.0", time.Now().Add(30*time.Millisecond), &diags)
 
 	if !diags.HasError() {
 		t.Fatal("expected a timeout when the requested version never lands")
@@ -313,7 +313,7 @@ func TestWaitForClusterDeleted_NotFound(t *testing.T) {
 	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 404})
 
 	var diags diag.Diagnostics
-	r.waitForClusterDeleted(context.Background(), mockLksClusterID, time.Second, &diags)
+	r.waitForClusterDeleted(context.Background(), mockLksClusterID, time.Now().Add(time.Second), &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected no error once the cluster 404s, got: %v", diags.Errors())
@@ -330,7 +330,7 @@ func TestWaitForClusterDeleted_StatusDeleted(t *testing.T) {
 	)
 
 	var diags diag.Diagnostics
-	r.waitForClusterDeleted(context.Background(), mockLksClusterID, 5*time.Second, &diags)
+	r.waitForClusterDeleted(context.Background(), mockLksClusterID, time.Now().Add(5*time.Second), &diags)
 
 	if diags.HasError() {
 		t.Fatalf("expected status \"deleted\" to be treated as terminal, got: %v", diags.Errors())
@@ -344,7 +344,7 @@ func TestWaitForClusterDeleted_Timeout(t *testing.T) {
 	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "deleting"})
 
 	var diags diag.Diagnostics
-	r.waitForClusterDeleted(context.Background(), mockLksClusterID, 30*time.Millisecond, &diags)
+	r.waitForClusterDeleted(context.Background(), mockLksClusterID, time.Now().Add(30*time.Millisecond), &diags)
 
 	if !diags.HasError() {
 		t.Fatal("expected a timeout error when the cluster is never removed or marked deleted")
@@ -404,7 +404,7 @@ func TestWaitForClusterReady_PausedFailsFast(t *testing.T) {
 	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "paused"})
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Minute, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Now().Add(time.Minute), &diags)
 
 	if !diags.HasError() {
 		t.Fatal("expected a paused cluster to fail immediately")
@@ -421,12 +421,56 @@ func TestWaitForClusterReady_UnknownTerminalStateEndsTheWait(t *testing.T) {
 	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "active"})
 
 	var diags diag.Diagnostics
-	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Second, &diags)
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", time.Now().Add(time.Second), &diags)
 
 	if diags.HasError() {
 		t.Fatalf("an unrecognized settled state must end the wait, got: %v", diags.Errors())
 	}
 	if got := mock.gets(); got != 1 {
 		t.Fatalf("expected exactly 1 poll, got %d", got)
+	}
+}
+
+// --- one deadline per operation ----------------------------------------------
+
+// Every wait inside a single Create or Update takes the SAME absolute deadline.
+// Each used to start its own clock from the configured duration, so the
+// documented budget quietly multiplied: Create's three sequential waits could
+// run the default 30 minutes three times over before failing, and an Update
+// could spend it once on the control plane and again on the pool. A deadline
+// one wait has spent is spent for every wait after it — no further polls,
+// straight to the timeout diagnostic.
+func TestWaits_ShareOneDeadlinePerOperation(t *testing.T) {
+	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "provisioning"})
+
+	deadline := time.Now().Add(50 * time.Millisecond)
+
+	// The record is readable at once, so this returns on its first poll.
+	var diags diag.Diagnostics
+	r.waitForClusterExists(context.Background(), mockLksClusterID, deadline, &diags)
+	if diags.HasError() {
+		t.Fatalf("waitForClusterExists: %v", diags.Errors())
+	}
+
+	// This one polls "provisioning" until the deadline passes.
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", deadline, &diags)
+	if !diags.HasError() {
+		t.Fatal("expected the readiness wait to time out: the mock never leaves provisioning")
+	}
+	if summary := diags.Errors()[0].Summary(); summary != "Timeout waiting for LKS cluster" {
+		t.Fatalf("expected the timeout diagnostic, got %q", summary)
+	}
+
+	// The deadline is gone. A later wait in the same operation must say so
+	// immediately, without a single further GET — a fresh 50ms here is
+	// exactly the multiplication this test exists to prevent.
+	polls := mock.gets()
+	var later diag.Diagnostics
+	r.waitForClusterReady(context.Background(), mockLksClusterID, "", deadline, &later)
+	if !later.HasError() {
+		t.Fatal("a spent deadline must fail the next wait too")
+	}
+	if got := mock.gets(); got != polls {
+		t.Fatalf("a wait past its deadline must not poll; GET count went %d -> %d", polls, got)
 	}
 }

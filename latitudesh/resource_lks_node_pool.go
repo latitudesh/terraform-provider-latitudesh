@@ -623,7 +623,7 @@ func (r *LksNodePoolResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	r.waitForNodesReady(ctx, clusterID, id, wantNodes, createTimeout, &resp.Diagnostics)
+	r.waitForNodesReady(ctx, clusterID, id, wantNodes, time.Now().Add(createTimeout), &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		// The pool exists even though it never came up, and the write above
 		// already recorded it, so a follow-up apply or destroy can address it
@@ -691,7 +691,7 @@ func (r *LksNodePoolResource) Update(ctx context.Context, req resource.UpdateReq
 		CountChanged:   !data.NodeCount.Equal(state.NodeCount),
 		Version:        data.KubernetesVersion,
 		VersionChanged: !data.KubernetesVersion.Equal(state.KubernetesVersion),
-		Timeout:        updateTimeout,
+		Deadline:       time.Now().Add(updateTimeout),
 	}, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -722,7 +722,10 @@ type lksNodePoolPatch struct {
 	Version        types.String
 	VersionChanged bool
 
-	Timeout time.Duration
+	// Deadline is absolute and bounds BOTH waits below together: a scale and a
+	// version change in one apply are two sequential operations inside one
+	// timeout budget, not one budget each.
+	Deadline time.Time
 }
 
 // lksPatchNodePool applies a node pool update, splitting it across requests
@@ -794,7 +797,7 @@ func lksPatchNodePool(ctx context.Context, client *latitudeshgosdk.Latitudesh, p
 
 	// Scaling is asynchronous: the API accepts the PATCH and keeps reporting
 	// the old ready_nodes for a while.
-	lksWaitForNodesReady(ctx, client, patch.ClusterID, patch.PoolID, wantCount, patch.Timeout, diags)
+	lksWaitForNodesReady(ctx, client, patch.ClusterID, patch.PoolID, wantCount, patch.Deadline, diags)
 	if diags.HasError() || !patch.VersionChanged {
 		return
 	}
@@ -810,7 +813,7 @@ func lksPatchNodePool(ctx context.Context, client *latitudeshgosdk.Latitudesh, p
 	// pool is still settling.
 	//
 	// An upgrade rolls the nodes, so ready_nodes dips and has to come back.
-	lksWaitForNodesReady(ctx, client, patch.ClusterID, patch.PoolID, wantCount, patch.Timeout, diags)
+	lksWaitForNodesReady(ctx, client, patch.ClusterID, patch.PoolID, wantCount, patch.Deadline, diags)
 }
 
 func (r *LksNodePoolResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -841,7 +844,7 @@ func (r *LksNodePoolResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 
-	r.waitForNodePoolDeleted(ctx, clusterID, id, deleteTimeout, &resp.Diagnostics)
+	r.waitForNodePoolDeleted(ctx, clusterID, id, time.Now().Add(deleteTimeout), &resp.Diagnostics)
 }
 
 func (r *LksNodePoolResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
@@ -963,16 +966,17 @@ func lksApplyNodePoolAttributes(ctx context.Context, data *LksNodePoolResourceMo
 // waitForNodesReady polls until ready_nodes reaches want. No terminal failure
 // status is documented for node pools, so a pool that never comes up is a
 // timeout rather than a fast failure.
-func (r *LksNodePoolResource) waitForNodesReady(ctx context.Context, clusterID, id string, want int64, timeout time.Duration, diags *diag.Diagnostics) {
-	lksWaitForNodesReady(ctx, r.client, clusterID, id, want, timeout, diags)
+func (r *LksNodePoolResource) waitForNodesReady(ctx context.Context, clusterID, id string, want int64, deadline time.Time, diags *diag.Diagnostics) {
+	lksWaitForNodesReady(ctx, r.client, clusterID, id, want, deadline, diags)
 }
 
 // lksWaitForNodesReady is the free function behind it: latitudesh_lks runs the
 // same wait for the default_node_pool it creates inside its own Create.
-func lksWaitForNodesReady(ctx context.Context, client *latitudeshgosdk.Latitudesh, clusterID, id string, want int64, timeout time.Duration, diags *diag.Diagnostics) {
+//
+// deadline is absolute and shared with the other waits of the same operation.
+func lksWaitForNodesReady(ctx context.Context, client *latitudeshgosdk.Latitudesh, clusterID, id string, want int64, deadline time.Time, diags *diag.Diagnostics) {
 	pollInterval := lksNodePoolReadyPollInterval
 
-	deadline := time.Now().Add(timeout)
 	lastReady := int64(-1)
 	lastStatus := ""
 	consecutiveErrors := 0
@@ -1042,20 +1046,19 @@ func lksWaitForNodesReady(ctx context.Context, client *latitudeshgosdk.Latitudes
 	}
 	diags.AddError(
 		"Timeout waiting for LKS node pool",
-		fmt.Sprintf("LKS node pool %q in cluster %q did not reach %d ready node(s) within %s (last ready_nodes: %s, last status: %q).",
-			id, clusterID, want, timeout, readyNodes, lastStatus),
+		fmt.Sprintf("LKS node pool %q in cluster %q did not reach %d ready node(s) before the timeout expired (last ready_nodes: %s, last status: %q).",
+			id, clusterID, want, readyNodes, lastStatus),
 	)
 }
 
 // waitForNodePoolDeleted polls until the pool 404s.
-func (r *LksNodePoolResource) waitForNodePoolDeleted(ctx context.Context, clusterID, id string, timeout time.Duration, diags *diag.Diagnostics) {
-	lksWaitForNodePoolDeleted(ctx, r.client, clusterID, id, timeout, diags)
+func (r *LksNodePoolResource) waitForNodePoolDeleted(ctx context.Context, clusterID, id string, deadline time.Time, diags *diag.Diagnostics) {
+	lksWaitForNodePoolDeleted(ctx, r.client, clusterID, id, deadline, diags)
 }
 
-func lksWaitForNodePoolDeleted(ctx context.Context, client *latitudeshgosdk.Latitudesh, clusterID, id string, timeout time.Duration, diags *diag.Diagnostics) {
+func lksWaitForNodePoolDeleted(ctx context.Context, client *latitudeshgosdk.Latitudesh, clusterID, id string, deadline time.Time, diags *diag.Diagnostics) {
 	pollInterval := lksNodePoolDeletePollInterval
 
-	deadline := time.Now().Add(timeout)
 	consecutiveErrors := 0
 
 	for time.Now().Before(deadline) {
@@ -1087,6 +1090,6 @@ func lksWaitForNodePoolDeleted(ctx context.Context, client *latitudeshgosdk.Lati
 
 	diags.AddError(
 		"Timeout waiting for LKS node pool deletion",
-		fmt.Sprintf("LKS node pool %q in cluster %q was not removed after %s.", id, clusterID, timeout),
+		fmt.Sprintf("LKS node pool %q in cluster %q was not removed before the delete timeout expired.", id, clusterID),
 	)
 }
