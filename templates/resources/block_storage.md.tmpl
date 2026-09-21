@@ -1,0 +1,49 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Creates and manages a persistent NVMe-TCP block storage volume on [Latitude.sh](https://latitude.sh/).
+
+There is no update endpoint for volumes, so changing any attribute forces a new resource. Mapping the volume to a server or mounting it to a client are separate lifecycle operations not managed by this resource.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+You can import a block storage resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_block_storage` resource can be imported by specifying the volume ID:
+
+```sh
+terraform import latitudesh_block_storage.example <VOLUME_ID>
+```
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration.
+
+```hcl
+import {
+  to = latitudesh_block_storage.example
+  id = "<VOLUME_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_block_storage.tf
+```
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.
