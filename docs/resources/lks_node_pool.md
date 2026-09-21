@@ -164,7 +164,7 @@ Optional:
 
 - `create` (String) Timeout for the pool to settle — the platform reporting no operation in progress, and ready_nodes reaching node_count when it reports one. Bare metal, so allow for a real deploy. Default: 60 minutes.
 - `delete` (String) Timeout for the pool to be fully removed. Default: 30 minutes.
-- `update` (String) Timeout for a scale or version change to settle. A scale and a version change in one apply are two sequential operations, each waited on, within this one budget. Default: 60 minutes.
+- `update` (String) Timeout for a scale or version change to settle. A scale and a version change in one apply are two sequential operations, each waited on, within this one budget; if the scale uses it up, the version change is not started and the next apply picks it up. Default: 60 minutes.
 
 ## Import
 

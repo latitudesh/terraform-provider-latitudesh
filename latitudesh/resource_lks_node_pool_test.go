@@ -844,3 +844,84 @@ func TestLksNodePool_ExplicitVersionIsPinned(t *testing.T) {
 		},
 	})
 }
+
+// A scale that uses up the whole update budget must not be followed by the
+// version PATCH: the provider could not wait for it, so Terraform would report
+// a timeout for an upgrade the API had in fact accepted and started — every
+// node rolling, state still on the old version (Update keeps the prior state
+// on error). The guard is the wait's own loop condition; the scale is left in
+// place, the version change is left for the next apply, and the diagnostic
+// says exactly that.
+func TestLksPatchNodePool_SpentDeadlineDoesNotStartVersionChange(t *testing.T) {
+	var (
+		mu      sync.Mutex
+		patches []string
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		switch r.Method {
+		case http.MethodPatch:
+			body, _ := io.ReadAll(r.Body)
+			mu.Lock()
+			patches = append(patches, string(body))
+			mu.Unlock()
+		case http.MethodGet:
+			// The scale settles — but only on a poll that was already in
+			// flight when the budget ran out, which is precisely the read
+			// that lets the first wait succeed with nothing left over.
+			time.Sleep(400 * time.Millisecond)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprint(w, `{"data":{"id":"np_1","type":"lks_node_pools","attributes":{"status":"ready","count":3,"ready_nodes":3,"kubernetes_version":"1.32.0"}}}`)
+	}))
+	defer server.Close()
+
+	prev := lksNodePoolReadyPollInterval
+	lksNodePoolReadyPollInterval = 5 * time.Millisecond
+	t.Cleanup(func() { lksNodePoolReadyPollInterval = prev })
+
+	client := latitudeshgosdk.New(
+		latitudeshgosdk.WithSecurity("test"),
+		latitudeshgosdk.WithServerURL(server.URL),
+	)
+
+	var diags diag.Diagnostics
+	lksPatchNodePool(context.Background(), client, lksNodePoolPatch{
+		ClusterID:      "lksc_1",
+		PoolID:         "np_1",
+		Labels:         types.MapNull(types.StringType),
+		Taints:         types.SetNull(lksTaintObjectType),
+		Count:          types.Int64Value(3),
+		CountChanged:   true,
+		Version:        types.StringValue("1.33.0"),
+		VersionChanged: true,
+		// Generous enough for the scale PATCH to go out, gone long before the
+		// scale wait's one GET comes back.
+		Deadline: time.Now().Add(150 * time.Millisecond),
+	}, &diags)
+
+	if !diags.HasError() {
+		t.Fatal("expected an error: the version change had no budget left to be waited on")
+	}
+	if summary := diags.Errors()[0].Summary(); summary != "Timeout before LKS node pool version change" {
+		t.Fatalf("expected the pre-send timeout diagnostic, got %q: %s", summary, diags.Errors()[0].Detail())
+	}
+	detail := diags.Errors()[0].Detail()
+	for _, want := range []string{"scaled to 3 node(s)", `"1.33.0"`, "was not sent", "Run apply again"} {
+		if !strings.Contains(detail, want) {
+			t.Errorf("detail should tell the user %q, got: %s", want, detail)
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(patches) != 1 {
+		t.Fatalf("expected exactly the scale PATCH, got %d: %v", len(patches), patches)
+	}
+	if strings.Contains(patches[0], `"kubernetes_version"`) {
+		t.Fatalf("the only PATCH must be the scale, but it carries kubernetes_version: %s", patches[0])
+	}
+	if !strings.Contains(patches[0], `"count":3`) {
+		t.Fatalf("the scale PATCH should carry count 3: %s", patches[0])
+	}
+}
