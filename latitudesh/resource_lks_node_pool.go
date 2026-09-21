@@ -473,7 +473,7 @@ func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaReq
 				Update:            true,
 				Delete:            true,
 				CreateDescription: `Timeout for the pool to settle — the platform reporting no operation in progress, and ready_nodes reaching node_count when it reports one. Bare metal, so allow for a real deploy. Default: 60 minutes.`,
-				UpdateDescription: `Timeout for a scale or version change to settle. A scale and a version change in one apply are two sequential operations, each waited on, within this one budget. Default: 60 minutes.`,
+				UpdateDescription: `Timeout for a scale or version change to settle. A scale and a version change in one apply are two sequential operations, each waited on, within this one budget; if the scale uses it up, the version change is not started and the next apply picks it up. Default: 60 minutes.`,
 				DeleteDescription: `Timeout for the pool to be fully removed. Default: 30 minutes.`,
 			}),
 		},
@@ -799,6 +799,27 @@ func lksPatchNodePool(ctx context.Context, client *latitudeshgosdk.Latitudesh, p
 	// the old ready_nodes for a while.
 	lksWaitForNodesReady(ctx, client, patch.ClusterID, patch.PoolID, wantCount, patch.Deadline, diags)
 	if diags.HasError() || !patch.VersionChanged {
+		return
+	}
+
+	// The scale may have used the whole budget. Starting a version change with
+	// none left would roll every node in the pool with no time to watch it: the
+	// API accepts the PATCH, the wait below fails on the spot, and Terraform
+	// reports a timeout for an upgrade that is in fact under way — with state
+	// still on the old version, because Update keeps the prior state on error.
+	// Better not to start what cannot be waited for. The scale has landed, the
+	// version has not, and the next apply picks it up with a fresh budget. The
+	// test is the wait's own loop condition: would it poll even once?
+	if !time.Now().Before(patch.Deadline) {
+		landed := "its metadata update landed"
+		if patch.CountChanged {
+			landed = fmt.Sprintf("it was scaled to %d node(s)", wantCount)
+		}
+		diags.AddError(
+			"Timeout before LKS node pool version change",
+			fmt.Sprintf("LKS node pool %q in cluster %q: %s, but the update timeout expired before kubernetes_version %q could be requested, so that change was not sent and the pool is still on its previous version. Run apply again to upgrade it, or raise timeouts.update — a scale and a version change in one apply are two sequential operations inside one budget.",
+				patch.PoolID, patch.ClusterID, landed, patch.Version.ValueString()),
+		)
 		return
 	}
 

@@ -195,7 +195,7 @@ Optional:
 
 - `create` (String) Budget for the entire create: the cluster record becoming readable, the nodes of default_node_pool coming up, and the control plane reaching status "ready". The nodes are the slow part — they are physical machines. Default: 30 minutes. Example: "45m", "1h"
 - `delete` (String) Timeout for the cluster to be fully deleted. Default: 15 minutes.
-- `update` (String) Budget for the entire update: a control-plane upgrade reaching "ready" again, plus whatever default_node_pool needs on top — a scale, a version change following the cluster, or a full pool replacement, which builds new bare metal before releasing the old. Default: 30 minutes.
+- `update` (String) Budget for the entire update: a control-plane upgrade reaching "ready" again, plus whatever default_node_pool needs on top — a scale, a version change following the cluster, or a full pool replacement, which builds new bare metal before releasing the old. The pool's version change is only started while budget remains; otherwise the next apply picks it up. Default: 30 minutes.
 
 ## Import
 
