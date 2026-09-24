@@ -1,0 +1,20 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Read-only traffic reporting: consumption over a date window (`Traffic.Get`) and quota (`Traffic.GetQuota`), both scoped by an optional `project`.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+`project` falls back to the provider-level `project` when unset; if neither is set, the report covers every project the token can access.
+
+Quota is reported per region under `quota_per_project.*.quota_per_region`. Each region carries exactly one of `quota_in_tb` or `quota_in_mbps` — which one is populated depends on a project-level feature flag, so read both and expect the other to be null.
+
+{{ .SchemaMarkdown | trimspace }}
