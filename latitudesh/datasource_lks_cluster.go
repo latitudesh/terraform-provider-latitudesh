@@ -15,19 +15,19 @@ import (
 )
 
 var (
-	_ datasource.DataSource              = &LksDataSource{}
-	_ datasource.DataSourceWithConfigure = &LksDataSource{}
+	_ datasource.DataSource              = &LksClusterDataSource{}
+	_ datasource.DataSourceWithConfigure = &LksClusterDataSource{}
 )
 
-func NewLksDataSource() datasource.DataSource {
-	return &LksDataSource{}
+func NewLksClusterDataSource() datasource.DataSource {
+	return &LksClusterDataSource{}
 }
 
-type LksDataSource struct {
+type LksClusterDataSource struct {
 	client *latitudeshgosdk.Latitudesh
 }
 
-type LksDataSourceModel struct {
+type LksClusterDataSourceModel struct {
 	ID                   types.String `tfsdk:"id"`
 	Project              types.String `tfsdk:"project"`
 	Name                 types.String `tfsdk:"name"`
@@ -45,11 +45,11 @@ type LksDataSourceModel struct {
 	UpdatedAt            types.String `tfsdk:"updated_at"`
 }
 
-func (d *LksDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_lks"
+func (d *LksClusterDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_lks_cluster"
 }
 
-func (d *LksDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *LksClusterDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	deps := iprovider.ConfigureFromProviderData(req.ProviderData, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -57,7 +57,7 @@ func (d *LksDataSource) Configure(ctx context.Context, req datasource.ConfigureR
 	d.client = deps.Client
 }
 
-func (d *LksDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *LksClusterDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "LKS (Latitude Kubernetes Service) cluster data source - lookup a cluster by id. `GetLksCluster` has no name-based lookup, so `id` is the only selector.",
 		Attributes: map[string]schema.Attribute{
@@ -145,8 +145,8 @@ func (d *LksDataSource) Schema(ctx context.Context, req datasource.SchemaRequest
 	}
 }
 
-func (d *LksDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var data LksDataSourceModel
+func (d *LksClusterDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data LksClusterDataSourceModel
 
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {

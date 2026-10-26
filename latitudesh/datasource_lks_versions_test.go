@@ -136,7 +136,7 @@ data "latitudesh_lks_versions" "test" {}
 
 // TestAccLksVersions_Basic reads the real version list. Skipped unless TF_ACC
 // and LATITUDESH_AUTH_TOKEN are set. This is what confirms which versions
-// `latitudesh_lks.kubernetes_version` accepts — the scaffold guessed "1.31.0".
+// `latitudesh_lks_cluster.kubernetes_version` accepts — the scaffold guessed "1.31.0".
 func TestAccLksVersions_Basic(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccTokenCheck(t) },

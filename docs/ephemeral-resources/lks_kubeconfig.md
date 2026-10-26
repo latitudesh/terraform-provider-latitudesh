@@ -15,13 +15,13 @@ This is an [ephemeral resource](https://developer.hashicorp.com/terraform/langua
 
 An LKS kubeconfig **does not expire**. That is why this resource needs no renewal and stays valid through an apply that runs for an hour — and equally why a copy of it must not be left lying in a state file, since a leaked one never stops working.
 
-The cluster must be `ready`. The platform publishes the kubeconfig only then, and until it does `GET /lks/clusters/{id}/kubeconfig` answers 409 `NOT_READY`. A cluster becomes ready only once a node pool has nodes, so the kubeconfig does not exist while [`latitudesh_lks`](../resources/lks.md) is still `provisioning` with `reason` `WaitingForNodePool`.
+The cluster must be `ready`. The platform publishes the kubeconfig only then, and until it does `GET /lks/clusters/{id}/kubeconfig` answers 409 `NOT_READY`. A cluster becomes ready only once a node pool has nodes, so the kubeconfig does not exist while [`latitudesh_lks_cluster`](../resources/lks_cluster.md) is still `provisioning` with `reason` `WaitingForNodePool`.
 
 For a cluster that already exists, read its id from [`latitudesh_lks_clusters`](../data-sources/lks_clusters.md) filtered on `status = "ready"`, as the example does. For a cluster created in the **same** configuration, reference the resource and order the read after its node pools:
 
 ```terraform
 ephemeral "latitudesh_lks_kubeconfig" "new_cluster" {
-  cluster_id = latitudesh_lks.example.id
+  cluster_id = latitudesh_lks_cluster.example.id
 
   depends_on = [latitudesh_lks_node_pool.example]
 }
@@ -44,7 +44,7 @@ ephemeral "latitudesh_lks_kubeconfig" "example" {
 }
 
 # Creating the cluster in the same configuration? Reference it —
-# `cluster_id = latitudesh_lks.example.id` — and add
+# `cluster_id = latitudesh_lks_cluster.example.id` — and add
 # `depends_on = [latitudesh_lks_node_pool.example]`: the kubeconfig exists only
 # once the cluster is ready, and the cluster is ready only once a pool has nodes.
 #

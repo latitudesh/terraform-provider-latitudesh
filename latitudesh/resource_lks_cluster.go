@@ -27,9 +27,9 @@ import (
 	providerpkg "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
 
-var _ resource.Resource = &LksResource{}
-var _ resource.ResourceWithImportState = &LksResource{}
-var _ resource.ResourceWithModifyPlan = &LksResource{}
+var _ resource.Resource = &LksClusterResource{}
+var _ resource.ResourceWithImportState = &LksClusterResource{}
+var _ resource.ResourceWithModifyPlan = &LksClusterResource{}
 
 // Poll intervals for the async create/update/delete waits. Declared as vars
 // (not consts) so tests can shorten them; production keeps the defaults.
@@ -38,11 +38,11 @@ var (
 	lksDeletePollInterval = 5 * time.Second
 )
 
-func NewLksResource() resource.Resource {
-	return &LksResource{}
+func NewLksClusterResource() resource.Resource {
+	return &LksClusterResource{}
 }
 
-type LksResource struct {
+type LksClusterResource struct {
 	client         *latitudeshgosdk.Latitudesh
 	defaultProject string
 }
@@ -60,7 +60,7 @@ var lksNetworkAttrTypes = map[string]attr.Type{
 	"node_cidrs":    types.SetType{ElemType: types.StringType},
 }
 
-type LksResourceModel struct {
+type LksClusterResourceModel struct {
 	ID                   types.String   `tfsdk:"id"`
 	Project              types.String   `tfsdk:"project"`
 	Name                 types.String   `tfsdk:"name"`
@@ -207,11 +207,11 @@ func lksNetworkFromObject(ctx context.Context, obj types.Object) (*components.Cr
 	}, diags
 }
 
-func (r *LksResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_lks"
+func (r *LksClusterResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_lks_cluster"
 }
 
-func (r *LksResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *LksClusterResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "LKS (Latitude Kubernetes Service) cluster resource. Provisions the control plane only; worker capacity is added with `latitudesh_lks_node_pool`.\n\n" +
 			"**A cluster needs at least one node pool to become `ready`.** Without one, the platform's own components (CNI, CoreDNS) have nowhere to run, so `status` stays `provisioning` with `reason` `WaitingForNodePool`. Create therefore waits for the control plane, not for `ready`: it returns once the platform reports `WaitingForNodePool`, which is the point where a node pool can join. The create of that pool then waits for the cluster to reach `ready`.",
@@ -333,7 +333,7 @@ func (r *LksResource) Schema(ctx context.Context, req resource.SchemaRequest, re
 	}
 }
 
-func (r *LksResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *LksClusterResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -345,12 +345,12 @@ func (r *LksResource) Configure(ctx context.Context, req resource.ConfigureReque
 	r.defaultProject = deps.DefaultProject
 }
 
-func (r *LksResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+func (r *LksClusterResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		return // destroy
 	}
 
-	var cfg, plan LksResourceModel
+	var cfg, plan LksClusterResourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -362,7 +362,7 @@ func (r *LksResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanReq
 	// Comparing here turns that into a plan error. Only runs on update (prior
 	// state exists).
 	if !req.State.Raw.IsNull() {
-		var state LksResourceModel
+		var state LksClusterResourceModel
 		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 		if resp.Diagnostics.HasError() {
 			return
@@ -425,8 +425,8 @@ func lksCheckNoDowngrade(priorVal, plannedVal types.String, attrPath path.Path, 
 	}
 }
 
-func (r *LksResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data LksResourceModel
+func (r *LksClusterResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data LksClusterResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -530,8 +530,8 @@ func (r *LksResource) Create(ctx context.Context, req resource.CreateRequest, re
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *LksResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data LksResourceModel
+func (r *LksClusterResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data LksClusterResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -552,8 +552,8 @@ func (r *LksResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 
 // Update only ever runs for name, description and kubernetes_version: every
 // other input attribute carries RequiresReplace.
-func (r *LksResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data LksResourceModel
+func (r *LksClusterResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data LksClusterResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -561,7 +561,7 @@ func (r *LksResource) Update(ctx context.Context, req resource.UpdateRequest, re
 
 	// The prior state is read only to tell an in-place control-plane upgrade
 	// apart from a name/description edit; see the wait below.
-	var state LksResourceModel
+	var state LksClusterResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -625,8 +625,8 @@ func (r *LksResource) Update(ctx context.Context, req resource.UpdateRequest, re
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *LksResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data LksResourceModel
+func (r *LksClusterResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data LksClusterResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -655,8 +655,8 @@ func (r *LksResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 	r.waitForClusterDeleted(ctx, id, time.Now().Add(deleteTimeout), &resp.Diagnostics)
 }
 
-func (r *LksResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	var data LksResourceModel
+func (r *LksClusterResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	var data LksClusterResourceModel
 	data.ID = types.StringValue(req.ID)
 
 	// No timeouts block is set on import, so give the field an explicitly
@@ -818,7 +818,7 @@ func lksPollCluster(ctx context.Context, client *latitudeshgosdk.Latitudesh, id 
 // settled (ready, or any state outside the in-progress set), or it reports one
 // of lksControlPlaneUpReasons. It is what Create waits for, since "ready" needs
 // a node pool that cannot exist yet — see the comment there.
-func (r *LksResource) waitForControlPlane(ctx context.Context, id string, deadline time.Time, diags *diag.Diagnostics) {
+func (r *LksClusterResource) waitForControlPlane(ctx context.Context, id string, deadline time.Time, diags *diag.Diagnostics) {
 	last, timedOut := lksPollCluster(ctx, r.client, id, deadline, diags, func(o lksClusterObservation) bool {
 		if done, _ := lksSettled(o.status); done {
 			return true
@@ -844,7 +844,7 @@ func (r *LksResource) waitForControlPlane(ctx context.Context, id string, deadli
 // passes the requested version, because the platform leaves the cluster
 // "ready" on the old version for a moment after accepting the PATCH and a
 // status-only check would return on that pre-upgrade read.
-func (r *LksResource) waitForClusterReady(ctx context.Context, id, wantVersion string, deadline time.Time, diags *diag.Diagnostics) {
+func (r *LksClusterResource) waitForClusterReady(ctx context.Context, id, wantVersion string, deadline time.Time, diags *diag.Diagnostics) {
 	last, timedOut := lksPollCluster(ctx, r.client, id, deadline, diags, func(o lksClusterObservation) bool {
 		done, _ := lksSettled(o.status)
 		return done && (wantVersion == "" || o.version == wantVersion)
@@ -871,7 +871,7 @@ func (r *LksResource) waitForClusterReady(ctx context.Context, id, wantVersion s
 // "deleted". Which of the two actually happens is not confirmed live (see
 // handoff); both are treated as terminal so destroy does not spin until the
 // timeout either way.
-func (r *LksResource) waitForClusterDeleted(ctx context.Context, id string, deadline time.Time, diags *diag.Diagnostics) {
+func (r *LksClusterResource) waitForClusterDeleted(ctx context.Context, id string, deadline time.Time, diags *diag.Diagnostics) {
 	const maxConsecutiveErrors = 5
 	pollInterval := lksDeletePollInterval
 
@@ -922,7 +922,7 @@ func (r *LksResource) waitForClusterDeleted(ctx context.Context, id string, dead
 // does, under the same rule — `site` and `network` carry RequiresReplace and
 // are only backfilled when the configuration left them open, and `project`
 // keeps the configured selector rather than the ID the API echoes back.
-func lksApplyCreatedCluster(data *LksResourceModel, attrs *components.LksClusterDataAttributes, diags *diag.Diagnostics) {
+func lksApplyCreatedCluster(data *LksClusterResourceModel, attrs *components.LksClusterDataAttributes, diags *diag.Diagnostics) {
 	fields, mapDiags := mapLksAttributes(attrs)
 	diags.Append(mapDiags...)
 	if diags.HasError() {
@@ -953,7 +953,7 @@ func lksApplyCreatedCluster(data *LksResourceModel, attrs *components.LksCluster
 // yield a spurious "inconsistent result after apply" or a needless
 // replacement. `name`, `kubernetes_version` and `description` are
 // updatable, so the API is always the source of truth for them.
-func (r *LksResource) readLksInto(ctx context.Context, data *LksResourceModel, diags *diag.Diagnostics) {
+func (r *LksClusterResource) readLksInto(ctx context.Context, data *LksClusterResourceModel, diags *diag.Diagnostics) {
 	id := data.ID.ValueString()
 	if id == "" {
 		diags.AddError("Invalid ID", "LKS cluster ID is empty")
@@ -1026,7 +1026,7 @@ func (r *LksResource) readLksInto(ctx context.Context, data *LksResourceModel, d
 // create endpoint. The configured selector itself is never rewritten in
 // state. The list filter used by the plural data source does document slug
 // support, so no resolution is needed there.
-func (r *LksResource) resolveProjectID(ctx context.Context, selector string) (string, error) {
+func (r *LksClusterResource) resolveProjectID(ctx context.Context, selector string) (string, error) {
 	if strings.HasPrefix(selector, "proj_") {
 		return selector, nil
 	}

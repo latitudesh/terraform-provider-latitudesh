@@ -136,7 +136,7 @@ func TestReadLksInto_Description(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := lksResourceServing(t, tc.body)
 
-			data := LksResourceModel{
+			data := LksClusterResourceModel{
 				ID:          types.StringValue("lks_read_1"),
 				Description: tc.prior,
 			}
@@ -153,9 +153,9 @@ func TestReadLksInto_Description(t *testing.T) {
 	}
 }
 
-// lksResourceServing returns an LksResource whose client answers every cluster
+// lksResourceServing returns an LksClusterResource whose client answers every cluster
 // GET with the given attributes fragment.
-func lksResourceServing(t *testing.T, attributes string) *LksResource {
+func lksResourceServing(t *testing.T, attributes string) *LksClusterResource {
 	t.Helper()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -165,7 +165,7 @@ func lksResourceServing(t *testing.T, attributes string) *LksResource {
 	}))
 	t.Cleanup(server.Close)
 
-	return &LksResource{
+	return &LksClusterResource{
 		client: latitudeshgosdk.New(
 			latitudeshgosdk.WithSecurity("test"),
 			latitudeshgosdk.WithServerURL(server.URL),
@@ -619,7 +619,7 @@ provider "latitudesh" {
   auth_token = "mock-token"
 }
 
-resource "latitudesh_lks" "test_item" {
+resource "latitudesh_lks_cluster" "test_item" {
   project             = "proj_mock_1"
   name                = "tf-test-cluster"
   site                = "ASH"
@@ -645,25 +645,25 @@ func TestLks_CreateUpdateImport(t *testing.T) {
 			{
 				Config: testAccLksConfig("1.31.0"),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "name", "tf-test-cluster"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "site", "ASH"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "kubernetes_version", "1.31.0"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "status", "ready"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "project", "proj_mock_1"),
+					resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "name", "tf-test-cluster"),
+					resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "site", "ASH"),
+					resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "kubernetes_version", "1.31.0"),
+					resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "status", "ready"),
+					resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "project", "proj_mock_1"),
 
 					// Every computed attribute the API reports has to reach
 					// state. Checking only the ones the config also sets is
 					// how a mapping regression on the rest went unnoticed:
 					// the values below come straight from the captured live
 					// envelope the mock now answers with.
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "message", "the cluster is ready"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "reason", ""),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "control_plane_endpoint", "https://lksc-8d12b878420d45.lks.lsh.io:6443"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "kubeconfig_url", "/lks/clusters/lksc_8d12b878420d45/kubeconfig"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "platform_version", "lks-v1.36.1-007"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "created_at", "2026-09-18T15:39:51.019044Z"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "updated_at", "2026-09-18T15:46:15.110843Z"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "network.pod_cidrs.0", "10.0.0.0/16"),
+					resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "message", "the cluster is ready"),
+					resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "reason", ""),
+					resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "control_plane_endpoint", "https://lksc-8d12b878420d45.lks.lsh.io:6443"),
+					resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "kubeconfig_url", "/lks/clusters/lksc_8d12b878420d45/kubeconfig"),
+					resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "platform_version", "lks-v1.36.1-007"),
+					resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "created_at", "2026-09-18T15:39:51.019044Z"),
+					resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "updated_at", "2026-09-18T15:46:15.110843Z"),
+					resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "network.pod_cidrs.0", "10.0.0.0/16"),
 				),
 			},
 			{
@@ -671,11 +671,11 @@ func TestLks_CreateUpdateImport(t *testing.T) {
 				// this must PATCH rather than replace.
 				Config: testAccLksConfig("1.32.0"),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "kubernetes_version", "1.32.0"),
+					resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "kubernetes_version", "1.32.0"),
 				),
 			},
 			{
-				ResourceName:      "latitudesh_lks.test_item",
+				ResourceName:      "latitudesh_lks_cluster.test_item",
 				ImportState:       true,
 				ImportStateVerify: true,
 			},
@@ -699,7 +699,7 @@ func TestLks_CreateReturnsOnceControlPlaneIsUp(t *testing.T) {
 	lksReadyPollInterval = 5 * time.Millisecond
 	t.Cleanup(func() { lksReadyPollInterval = prevReady })
 
-	const rn = "latitudesh_lks.test_item"
+	const rn = "latitudesh_lks_cluster.test_item"
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
@@ -726,7 +726,7 @@ func TestLks_CreateReturnsOnceControlPlaneIsUp(t *testing.T) {
 	mock.mu.Lock()
 	defer mock.mu.Unlock()
 	if mock.poolPosts != 0 {
-		t.Errorf("latitudesh_lks created %d node pool(s); pools belong to latitudesh_lks_node_pool", mock.poolPosts)
+		t.Errorf("latitudesh_lks_cluster created %d node pool(s); pools belong to latitudesh_lks_node_pool", mock.poolPosts)
 	}
 }
 
@@ -754,7 +754,7 @@ func TestLks_ClusterWithNodePoolBecomesReady(t *testing.T) {
 	})
 
 	const (
-		cluster = "latitudesh_lks.test_item"
+		cluster = "latitudesh_lks_cluster.test_item"
 		pool    = "latitudesh_lks_node_pool.workers"
 	)
 	var firstPoolID string
@@ -762,7 +762,7 @@ func TestLks_ClusterWithNodePoolBecomesReady(t *testing.T) {
 	config := func(poolExtra string) string {
 		return testAccLksConfigWithTimeout("1.31.0", "") + fmt.Sprintf(`
 resource "latitudesh_lks_node_pool" "workers" {
-  cluster_id = latitudesh_lks.test_item.id
+  cluster_id = latitudesh_lks_cluster.test_item.id
   plan       = "c2-medium-x86"
   node_count = 1
 %s
@@ -880,7 +880,7 @@ func TestLks_NodePoolCreateDoesNotFailOnANeverReadyCluster(t *testing.T) {
 			{
 				Config: testAccLksConfigWithTimeout("1.31.0", "") + `
 resource "latitudesh_lks_node_pool" "workers" {
-  cluster_id = latitudesh_lks.test_item.id
+  cluster_id = latitudesh_lks_cluster.test_item.id
   plan       = "c2-medium-x86"
   node_count = 1
 
@@ -909,7 +909,7 @@ provider "latitudesh" {
   auth_token = "mock-token"
 }
 
-resource "latitudesh_lks" "test_item" {
+resource "latitudesh_lks_cluster" "test_item" {
   project             = "proj_mock_1"
   name                = "tf-test-cluster"
   site                = "ASH"

@@ -103,7 +103,7 @@ func (m *lksClusterMock) handler(w http.ResponseWriter, r *http.Request) {
 // newLksClusterMock starts the mock, wires a resource whose client points at
 // it, and shortens both poll intervals so a scripted sequence costs
 // milliseconds instead of one 10s/5s sleep per transition.
-func newLksClusterMock(t *testing.T, steps ...lksGetStep) (*lksClusterMock, *LksResource) {
+func newLksClusterMock(t *testing.T, steps ...lksGetStep) (*lksClusterMock, *LksClusterResource) {
 	t.Helper()
 
 	if len(steps) == 0 {
@@ -122,7 +122,7 @@ func newLksClusterMock(t *testing.T, steps ...lksGetStep) (*lksClusterMock, *Lks
 		lksDeletePollInterval = prevDelete
 	})
 
-	r := &LksResource{
+	r := &LksClusterResource{
 		client: latitudeshgosdk.New(
 			latitudeshgosdk.WithSecurity("test"),
 			latitudeshgosdk.WithServerURL(server.URL),

@@ -357,7 +357,7 @@ func (d *LksPlansDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 				Computed:            true,
 			},
 			"site": schema.StringAttribute{
-				MarkdownDescription: "Only return plans that have capacity at this site **right now**, and fill `stock` for it. Use the same slug you pass to `latitudesh_lks.site`. Omit to return the whole catalog.",
+				MarkdownDescription: "Only return plans that have capacity at this site **right now**, and fill `stock` for it. Use the same slug you pass to `latitudesh_lks_cluster.site`. Omit to return the whole catalog.",
 				Optional:            true,
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -494,7 +494,7 @@ func (d *LksPlansDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 										Computed:            true,
 									},
 									"available_sites": schema.ListAttribute{
-										MarkdownDescription: "Site slugs where LKS can deploy this plan. These match `latitudesh_lks_sites`, and `latitudesh_lks.site`.",
+										MarkdownDescription: "Site slugs where LKS can deploy this plan. These match `latitudesh_lks_sites`, and `latitudesh_lks_cluster.site`.",
 										ElementType:         types.StringType,
 										Computed:            true,
 									},

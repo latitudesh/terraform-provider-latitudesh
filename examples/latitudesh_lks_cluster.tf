@@ -21,7 +21,7 @@ resource "latitudesh_project" "lks" {
   name = "lks-example"
 }
 
-resource "latitudesh_lks" "example" {
+resource "latitudesh_lks_cluster" "example" {
   project            = latitudesh_project.lks.id
   name               = "example-cluster"
   site               = local.site
@@ -45,7 +45,7 @@ resource "latitudesh_lks" "example" {
 # at least one pool has to stay free of NoSchedule/NoExecute taints so the
 # platform's own components (CNI, CoreDNS) have somewhere to run.
 resource "latitudesh_lks_node_pool" "example" {
-  cluster_id = latitudesh_lks.example.id
+  cluster_id = latitudesh_lks_cluster.example.id
   node_count = 2
   plan       = keys(data.latitudesh_lks_plans.for_cluster.stock)[0]
 

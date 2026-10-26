@@ -44,7 +44,7 @@ type LksClustersDataSourceModel struct {
 // LksClusterItemModel carries every attribute the list response already
 // contains. The API answers each cluster with the same envelope the singular
 // lookup returns, so dropping fields here would only force a second
-// latitudesh_lks data source per cluster to read what this call already
+// latitudesh_lks_cluster data source per cluster to read what this call already
 // fetched.
 type LksClusterItemModel struct {
 	ID                   types.String `tfsdk:"id"`

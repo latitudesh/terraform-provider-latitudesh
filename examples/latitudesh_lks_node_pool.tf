@@ -1,4 +1,4 @@
-# A cluster's workers. latitudesh_lks is the control plane alone; every pool,
+# A cluster's workers. latitudesh_lks_cluster is the control plane alone; every pool,
 # including the first, is a latitudesh_lks_node_pool that scales, upgrades and
 # is destroyed independently of the cluster.
 data "latitudesh_lks_sites" "for_pool" {}
@@ -20,7 +20,7 @@ resource "latitudesh_project" "lks_node_pool" {
   name = "lks-node-pool-example"
 }
 
-resource "latitudesh_lks" "node_pool_example" {
+resource "latitudesh_lks_cluster" "node_pool_example" {
   project            = latitudesh_project.lks_node_pool.id
   name               = "example-cluster"
   site               = local.pool_site
@@ -31,7 +31,7 @@ resource "latitudesh_lks" "node_pool_example" {
 # components (CNI, CoreDNS) can run on it — a cluster needs at least one pool
 # like this to become ready.
 resource "latitudesh_lks_node_pool" "general" {
-  cluster_id = latitudesh_lks.node_pool_example.id
+  cluster_id = latitudesh_lks_cluster.node_pool_example.id
   node_count = 1
   plan       = keys(data.latitudesh_lks_plans.for_pool.stock)[0]
 
@@ -41,7 +41,7 @@ resource "latitudesh_lks_node_pool" "general" {
 }
 
 resource "latitudesh_lks_node_pool" "gpu" {
-  cluster_id = latitudesh_lks.node_pool_example.id
+  cluster_id = latitudesh_lks_cluster.node_pool_example.id
   node_count = 2
   plan       = keys(data.latitudesh_lks_plans.for_pool.stock)[0]
 
@@ -53,7 +53,7 @@ resource "latitudesh_lks_node_pool" "gpu" {
   #   literal "1.36.1"           -> pinned until you change it
   # Whatever the form, it may never be NEWER than the control plane
   # (422 VERSION_SKEW), and every version change recycles the pool's nodes.
-  kubernetes_version = latitudesh_lks.node_pool_example.kubernetes_version
+  kubernetes_version = latitudesh_lks_cluster.node_pool_example.kubernetes_version
 
   labels = {
     "workload" = "gpu"
@@ -78,7 +78,7 @@ resource "latitudesh_lks_node_pool" "gpu" {
 }
 
 data "latitudesh_lks_node_pools" "example" {
-  cluster_id = latitudesh_lks.node_pool_example.id
+  cluster_id = latitudesh_lks_cluster.node_pool_example.id
 
   depends_on = [latitudesh_lks_node_pool.general, latitudesh_lks_node_pool.gpu]
 }

@@ -88,7 +88,7 @@ output "lks_plan_specs" {
 
 ### Optional
 
-- `site` (String) Only return plans that have capacity at this site **right now**, and fill `stock` for it. Use the same slug you pass to `latitudesh_lks.site`. Omit to return the whole catalog.
+- `site` (String) Only return plans that have capacity at this site **right now**, and fill `stock` for it. Use the same slug you pass to `latitudesh_lks_cluster.site`. Omit to return the whole catalog.
 
 ### Read-Only
 
@@ -113,7 +113,7 @@ Read-Only:
 
 Read-Only:
 
-- `available_sites` (List of String) Site slugs where LKS can deploy this plan. These match `latitudesh_lks_sites`, and `latitudesh_lks.site`.
+- `available_sites` (List of String) Site slugs where LKS can deploy this plan. These match `latitudesh_lks_sites`, and `latitudesh_lks_cluster.site`.
 - `in_stock_count` (Map of Number) Available node count keyed by site slug. Only sites with stock appear.
 - `in_stock_sites` (List of String) Site slugs that have capacity for a node on this plan right now.
 - `name` (String) Region name.

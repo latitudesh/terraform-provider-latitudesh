@@ -309,7 +309,7 @@ func (r *LksNodePoolResource) Metadata(ctx context.Context, req resource.Metadat
 
 func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "A node pool for an LKS (Latitude Kubernetes Service) cluster. `latitudesh_lks` provisions a control plane only: the cluster has no workers, and does not become `ready`, until at least one pool has nodes the platform's own components (CNI, CoreDNS) can schedule on.\n\n" +
+		MarkdownDescription: "A node pool for an LKS (Latitude Kubernetes Service) cluster. `latitudesh_lks_cluster` provisions a control plane only: the cluster has no workers, and does not become `ready`, until at least one pool has nodes the platform's own components (CNI, CoreDNS) can schedule on.\n\n" +
 			"Create waits for the pool's nodes and then for the cluster to settle on them, so an apply that adds a cluster's first pool ends on a `ready` cluster. If the cluster does not get there within the create timeout, the apply still succeeds, with a warning: the pool itself is up.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -320,7 +320,7 @@ func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"cluster_id": schema.StringAttribute{
-				MarkdownDescription: "ID of the `latitudesh_lks` cluster the pool belongs to. Changing it forces a new resource; a pool cannot move between clusters.",
+				MarkdownDescription: "ID of the `latitudesh_lks_cluster` cluster the pool belongs to. Changing it forces a new resource; a pool cannot move between clusters.",
 				Required:            true,
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -637,7 +637,7 @@ func (r *LksNodePoolResource) Create(ctx context.Context, req resource.CreateReq
 	}
 
 	// The pool may be what the cluster was waiting for: a cluster with no
-	// ready node is not "ready", and latitudesh_lks cannot wait for that itself.
+	// ready node is not "ready", and latitudesh_lks_cluster cannot wait for that itself.
 	// Waiting here is what lets an apply that builds a cluster and its first
 	// pool end on a usable cluster.
 	lksWaitForClusterToSettle(ctx, r.client, clusterID, deadline, &resp.Diagnostics)
@@ -881,7 +881,7 @@ func (r *LksNodePoolResource) Delete(ctx context.Context, req resource.DeleteReq
 
 func (r *LksNodePoolResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	// GetLksNodePool is addressed by (cluster_id, id), so a bare pool ID is not
-	// enough to read one back — unlike latitudesh_lks, the composite form is
+	// enough to read one back — unlike latitudesh_lks_cluster, the composite form is
 	// mandatory here rather than an alternative.
 	clusterID, id, found := strings.Cut(req.ID, ":")
 	if !found || clusterID == "" || id == "" {
@@ -897,7 +897,7 @@ func (r *LksNodePoolResource) ImportState(ctx context.Context, req resource.Impo
 	data.ClusterID = types.StringValue(clusterID)
 
 	// No timeouts block is set on import, so give the field an explicitly typed
-	// null (see latitudesh_lks's ImportState for why the zero value fails).
+	// null (see latitudesh_lks_cluster's ImportState for why the zero value fails).
 	data.Timeouts = timeouts.Value{
 		Object: types.ObjectNull(map[string]attr.Type{
 			"create": types.StringType,
@@ -980,7 +980,7 @@ func lksApplyNodePoolAttributes(ctx context.Context, data *LksNodePoolResourceMo
 
 	// description, labels and taints are all updatable, so the API owns them:
 	// assigning unconditionally is what makes an out-of-band change show up as
-	// drift (the mistake latitudesh_lks shipped with for description).
+	// drift (the mistake latitudesh_lks_cluster shipped with for description).
 	data.Description = lksDescriptionFromAPI(data.Description, fields.Description)
 	data.Labels = fields.Labels
 	data.Taints = fields.Taints
@@ -1099,7 +1099,7 @@ var lksClusterWaitingOnNodesReasons = map[string]bool{
 // lksWaitForClusterToSettle waits, once a pool's nodes are up, for the cluster
 // to finish its own work on them. A cluster with no ready node is not ready —
 // see lksClusterWaitingOnNodesReasons — and only a pool can take it there.
-// latitudesh_lks cannot wait for that, since no pool exists while its Create
+// latitudesh_lks_cluster cannot wait for that, since no pool exists while its Create
 // runs, so the pool that ends the wait is the one that waits. It waits for
 // "ready" through every state explained by missing nodes, including the
 // "degraded" NoReadyNodes of a cluster whose previous pools are gone, and stops

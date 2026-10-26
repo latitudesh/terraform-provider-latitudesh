@@ -131,21 +131,23 @@ groups:
       components.FirewallAssignmentDataAttributes.Server/.VirtualMachine.
 
   Lks:
-    implemented_by: [latitudesh_lks, latitudesh_lks_clusters, latitudesh_lks_node_pool,
+    implemented_by: [latitudesh_lks_cluster, latitudesh_lks_clusters, latitudesh_lks_node_pool,
       latitudesh_lks_node_pools, latitudesh_lks_kubeconfig, latitudesh_lks_sites,
       latitudesh_lks_versions]
     notes: >-
       Fully mapped: all 13 methods. LKS (Latitude Kubernetes Service) is an
-      acronym, not a plural, so the types keep the trailing s and the two
-      list data sources are spelled out (latitudesh_lks_clusters,
-      latitudesh_lks_node_pools) rather than following the usual singular+s
-      pair — SuggestTypeName's singularize rule would otherwise propose
-      latitudesh_lk.
+      acronym, not a plural, so every type keeps the trailing s
+      (SuggestTypeName's singularize rule would otherwise propose
+      latitudesh_lk). Each object the family manages is named after itself
+      under that prefix — latitudesh_lks_cluster / latitudesh_lks_clusters,
+      latitudesh_lks_node_pool / latitudesh_lks_node_pools — so the usual
+      singular+s pair holds. The cluster shipped as plain latitudesh_lks
+      until 2026-10-26; renamed before release, so no state migration.
 
       Two products live in this one SDK group and each gets its own
       resource, because a cluster with no node pool is a control plane that
       schedules nothing:
-      - latitudesh_lks maps LksCluster (Create/Get/Update/Delete, plus
+      - latitudesh_lks_cluster maps LksCluster (Create/Get/Update/Delete, plus
         ListLksClusters behind latitudesh_lks_clusters, project-scoped): the
         control plane alone. name/description/kubernetes_version update in
         place; project, site and network carry RequiresReplace. A cluster
@@ -179,7 +181,7 @@ groups:
         documents no status enum, and a scale is asynchronous. Create then
         also waits for the CLUSTER to settle (lksWaitForClusterToSettle):
         the first pool is what takes a cluster from WaitingForNodePool
-        through FinishingSetup to "ready", and latitudesh_lks cannot wait
+        through FinishingSetup to "ready", and latitudesh_lks_cluster cannot wait
         for that itself. On an already-ready cluster it is one GET. Every
         shortfall there is a WARNING, never an error — the pool is up and in
         state, and an error from Create would taint it, so the next apply

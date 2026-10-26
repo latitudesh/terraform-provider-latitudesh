@@ -1,5 +1,5 @@
 # The sites an LKS cluster can be deployed to, and the authoritative source for
-# latitudesh_lks's `site`. LKS runs in its own subset of locations, so
+# latitudesh_lks_cluster's `site`. LKS runs in its own subset of locations, so
 # latitudesh_region is not a substitute and there is no fixed list to hardcode.
 data "latitudesh_lks_sites" "all" {}
 

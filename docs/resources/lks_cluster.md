@@ -1,12 +1,12 @@
 ---
-page_title: "latitudesh_lks Resource - latitudesh"
+page_title: "latitudesh_lks_cluster Resource - latitudesh"
 subcategory: ""
 description: |-
   LKS (Latitude Kubernetes Service) cluster resource. Provisions the control plane only; worker capacity is added with latitudesh_lks_node_pool.
   A cluster needs at least one node pool to become ready. Without one, the platform's own components (CNI, CoreDNS) have nowhere to run, so status stays provisioning with reason WaitingForNodePool. Create therefore waits for the control plane, not for ready: it returns once the platform reports WaitingForNodePool, which is the point where a node pool can join. The create of that pool then waits for the cluster to reach ready.
 ---
 
-# latitudesh_lks (Resource)
+# latitudesh_lks_cluster (Resource)
 
 Provisions an LKS (Latitude Kubernetes Service) cluster's **control plane**. Worker capacity is a separate resource: every node pool, the first one included, is a [`latitudesh_lks_node_pool`](lks_node_pool.md).
 
@@ -56,7 +56,7 @@ resource "latitudesh_project" "lks" {
   name = "lks-example"
 }
 
-resource "latitudesh_lks" "example" {
+resource "latitudesh_lks_cluster" "example" {
   project            = latitudesh_project.lks.id
   name               = "example-cluster"
   site               = local.site
@@ -80,7 +80,7 @@ resource "latitudesh_lks" "example" {
 # at least one pool has to stay free of NoSchedule/NoExecute taints so the
 # platform's own components (CNI, CoreDNS) have somewhere to run.
 resource "latitudesh_lks_node_pool" "example" {
-  cluster_id = latitudesh_lks.example.id
+  cluster_id = latitudesh_lks_cluster.example.id
   node_count = 2
   plan       = keys(data.latitudesh_lks_plans.for_cluster.stock)[0]
 
@@ -153,10 +153,10 @@ You can import an LKS cluster resource using either the CLI method or the [exper
 
 **CLI Import**
 
-The `latitudesh_lks` resource can be imported by specifying the cluster ID:
+The `latitudesh_lks_cluster` resource can be imported by specifying the cluster ID:
 
 ```sh
-terraform import latitudesh_lks.example <LKS_CLUSTER_ID>
+terraform import latitudesh_lks_cluster.example <LKS_CLUSTER_ID>
 ```
 
 Import covers the control plane only. Import each of the cluster's node pools as its own [`latitudesh_lks_node_pool`](lks_node_pool.md).
@@ -167,7 +167,7 @@ Terraform v1.5.0 and later supports the experimental import block, which allows 
 
 ```hcl
 import {
-  to = latitudesh_lks.example
+  to = latitudesh_lks_cluster.example
   id = "<LKS_CLUSTER_ID>"
 }
 ```

@@ -152,7 +152,7 @@ func testAccLksTarget(t *testing.T) (site, version, plan string) {
 }
 
 func TestAccLks_Basic(t *testing.T) {
-	resourceName := "latitudesh_lks.test_item"
+	resourceName := "latitudesh_lks_cluster.test_item"
 	poolName := "latitudesh_lks_node_pool.test_item"
 	projectID := testAccProjectID()
 	site, version, plan := testAccLksTarget(t)
@@ -205,7 +205,7 @@ func TestAccLks_Basic(t *testing.T) {
 // as soon as the control plane is up.
 func testAccLksConfigBasic(project, site, version, plan string) string {
 	return fmt.Sprintf(`
-resource "latitudesh_lks" "test_item" {
+resource "latitudesh_lks_cluster" "test_item" {
   project             = %q
   name                = "tf-acc-lks-%s"
   site                = %q
@@ -217,7 +217,7 @@ resource "latitudesh_lks" "test_item" {
 }
 
 resource "latitudesh_lks_node_pool" "test_item" {
-  cluster_id = latitudesh_lks.test_item.id
+  cluster_id = latitudesh_lks_cluster.test_item.id
   plan       = %q
   node_count = 1
 
@@ -276,7 +276,7 @@ func testAccCheckLksDestroy(s *terraform.State) error {
 	}
 
 	for _, rs := range s.RootModule().Resources {
-		if rs.Type != "latitudesh_lks" {
+		if rs.Type != "latitudesh_lks_cluster" {
 			continue
 		}
 		id := rs.Primary.ID

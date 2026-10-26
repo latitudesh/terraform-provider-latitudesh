@@ -90,14 +90,14 @@ func (d *LksVersionsDataSource) Configure(ctx context.Context, req datasource.Co
 
 func (d *LksVersionsDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "LKS (Latitude Kubernetes Service) Kubernetes versions data source - the versions a cluster can be created with or upgraded to. This is the authoritative source for `latitudesh_lks`'s `kubernetes_version` argument; the platform rejects anything else, and a downgrade with 422 `DOWNGRADE_NOT_ALLOWED`. The lookup is global and takes no arguments — filter the list in configuration on `available_for_creation` / `available_for_upgrade`, which is why both are exposed.",
+		MarkdownDescription: "LKS (Latitude Kubernetes Service) Kubernetes versions data source - the versions a cluster can be created with or upgraded to. This is the authoritative source for `latitudesh_lks_cluster`'s `kubernetes_version` argument; the platform rejects anything else, and a downgrade with 422 `DOWNGRADE_NOT_ALLOWED`. The lookup is global and takes no arguments — filter the list in configuration on `available_for_creation` / `available_for_upgrade`, which is why both are exposed.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Synthetic identifier. The lookup takes no arguments, so this is always `all`.",
 				Computed:            true,
 			},
 			"default_version": schema.StringAttribute{
-				MarkdownDescription: "The version the platform marks as `default`, ready to hand to `latitudesh_lks.kubernetes_version`. Null when no entry is flagged as the default.",
+				MarkdownDescription: "The version the platform marks as `default`, ready to hand to `latitudesh_lks_cluster.kubernetes_version`. Null when no entry is flagged as the default.",
 				Computed:            true,
 			},
 			"versions": schema.ListNestedAttribute{
@@ -110,7 +110,7 @@ func (d *LksVersionsDataSource) Schema(ctx context.Context, req datasource.Schem
 							Computed:            true,
 						},
 						"version": schema.StringAttribute{
-							MarkdownDescription: "Kubernetes patch version — this is what `latitudesh_lks.kubernetes_version` takes.",
+							MarkdownDescription: "Kubernetes patch version — this is what `latitudesh_lks_cluster.kubernetes_version` takes.",
 							Computed:            true,
 						},
 						"default": schema.BoolAttribute{

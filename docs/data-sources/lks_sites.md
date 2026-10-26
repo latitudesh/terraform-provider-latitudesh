@@ -2,12 +2,12 @@
 page_title: "latitudesh_lks_sites Data Source - latitudesh"
 subcategory: ""
 description: |-
-  LKS (Latitude Kubernetes Service) sites data source - the sites a cluster can be deployed to. This is the authoritative source for latitudesh_lks's site argument: LKS runs in its own subset of locations, so latitudesh_region is not a substitute. The lookup is global and takes no arguments.
+  LKS (Latitude Kubernetes Service) sites data source - the sites a cluster can be deployed to. This is the authoritative source for latitudesh_lks_cluster's site argument: LKS runs in its own subset of locations, so latitudesh_region is not a substitute. The lookup is global and takes no arguments.
 ---
 
 # latitudesh_lks_sites (Data Source)
 
-Lists the sites an LKS (Latitude Kubernetes Service) cluster can be deployed to. This is the authoritative source for [`latitudesh_lks`](../resources/lks.md)'s `site` argument — LKS runs in its own subset of locations, so `latitudesh_region` is not a substitute.
+Lists the sites an LKS (Latitude Kubernetes Service) cluster can be deployed to. This is the authoritative source for [`latitudesh_lks_cluster`](../resources/lks_cluster.md)'s `site` argument — LKS runs in its own subset of locations, so `latitudesh_region` is not a substitute.
 
 The lookup is global: it takes no arguments and is not scoped to a project.
 
@@ -15,7 +15,7 @@ The lookup is global: it takes no arguments and is not scoped to a project.
 
 ```terraform
 # The sites an LKS cluster can be deployed to, and the authoritative source for
-# latitudesh_lks's `site`. LKS runs in its own subset of locations, so
+# latitudesh_lks_cluster's `site`. LKS runs in its own subset of locations, so
 # latitudesh_region is not a substitute and there is no fixed list to hardcode.
 data "latitudesh_lks_sites" "all" {}
 
@@ -64,4 +64,4 @@ Read-Only:
 - `facility` (String) Datacenter facility backing the site.
 - `id` (String) Site identifier. The API documents this as the slug to pass as `site` when creating a cluster, and it matches `slug` below.
 - `name` (String) Human-readable site name.
-- `slug` (String) Site slug — this is what `latitudesh_lks.site` takes.
+- `slug` (String) Site slug — this is what `latitudesh_lks_cluster.site` takes.

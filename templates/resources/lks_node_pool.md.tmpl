@@ -7,9 +7,9 @@ description: |-
 
 # {{.Name}} ({{.Type}})
 
-A node pool for an LKS (Latitude Kubernetes Service) cluster. [`latitudesh_lks`](lks.md) is the control plane alone; every pool, the first one included, is one of these, so each scales, upgrades and is destroyed without touching the cluster.
+A node pool for an LKS (Latitude Kubernetes Service) cluster. [`latitudesh_lks_cluster`](lks_cluster.md) is the control plane alone; every pool, the first one included, is one of these, so each scales, upgrades and is destroyed without touching the cluster.
 
-A cluster becomes `ready` only once a pool has nodes. Its create returns as soon as the control plane is up (`reason` `WaitingForNodePool`), so a pool that references the cluster — `cluster_id = latitudesh_lks.example.id` — is created right after it. This resource's create waits for its own nodes and **then for the cluster** to finish installing the platform's components on them, so the apply that adds a cluster's first pool ends on a `ready` cluster. On a cluster that is already ready, that second wait is a single read.
+A cluster becomes `ready` only once a pool has nodes. Its create returns as soon as the control plane is up (`reason` `WaitingForNodePool`), so a pool that references the cluster — `cluster_id = latitudesh_lks_cluster.example.id` — is created right after it. This resource's create waits for its own nodes and **then for the cluster** to finish installing the platform's components on them, so the apply that adds a cluster's first pool ends on a `ready` cluster. On a cluster that is already ready, that second wait is a single read.
 
 If the cluster does not reach `ready` within `timeouts.create`, the apply still succeeds, with a warning naming the cluster's last status and reason. It is a warning on purpose: the pool is up, and failing its create would taint it, so the next apply would rebuild healthy bare metal over a problem that belongs to the cluster.
 
@@ -21,11 +21,11 @@ Two lookups feed a pool: [`latitudesh_lks_plans`](../data-sources/lks_plans.md) 
 
 ## `kubernetes_version` tracks the cluster unless you pin it
 
-Leave `kubernetes_version` unset and the pool follows the cluster's control-plane version: upgrade `latitudesh_lks` and this pool upgrades to match. Because a pool only knows its `cluster_id`, it learns the new version by reading the cluster during planning — so the follow lands on the **next** apply after the control plane is actually on the new version, not the same one that bumps it. Set `kubernetes_version` explicitly to pin the pool to a single version and opt out of tracking. Following recycles the pool's nodes, the same as any version change.
+Leave `kubernetes_version` unset and the pool follows the cluster's control-plane version: upgrade `latitudesh_lks_cluster` and this pool upgrades to match. Because a pool only knows its `cluster_id`, it learns the new version by reading the cluster during planning — so the follow lands on the **next** apply after the control plane is actually on the new version, not the same one that bumps it. Set `kubernetes_version` explicitly to pin the pool to a single version and opt out of tracking. Following recycles the pool's nodes, the same as any version change.
 
 Two API rules worth knowing before you meet them as a 422:
 
-* `kubernetes_version` must never be **newer** than the cluster's control plane (`VERSION_SKEW`). Upgrade `latitudesh_lks` first, then the pool — which tracking does for you.
+* `kubernetes_version` must never be **newer** than the cluster's control plane (`VERSION_SKEW`). Upgrade `latitudesh_lks_cluster` first, then the pool — which tracking does for you.
 * Label and taint keys under `kubernetes.io`, `k8s.io`, `cluster.x-k8s.io`, `lks.latitude.sh` or their subdomains are reserved, and each collection is capped at 50 entries. This provider rejects both at plan time rather than letting the apply fail. Key and value *format* rules (63-character names, DNS-label prefixes) are still only enforced server-side.
 
 `labels` and `taints` are a declarative replace, not a merge: what you write is what the pool ends up with, and removing them all clears them.

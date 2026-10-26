@@ -10,7 +10,7 @@ ephemeral "latitudesh_lks_kubeconfig" "example" {
 }
 
 # Creating the cluster in the same configuration? Reference it —
-# `cluster_id = latitudesh_lks.example.id` — and add
+# `cluster_id = latitudesh_lks_cluster.example.id` — and add
 # `depends_on = [latitudesh_lks_node_pool.example]`: the kubeconfig exists only
 # once the cluster is ready, and the cluster is ready only once a pool has nodes.
 #

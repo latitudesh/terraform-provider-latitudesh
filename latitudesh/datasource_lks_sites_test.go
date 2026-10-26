@@ -109,7 +109,7 @@ data "latitudesh_lks_sites" "test" {}
 
 // TestAccLksSites_Basic reads the real site list. Skipped unless TF_ACC and
 // LATITUDESH_AUTH_TOKEN are set. This is the test that finally answers what
-// `latitudesh_lks.site` actually accepts — the scaffold guessed "ASH".
+// `latitudesh_lks_cluster.site` actually accepts — the scaffold guessed "ASH".
 func TestAccLksSites_Basic(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccTokenCheck(t) },
