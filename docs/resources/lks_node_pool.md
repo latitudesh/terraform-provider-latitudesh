@@ -2,16 +2,19 @@
 page_title: "latitudesh_lks_node_pool Resource - latitudesh"
 subcategory: ""
 description: |-
-  A node pool for an LKS (Latitude Kubernetes Service) cluster. latitudesh_lks provisions a control plane only — without at least one node pool the cluster has no workers and schedules nothing.
+  A node pool for an LKS (Latitude Kubernetes Service) cluster. latitudesh_lks provisions a control plane only: the cluster has no workers, and does not become ready, until at least one pool has nodes the platform's own components (CNI, CoreDNS) can schedule on.
+  Create waits for the pool's nodes and then for the cluster to settle on them, so an apply that adds a cluster's first pool ends on a ready cluster. If the cluster does not get there within the create timeout, the apply still succeeds, with a warning: the pool itself is up.
 ---
 
 # latitudesh_lks_node_pool (Resource)
 
-An **additional** node pool for an LKS (Latitude Kubernetes Service) cluster.
+A node pool for an LKS (Latitude Kubernetes Service) cluster. [`latitudesh_lks`](lks.md) is the control plane alone; every pool, the first one included, is one of these, so each scales, upgrades and is destroyed without touching the cluster.
 
-The *first* pool is not created here: it is required and lives inside [`latitudesh_lks`](lks.md) as `default_node_pool`, because a cluster with no pool never leaves `provisioning` and the cluster create call cannot take one inline. See that resource for why. Use this one for every pool beyond the first — a GPU pool, a pool on a different plan, a pool you want to scale or destroy without touching the cluster.
+A cluster becomes `ready` only once a pool has nodes. Its create returns as soon as the control plane is up (`reason` `WaitingForNodePool`), so a pool that references the cluster — `cluster_id = latitudesh_lks.example.id` — is created right after it. This resource's create waits for its own nodes and **then for the cluster** to finish installing the platform's components on them, so the apply that adds a cluster's first pool ends on a `ready` cluster. On a cluster that is already ready, that second wait is a single read.
 
-`latitudesh_lks` manages only the pool recorded in its `default_node_pool`, so the two resources never contend for the same object.
+If the cluster does not reach `ready` within `timeouts.create`, the apply still succeeds, with a warning naming the cluster's last status and reason. It is a warning on purpose: the pool is up, and failing its create would taint it, so the next apply would rebuild healthy bare metal over a problem that belongs to the cluster.
+
+At least one pool in the cluster must stay free of `NoSchedule` and `NoExecute` taints, or the platform's components (CNI, CoreDNS) have nowhere to run and the cluster never leaves `provisioning`. The API accepts the taint, and a pool cannot tell whether it is the only one, so this is not checked at plan time — keep a general-purpose pool, as the example does, and taint the specialized ones.
 
 Two lookups feed a pool: [`latitudesh_lks_plans`](../data-sources/lks_plans.md) for `plan` and [`latitudesh_lks_versions`](../data-sources/lks_versions.md) for `kubernetes_version`. A pool has no site of its own — it is built wherever its cluster is — so filter the plan catalog by the **cluster's** `site`: a plan that is merely *available* there is not enough, it has to be in `stock`, or the pool has nothing to build on.
 
@@ -19,7 +22,7 @@ Two lookups feed a pool: [`latitudesh_lks_plans`](../data-sources/lks_plans.md) 
 
 ## `kubernetes_version` tracks the cluster unless you pin it
 
-Leave `kubernetes_version` unset and the pool follows the cluster's control-plane version: upgrade `latitudesh_lks` and this pool upgrades to match. Because a standalone pool only knows its `cluster_id`, it learns the new version by reading the cluster during planning — so the follow lands on the **next** apply after the control plane is actually on the new version, not the same one that bumps it. Set `kubernetes_version` explicitly to pin the pool to a single version and opt out of tracking. Following recycles the pool's nodes, the same as any version change.
+Leave `kubernetes_version` unset and the pool follows the cluster's control-plane version: upgrade `latitudesh_lks` and this pool upgrades to match. Because a pool only knows its `cluster_id`, it learns the new version by reading the cluster during planning — so the follow lands on the **next** apply after the control plane is actually on the new version, not the same one that bumps it. Set `kubernetes_version` explicitly to pin the pool to a single version and opt out of tracking. Following recycles the pool's nodes, the same as any version change.
 
 Two API rules worth knowing before you meet them as a 422:
 
@@ -28,15 +31,12 @@ Two API rules worth knowing before you meet them as a 422:
 
 `labels` and `taints` are a declarative replace, not a merge: what you write is what the pool ends up with, and removing them all clears them.
 
-Unlike [`latitudesh_lks`](lks.md)'s `default_node_pool`, this resource accepts `NoSchedule` and `NoExecute` — reserving a pool for specific workloads is the usual reason to add one. The restriction exists only on the default pool, which has to stay schedulable for the cluster's own components.
-
 ## Example Usage
 
 ```terraform
-# Node pools beyond the first. The first one is required and lives inside
-# latitudesh_lks as `default_node_pool`; use this resource to add capacity that
-# should scale, upgrade or be destroyed independently of the cluster — a GPU
-# pool, a batch pool, a pool on a different plan.
+# A cluster's workers. latitudesh_lks is the control plane alone; every pool,
+# including the first, is a latitudesh_lks_node_pool that scales, upgrades and
+# is destroyed independently of the cluster.
 data "latitudesh_lks_sites" "for_pool" {}
 
 data "latitudesh_lks_versions" "for_pool" {}
@@ -61,10 +61,18 @@ resource "latitudesh_lks" "node_pool_example" {
   name               = "example-cluster"
   site               = local.pool_site
   kubernetes_version = data.latitudesh_lks_versions.for_pool.default_version
+}
 
-  default_node_pool = {
-    node_count = 1
-    plan       = keys(data.latitudesh_lks_plans.for_pool.stock)[0]
+# The general-purpose pool. It carries no hard taint, so the platform's own
+# components (CNI, CoreDNS) can run on it — a cluster needs at least one pool
+# like this to become ready.
+resource "latitudesh_lks_node_pool" "general" {
+  cluster_id = latitudesh_lks.node_pool_example.id
+  node_count = 1
+  plan       = keys(data.latitudesh_lks_plans.for_pool.stock)[0]
+
+  labels = {
+    "workload" = "general"
   }
 }
 
@@ -87,9 +95,8 @@ resource "latitudesh_lks_node_pool" "gpu" {
     "workload" = "gpu"
   }
 
-  # A hard taint belongs here rather than on `default_node_pool`, which has to
-  # stay schedulable for the cluster's own components. Reserving a pool this
-  # way is the usual reason to add one.
+  # A hard taint reserves this pool for workloads that tolerate it. Fine here,
+  # because the general pool above stays schedulable for everything else.
   taints = [{
     key    = "dedicated"
     value  = "gpu"
@@ -97,7 +104,8 @@ resource "latitudesh_lks_node_pool" "gpu" {
   }]
 
   # Bare metal: create and scale wait until the platform reports the pool
-  # settled (and for ready_nodes to reach node_count, when it reports one).
+  # settled (and for ready_nodes to reach node_count, when it reports one);
+  # create also waits for the cluster to settle on the new nodes.
   timeouts = {
     create = "90m"
     update = "90m"
@@ -108,7 +116,7 @@ resource "latitudesh_lks_node_pool" "gpu" {
 data "latitudesh_lks_node_pools" "example" {
   cluster_id = latitudesh_lks.node_pool_example.id
 
-  depends_on = [latitudesh_lks_node_pool.gpu]
+  depends_on = [latitudesh_lks_node_pool.general, latitudesh_lks_node_pool.gpu]
 }
 ```
 
@@ -128,7 +136,9 @@ data "latitudesh_lks_node_pools" "example" {
 - `labels` (Map of String) Kubernetes labels applied to every node in the pool (max 50). Keys follow Kubernetes label-key syntax; values may be empty. Keys under `kubernetes.io`, `k8s.io`, `cluster.x-k8s.io`, `lks.latitude.sh` or their subdomains are reserved and rejected with 422.
 - `max_pods_per_node` (Number) kubelet `--max-pods` for every node in the pool. Create-only: the API rejects a PATCH that carries it with 422, so changing it forces a new resource. Omit for the platform default (110).
 - `name` (String) Display name for the pool. Generated by the platform when omitted.
-- `taints` (Attributes Set) Kubernetes taints applied to every node in the pool (max 50). A set rather than a list: the API imposes no ordering, and each `(key, effect)` pair must be unique. (see [below for nested schema](#nestedatt--taints))
+- `taints` (Attributes Set) Kubernetes taints applied to every node in the pool (max 50). A set rather than a list: the API imposes no ordering, and each `(key, effect)` pair must be unique.
+
+Keep at least one pool in the cluster free of `NoSchedule` and `NoExecute` taints: the platform's own components do not tolerate them, so a cluster whose every pool carries one never leaves `provisioning`. The API accepts the taint, and a single pool cannot tell whether it is the only one, so this is not checked at plan time. (see [below for nested schema](#nestedatt--taints))
 - `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))
 - `type` (String) Node type. `bare_metal` is the only value the API accepts today. Set at creation; changing it forces a new resource.
 
@@ -162,7 +172,7 @@ Optional:
 
 Optional:
 
-- `create` (String) Timeout for the pool to settle — the platform reporting no operation in progress, and ready_nodes reaching node_count when it reports one. Bare metal, so allow for a real deploy. Default: 60 minutes.
+- `create` (String) Budget for the entire create: the pool settling (the platform reporting no operation in progress, and ready_nodes reaching node_count when it reports one), then the cluster settling on the new nodes — normally "ready". The second part only warns when it runs out. Bare metal, so allow for a real deploy. Default: 60 minutes.
 - `delete` (String) Timeout for the pool to be fully removed. Default: 30 minutes.
 - `update` (String) Timeout for a scale or version change to settle. A scale and a version change in one apply are two sequential operations, each waited on, within this one budget; if the scale uses it up, the version change is not started and the next apply picks it up. Default: 60 minutes.
 

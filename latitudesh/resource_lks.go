@@ -10,16 +10,12 @@ import (
 
 	goversion "github.com/hashicorp/go-version"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
-	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
-	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
-	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -72,7 +68,6 @@ type LksResourceModel struct {
 	KubernetesVersion    types.String   `tfsdk:"kubernetes_version"`
 	Description          types.String   `tfsdk:"description"`
 	Network              types.Object   `tfsdk:"network"`
-	DefaultNodePool      types.Object   `tfsdk:"default_node_pool"`
 	Status               types.String   `tfsdk:"status"`
 	Message              types.String   `tfsdk:"message"`
 	Reason               types.String   `tfsdk:"reason"`
@@ -212,196 +207,14 @@ func lksNetworkFromObject(ctx context.Context, obj types.Object) (*components.Cr
 	}, diags
 }
 
-// --- default_node_pool ------------------------------------------------------
-//
-// The cluster owns exactly one node pool, created inside its own Create. This
-// is the AKS/DigitalOcean shape, and here it is not a stylistic choice: a
-// cluster with no pool never leaves "provisioning", and POST /lks/clusters
-// takes none inline, so a pool expressed as a separate resource could only be
-// created after Create returned — which is why Create cannot wait for
-// readiness in that design. Folding the first pool in restores both: the
-// requirement is enforced by the schema, and waiting for "ready" is honest
-// again. Every pool beyond the first belongs to latitudesh_lks_node_pool.
-
-// lksDefaultNodePoolModel mirrors the default_node_pool attribute. The
-// read-only half of it is everything GET /lks/clusters/{id}/nodepools/{id}
-// reports and latitudesh_lks_node_pool already exposes: the pool folded in
-// here is the same object, so it answers the same questions — above all
-// `message`/`reason`, which are what explain a pool that is stuck.
-type lksDefaultNodePoolModel struct {
-	ID                types.String `tfsdk:"id"`
-	Plan              types.String `tfsdk:"plan"`
-	NodeCount         types.Int64  `tfsdk:"node_count"`
-	Name              types.String `tfsdk:"name"`
-	Description       types.String `tfsdk:"description"`
-	KubernetesVersion types.String `tfsdk:"kubernetes_version"`
-	MaxPodsPerNode    types.Int64  `tfsdk:"max_pods_per_node"`
-	Labels            types.Map    `tfsdk:"labels"`
-	Taints            types.Set    `tfsdk:"taints"`
-	Type              types.String `tfsdk:"type"`
-	Mode              types.String `tfsdk:"mode"`
-	Status            types.String `tfsdk:"status"`
-	Message           types.String `tfsdk:"message"`
-	Reason            types.String `tfsdk:"reason"`
-	ReadyNodes        types.Int64  `tfsdk:"ready_nodes"`
-	PlatformVersion   types.String `tfsdk:"platform_version"`
-	CreatedAt         types.String `tfsdk:"created_at"`
-	UpdatedAt         types.String `tfsdk:"updated_at"`
-}
-
-var lksDefaultNodePoolAttrTypes = map[string]attr.Type{
-	"id":                 types.StringType,
-	"plan":               types.StringType,
-	"node_count":         types.Int64Type,
-	"name":               types.StringType,
-	"description":        types.StringType,
-	"kubernetes_version": types.StringType,
-	"max_pods_per_node":  types.Int64Type,
-	"labels":             types.MapType{ElemType: types.StringType},
-	"taints":             types.SetType{ElemType: lksTaintObjectType},
-	"type":               types.StringType,
-	"mode":               types.StringType,
-	"status":             types.StringType,
-	"message":            types.StringType,
-	"reason":             types.StringType,
-	"ready_nodes":        types.Int64Type,
-	"platform_version":   types.StringType,
-	"created_at":         types.StringType,
-	"updated_at":         types.StringType,
-}
-
-func lksDefaultNodePoolFromObject(ctx context.Context, obj types.Object) (lksDefaultNodePoolModel, diag.Diagnostics) {
-	var model lksDefaultNodePoolModel
-	var diags diag.Diagnostics
-	if obj.IsNull() || obj.IsUnknown() {
-		return model, diags
-	}
-	diags.Append(obj.As(ctx, &model, basetypes.ObjectAsOptions{})...)
-	return model, diags
-}
-
-// lksCreateDefaultNodePool POSTs the pool described by default_node_pool and
-// returns its ID along with the attributes the API answered with, so the
-// caller can record the pool as the platform created it before the long wait
-// for its nodes rather than only after.
-func (r *LksResource) lksCreateDefaultNodePool(ctx context.Context, clusterID string, pool lksDefaultNodePoolModel, diags *diag.Diagnostics) (string, *components.LksNodePoolDataAttributes) {
-	labels, d := lksLabelsFromMap(ctx, pool.Labels)
-	diags.Append(d...)
-	taints, d := lksTaintsFromSet(ctx, pool.Taints)
-	diags.Append(d...)
-	if diags.HasError() {
-		return "", nil
-	}
-
-	result, err := r.client.Lks.CreateLksNodePool(ctx, clusterID, components.CreateLksNodePool{
-		Data: components.CreateLksNodePoolData{
-			Type: components.CreateLksNodePoolTypeLksNodePools,
-			Attributes: components.CreateLksNodePoolAttributes{
-				Plan:              pool.Plan.ValueString(),
-				Count:             pool.NodeCount.ValueInt64(),
-				KubernetesVersion: lksStringPtrIfSet(pool.KubernetesVersion),
-				MaxPodsPerNode:    lksInt64PtrIfSet(pool.MaxPodsPerNode),
-				Name:              lksStringPtrIfSet(pool.Name),
-				Description:       lksStringPtrIfSet(pool.Description),
-				Labels:            labels,
-				Taints:            taints,
-			},
-		},
-	})
-	if err != nil {
-		diags.AddError("Client Error", "Unable to create the cluster's default node pool, got error: "+err.Error())
-		return "", nil
-	}
-	if result == nil || result.LksNodePool == nil || result.LksNodePool.Data == nil || result.LksNodePool.Data.ID == nil {
-		diags.AddError("Unexpected API response", "The default node pool creation response did not include an ID.")
-		return "", nil
-	}
-	return *result.LksNodePool.Data.ID, result.LksNodePool.Data.Attributes
-}
-
-// lksReadDefaultNodePoolInto refreshes default_node_pool from the API. A pool
-// that has been removed out of band comes back as a null object, which plans as
-// a change and is recreated on the next apply rather than silently leaving the
-// cluster without one.
-func (r *LksResource) lksReadDefaultNodePoolInto(ctx context.Context, clusterID string, data *LksResourceModel, diags *diag.Diagnostics) {
-	planned, d := lksDefaultNodePoolFromObject(ctx, data.DefaultNodePool)
-	diags.Append(d...)
-	if diags.HasError() {
-		return
-	}
-
-	poolID := planned.ID.ValueString()
-	if poolID == "" {
-		data.DefaultNodePool = types.ObjectNull(lksDefaultNodePoolAttrTypes)
-		return
-	}
-
-	result, err := r.client.Lks.GetLksNodePool(ctx, clusterID, poolID)
-	if err != nil {
-		if lksClusterNotFound(err) {
-			data.DefaultNodePool = types.ObjectNull(lksDefaultNodePoolAttrTypes)
-			return
-		}
-		diags.AddError("Client Error", "Unable to read the cluster's default node pool, got error: "+err.Error())
-		return
-	}
-	if result == nil || result.LksNodePool == nil || result.LksNodePool.Data == nil {
-		data.DefaultNodePool = types.ObjectNull(lksDefaultNodePoolAttrTypes)
-		return
-	}
-
-	data.DefaultNodePool = lksDefaultNodePoolObject(ctx, poolID, planned, result.LksNodePool.Data.Attributes, diags)
-}
-
-// lksDefaultNodePoolObject folds the API's view of a pool into the planned
-// default_node_pool. Both the POST response and a later GET carry the same
-// attributes envelope, so the create path and the refresh path agree on what
-// state ends up holding.
-func lksDefaultNodePoolObject(ctx context.Context, poolID string, planned lksDefaultNodePoolModel, attrs *components.LksNodePoolDataAttributes, diags *diag.Diagnostics) types.Object {
-	fields, mapDiags := mapLksNodePoolAttributes(ctx, attrs)
-	diags.Append(mapDiags...)
-
-	out := lksDefaultNodePoolModel{
-		ID:                types.StringValue(poolID),
-		Plan:              fields.Plan,
-		NodeCount:         fields.NodeCount,
-		Name:              fields.Name,
-		Description:       lksDescriptionFromAPI(planned.Description, fields.Description),
-		KubernetesVersion: fields.KubernetesVersion,
-		MaxPodsPerNode:    planned.MaxPodsPerNode,
-		Labels:            fields.Labels,
-		Taints:            fields.Taints,
-		Type:              fields.Type,
-		Mode:              fields.Mode,
-		Status:            fields.Status,
-		Message:           fields.Message,
-		Reason:            fields.Reason,
-		ReadyNodes:        fields.ReadyNodes,
-		PlatformVersion:   fields.PlatformVersion,
-		CreatedAt:         fields.CreatedAt,
-		UpdatedAt:         fields.UpdatedAt,
-	}
-	// Create-only, so an omitted value must not wipe what was configured —
-	// but it still has to resolve, Computed attributes never staying unknown.
-	if !fields.MaxPodsPerNode.IsNull() {
-		out.MaxPodsPerNode = fields.MaxPodsPerNode
-	} else if out.MaxPodsPerNode.IsUnknown() {
-		out.MaxPodsPerNode = types.Int64Null()
-	}
-
-	obj, objDiags := types.ObjectValueFrom(ctx, lksDefaultNodePoolAttrTypes, out)
-	diags.Append(objDiags...)
-	return obj
-}
-
 func (r *LksResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_lks"
 }
 
 func (r *LksResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "LKS (Latitude Kubernetes Service) cluster resource. Provisions the control plane and the cluster's first node pool.\n\n" +
-			"**A cluster needs at least one node pool**, which is why `default_node_pool` is required here: until one exists the control plane never finishes converging and `status` stays `provisioning` — permanently, not slowly. Create builds that pool and waits for the whole thing to reach `ready`, so an apply that succeeds leaves a usable cluster. Every pool beyond the first is a `latitudesh_lks_node_pool`.",
+		MarkdownDescription: "LKS (Latitude Kubernetes Service) cluster resource. Provisions the control plane only; worker capacity is added with `latitudesh_lks_node_pool`.\n\n" +
+			"**A cluster needs at least one node pool to become `ready`.** Without one, the platform's own components (CNI, CoreDNS) have nowhere to run, so `status` stays `provisioning` with `reason` `WaitingForNodePool`. Create therefore waits for the control plane, not for `ready`: it returns once the platform reports `WaitingForNodePool`, which is the point where a node pool can join. The create of that pool then waits for the cluster to reach `ready`.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "LKS cluster identifier.",
@@ -475,144 +288,9 @@ func (r *LksResource) Schema(ctx context.Context, req resource.SchemaRequest, re
 					objectplanmodifier.RequiresReplace(),
 				},
 			},
-			"default_node_pool": schema.SingleNestedAttribute{
-				MarkdownDescription: "The cluster's first node pool, created with the cluster and required: a cluster with no node pool never leaves `provisioning`, and `POST /lks/clusters` takes none inline, so it cannot be a separate resource without deadlocking. Additional pools go in `latitudesh_lks_node_pool`, which owns its own lifecycle; this resource only ever manages the pool whose `id` it recorded here and ignores any other pool in the cluster.",
-				Required:            true,
-				Attributes: map[string]schema.Attribute{
-					"id": schema.StringAttribute{
-						MarkdownDescription: "Node pool identifier, assigned on creation. This is how the cluster recognizes its own pool on refresh.",
-						Computed:            true,
-						PlanModifiers: []planmodifier.String{
-							stringplanmodifier.UseStateForUnknown(),
-						},
-					},
-					"plan": schema.StringAttribute{
-						MarkdownDescription: "Plan the pool's nodes are provisioned from, as listed by `latitudesh_lks_plans` — not a `latitudesh_plan` server slug. It must have stock at the cluster's `site` (`in_stock_sites`). Changing it replaces the pool, not the cluster: a new one is built before the old is removed, so the cluster is never left without one.",
-						Required:            true,
-						Validators: []validator.String{
-							stringvalidator.LengthAtLeast(1),
-						},
-					},
-					"node_count": schema.Int64Attribute{
-						MarkdownDescription: "Number of nodes. Changing it scales the pool in place.",
-						Required:            true,
-						Validators: []validator.Int64{
-							int64validator.AtLeast(1),
-						},
-					},
-					"name": schema.StringAttribute{
-						MarkdownDescription: "Display name for the pool. Generated by the platform when omitted.",
-						Optional:            true,
-						Computed:            true,
-						PlanModifiers: []planmodifier.String{
-							stringplanmodifier.UseStateForUnknown(),
-						},
-					},
-					"description": schema.StringAttribute{
-						MarkdownDescription: "Optional customer description for the pool. Like the cluster's, it cannot be removed once set; change it instead.",
-						Optional:            true,
-					},
-					"kubernetes_version": schema.StringAttribute{
-						MarkdownDescription: "Kubernetes patch version for the pool's nodes. Omit it and the pool tracks the cluster's `kubernetes_version` — a control-plane upgrade upgrades this pool too, in the same apply. Set it explicitly to pin the pool to one version. Never newer than the control plane (422 `VERSION_SKEW`); tracking keeps it in step by construction.",
-						Optional:            true,
-						Computed:            true,
-						PlanModifiers: []planmodifier.String{
-							stringplanmodifier.UseStateForUnknown(),
-						},
-					},
-					"max_pods_per_node": schema.Int64Attribute{
-						MarkdownDescription: "kubelet `--max-pods` for the pool's nodes. Create-only on the API, so changing it replaces the pool. Omit for the platform default (110).",
-						Optional:            true,
-						Computed:            true,
-						Validators: []validator.Int64{
-							int64validator.AtLeast(1),
-						},
-						PlanModifiers: []planmodifier.Int64{
-							int64planmodifier.UseStateForUnknown(),
-						},
-					},
-					"labels": schema.MapAttribute{
-						MarkdownDescription: "Kubernetes labels applied to every node in the pool (max 50). Reserved prefixes are rejected — see `latitudesh_lks_node_pool`.",
-						ElementType:         types.StringType,
-						Optional:            true,
-						Validators: []validator.Map{
-							mapvalidator.SizeAtMost(50),
-							lksReservedLabelKeysValidator{},
-						},
-					},
-					"taints": schema.SetNestedAttribute{
-						MarkdownDescription: "Kubernetes taints applied to every node in the pool (max 50). Each `(key, effect)` pair must be unique.\n\n" +
-							"`NoSchedule` and `NoExecute` are rejected here: the cluster's own system workloads have nowhere to run but this pool, so a hard taint keeps them from scheduling and the cluster never leaves `provisioning`. Use `PreferNoSchedule`, or put the taint on a separate `latitudesh_lks_node_pool`.",
-						Optional: true,
-						Validators: []validator.Set{
-							setvalidator.SizeAtMost(50),
-							lksUniqueTaintsValidator{},
-							lksDefaultPoolTaintsValidator{},
-						},
-						NestedObject: schema.NestedAttributeObject{
-							Attributes: map[string]schema.Attribute{
-								"key": schema.StringAttribute{
-									MarkdownDescription: "Taint key.",
-									Required:            true,
-									Validators: []validator.String{
-										stringvalidator.LengthAtLeast(1),
-									},
-								},
-								"value": schema.StringAttribute{
-									MarkdownDescription: "Taint value.",
-									Optional:            true,
-								},
-								"effect": schema.StringAttribute{
-									MarkdownDescription: "Taint effect: `NoSchedule`, `PreferNoSchedule` or `NoExecute`.",
-									Required:            true,
-									Validators: []validator.String{
-										stringvalidator.OneOf("NoSchedule", "PreferNoSchedule", "NoExecute"),
-									},
-								},
-							},
-						},
-					},
-					"type": schema.StringAttribute{
-						MarkdownDescription: "Node type backing the pool. Read-only here: `POST /lks/clusters/{id}/nodepools` only accepts `bare_metal` today, so there is nothing to choose. `latitudesh_lks_node_pool` exposes it as a write once that changes.",
-						Computed:            true,
-					},
-					"mode": schema.StringAttribute{
-						MarkdownDescription: "Provisioning mode the platform assigned to the pool's nodes, e.g. `on_demand`.",
-						Computed:            true,
-					},
-					"status": schema.StringAttribute{
-						MarkdownDescription: "Pool lifecycle status.",
-						Computed:            true,
-					},
-					"message": schema.StringAttribute{
-						MarkdownDescription: "Human-readable detail behind the pool's current `status` — this is what explains a pool that is not coming up.",
-						Computed:            true,
-					},
-					"reason": schema.StringAttribute{
-						MarkdownDescription: "Machine-readable status reason for the pool (open enum).",
-						Computed:            true,
-					},
-					"ready_nodes": schema.Int64Attribute{
-						MarkdownDescription: "Nodes currently ready. The platform does not always report it: it is absent while the pool is still building, and stays `null` on pools it never counts, so a null here does not mean zero.",
-						Computed:            true,
-					},
-					"platform_version": schema.StringAttribute{
-						MarkdownDescription: "Platform (LKS controller) version running on the pool's nodes.",
-						Computed:            true,
-					},
-					"created_at": schema.StringAttribute{
-						MarkdownDescription: "Timestamp when the pool was created.",
-						Computed:            true,
-					},
-					"updated_at": schema.StringAttribute{
-						MarkdownDescription: "Timestamp when the pool was last updated.",
-						Computed:            true,
-					},
-				},
-			},
 			"status": schema.StringAttribute{
 				MarkdownDescription: "Cluster lifecycle status. Open enum sourced from the platform controller; values in use today are `provisioning`, `ready`, `updating`, `scaling`, `upgrading`, `paused`, `deleting` and `deleted`, and new ones may appear without notice.\n\n" +
-					"After a successful apply this reads `ready`: create builds `default_node_pool` and waits for the control plane to converge, so a cluster that never got there fails the apply instead of being recorded half-built.",
+					"Right after a create this reads `provisioning` with `reason` `WaitingForNodePool`: the control plane is up, and the cluster becomes `ready` only once a `latitudesh_lks_node_pool` has nodes and the platform has finished installing its components on them. This resource's create cannot wait for that, because no pool can be created before the cluster exists; the pool's create does, and this attribute catches up on the next refresh.",
 				Computed: true,
 			},
 			"message": schema.StringAttribute{
@@ -620,7 +298,7 @@ func (r *LksResource) Schema(ctx context.Context, req resource.SchemaRequest, re
 				Computed:            true,
 			},
 			"reason": schema.StringAttribute{
-				MarkdownDescription: "Machine-readable status reason (open enum).",
+				MarkdownDescription: "Machine-readable status reason (open enum). `WaitingForNodePool` means the control plane is up and the cluster has no ready node yet; `FinishingSetup` means a node has joined and the platform is still installing its components.",
 				Computed:            true,
 			},
 			"control_plane_endpoint": schema.StringAttribute{
@@ -628,7 +306,7 @@ func (r *LksResource) Schema(ctx context.Context, req resource.SchemaRequest, re
 				Computed:            true,
 			},
 			"kubeconfig_url": schema.StringAttribute{
-				MarkdownDescription: "URL to fetch the cluster kubeconfig from once the control plane is ready. `GET /lks/clusters/{id}/kubeconfig` answers 409 `NOT_READY` until `status` is `ready` — and the URL is published moments *after* the status flips, so it can still be null in state right after a create; the next refresh fills it.",
+				MarkdownDescription: "URL to fetch the cluster kubeconfig from. The platform publishes the kubeconfig only once `status` is `ready`, which takes a node pool, so this is null right after a create; the next refresh after the first pool is up fills it. Until then `GET /lks/clusters/{id}/kubeconfig` answers 409 `NOT_READY`.",
 				Computed:            true,
 			},
 			"platform_version": schema.StringAttribute{
@@ -647,8 +325,8 @@ func (r *LksResource) Schema(ctx context.Context, req resource.SchemaRequest, re
 				Create:            true,
 				Update:            true,
 				Delete:            true,
-				CreateDescription: `Budget for the entire create: the cluster record becoming readable, the nodes of default_node_pool coming up, and the control plane reaching status "ready". The nodes are the slow part — they are physical machines. Default: 30 minutes. Example: "45m", "1h"`,
-				UpdateDescription: `Budget for the entire update: a control-plane upgrade reaching "ready" again, plus whatever default_node_pool needs on top — a scale, a version change following the cluster, or a full pool replacement, which builds new bare metal before releasing the old. The pool's version change is only started while budget remains; otherwise the next apply picks it up. Default: 30 minutes.`,
+				CreateDescription: `Budget for the entire create: the cluster record becoming readable and the control plane coming up, which the platform signals with reason "WaitingForNodePool". Node pools are separate resources with their own timeouts. Default: 30 minutes. Example: "45m", "1h"`,
+				UpdateDescription: `Budget for an update: a control-plane upgrade reaching "ready" again on the new kubernetes_version. Node pools upgrade separately. Default: 30 minutes.`,
 				DeleteDescription: `Timeout for the cluster to be fully deleted. Default: 15 minutes.`,
 			}),
 		},
@@ -680,10 +358,9 @@ func (r *LksResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanReq
 	}
 
 	// Reject lowering kubernetes_version in place. The platform forbids it (422
-	// DOWNGRADE_NOT_ALLOWED), but only once the apply reaches the PATCH — an
-	// hour of build behind it if the pool has to come up first. Comparing here
-	// turns that into a plan error, the same reason the default-pool taint check
-	// lives in the plan. Only runs on update (prior state exists).
+	// DOWNGRADE_NOT_ALLOWED), but only once the apply reaches the PATCH.
+	// Comparing here turns that into a plan error. Only runs on update (prior
+	// state exists).
 	if !req.State.Raw.IsNull() {
 		var state LksResourceModel
 		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -713,46 +390,6 @@ func (r *LksResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanReq
 	}
 
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// An omitted default_node_pool.kubernetes_version follows the cluster's
-	// version instead of pinning to whatever it got at create — set explicitly,
-	// it stays put. Both live in this one resource, so "the cluster's version"
-	// is the plan value right here, no lookup needed: on a version bump the pool
-	// plans the same upgrade, which reconcileDefaultNodePool issues right after
-	// the control plane. Done last so it wins over the whole-plan Set above.
-	r.followClusterVersionInDefaultPool(ctx, cfg, plan, resp)
-}
-
-// followClusterVersionInDefaultPool pins default_node_pool.kubernetes_version to
-// the cluster's version when the configuration omits it. An explicit value is
-// left untouched (the user opted out of tracking). Setting it to a known value
-// also removes the "known after apply" the omitted attribute would otherwise
-// show, and guarantees the pool is never newer than the control plane, so
-// VERSION_SKEW is impossible by construction.
-func (r *LksResource) followClusterVersionInDefaultPool(ctx context.Context, cfg, plan LksResourceModel, resp *resource.ModifyPlanResponse) {
-	if plan.DefaultNodePool.IsNull() || plan.DefaultNodePool.IsUnknown() {
-		return
-	}
-	if plan.KubernetesVersion.IsNull() || plan.KubernetesVersion.IsUnknown() {
-		return
-	}
-
-	cfgPool, d := lksDefaultNodePoolFromObject(ctx, cfg.DefaultNodePool)
-	resp.Diagnostics.Append(d...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	// Explicitly configured version: pinned, not tracked.
-	if !cfgPool.KubernetesVersion.IsNull() {
-		return
-	}
-
-	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx,
-		path.Root("default_node_pool").AtName("kubernetes_version"),
-		plan.KubernetesVersion)...)
 }
 
 // lksCheckNoDowngrade fails the plan when kubernetes_version would move
@@ -871,53 +508,16 @@ func (r *LksResource) Create(ctx context.Context, req resource.CreateRequest, re
 
 	// One absolute deadline for every wait in this create. The timeout is a
 	// budget for the whole operation — which is what the schema promises — not
-	// an allowance each sequential wait starts afresh, which would let the
-	// default 30 minutes run for 90 before failing.
+	// an allowance each sequential wait starts afresh.
 	deadline := time.Now().Add(createTimeout)
 
-	// The cluster record has to be queryable before anything can be hung off
-	// it: the POST answers before the GET necessarily succeeds.
-	r.waitForClusterExists(ctx, id, deadline, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// The default node pool is created here, inside the cluster's own Create,
-	// and that is the whole reason it lives in this schema — see the comment on
-	// lksDefaultNodePoolModel. Without it the cluster would never converge.
-	pool, poolDiags := lksDefaultNodePoolFromObject(ctx, data.DefaultNodePool)
-	resp.Diagnostics.Append(poolDiags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	poolID, poolAttrs := r.lksCreateDefaultNodePool(ctx, id, pool, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		// The cluster exists and is tracked by the write above; the pool is
-		// not. The next apply finishes the job instead of orphaning it.
-		return
-	}
-	data.DefaultNodePool = lksDefaultNodePoolObject(ctx, poolID, pool, poolAttrs, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// Nodes first, then the control plane: the cluster converges only once the
-	// pool has nodes, so this order reports the slow part as the slow part.
-	// Neither wait mutates the model, and both objects are already in state
-	// above, so a failure here needs no further write to stay recoverable.
-	lksWaitForNodesReady(ctx, r.client, id, poolID, pool.NodeCount.ValueInt64(), deadline, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// Now valid, unlike the pool-less design: the pool exists, so "ready" is
-	// reachable rather than a deadlock.
-	r.waitForClusterReady(ctx, id, "", deadline, &resp.Diagnostics)
+	// The control plane, not "ready": a cluster becomes ready only once a node
+	// pool has nodes, and no latitudesh_lks_node_pool can be created until this
+	// Create returns, so waiting for ready here would wait on itself. The
+	// platform says when the control plane is up and a pool is all that is
+	// missing; that is the point this returns at. The POST answers before the
+	// GET necessarily succeeds, which the poller absorbs as a transient 404.
+	r.waitForControlPlane(ctx, id, deadline, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -996,8 +596,6 @@ func (r *LksResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		return
 	}
 
-	// Shared by the control-plane wait and everything reconcileDefaultNodePool
-	// does after it — see the same note in Create.
 	deadline := time.Now().Add(updateTimeout)
 
 	// A kubernetes_version change is asynchronous *and* lazy: the platform
@@ -1019,109 +617,12 @@ func (r *LksResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		return
 	}
 
-	r.reconcileDefaultNodePool(ctx, id, &data, state, deadline, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
 	r.readLksInto(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-}
-
-// reconcileDefaultNodePool brings the cluster's own pool in line with the plan.
-//
-// plan and max_pods_per_node have no update endpoint, so changing either
-// replaces the pool — the pool, not the cluster, which is where this improves
-// on azurerm_kubernetes_cluster's default_node_pool. The replacement is built
-// BEFORE the old one is torn down, so the cluster is never momentarily without
-// a pool: it is the same allocate-then-release ordering resource_elastic_ip_bgp
-// uses to avoid orphaning.
-func (r *LksResource) reconcileDefaultNodePool(ctx context.Context, clusterID string, data *LksResourceModel, state LksResourceModel, deadline time.Time, diags *diag.Diagnostics) {
-	planned, d := lksDefaultNodePoolFromObject(ctx, data.DefaultNodePool)
-	diags.Append(d...)
-	current, d := lksDefaultNodePoolFromObject(ctx, state.DefaultNodePool)
-	diags.Append(d...)
-	if diags.HasError() {
-		return
-	}
-
-	oldID := current.ID.ValueString()
-
-	// A planned value that is still unknown is a Computed attribute waiting to
-	// be filled from the API, NOT a change. Comparing it directly against state
-	// makes every update look like a plan/max_pods_per_node edit and rebuilds
-	// the pool — an hour of bare metal for a rename.
-	changed := func(plannedVal, currentVal attr.Value) bool {
-		if plannedVal.IsUnknown() {
-			return false
-		}
-		return !plannedVal.Equal(currentVal)
-	}
-
-	// No pool on record: either the first apply failed after the cluster was
-	// created, or it was deleted out of band. Either way, build one.
-	replace := oldID == "" ||
-		changed(planned.Plan, current.Plan) ||
-		changed(planned.MaxPodsPerNode, current.MaxPodsPerNode)
-
-	if replace {
-		newID, newAttrs := r.lksCreateDefaultNodePool(ctx, clusterID, planned, diags)
-		if diags.HasError() {
-			return
-		}
-		planned.ID = types.StringValue(newID)
-
-		data.DefaultNodePool = lksDefaultNodePoolObject(ctx, newID, planned, newAttrs, diags)
-		if diags.HasError() {
-			return
-		}
-
-		lksWaitForNodesReady(ctx, r.client, clusterID, newID, planned.NodeCount.ValueInt64(), deadline, diags)
-		if diags.HasError() {
-			return
-		}
-
-		if oldID != "" {
-			if _, err := r.client.Lks.DeleteLksNodePool(ctx, clusterID, oldID); err != nil && !lksClusterNotFound(err) {
-				diags.AddError("Client Error", "Replaced the default node pool but could not remove the old one ("+oldID+"): "+err.Error())
-				return
-			}
-			lksWaitForNodePoolDeleted(ctx, r.client, clusterID, oldID, deadline, diags)
-		}
-		return
-	}
-
-	// The default pool goes through the same split as the standalone resource:
-	// a scale and an upgrade may not share a PATCH (422), and the version is
-	// always known here because the attribute is Computed.
-	lksPatchNodePool(ctx, r.client, lksNodePoolPatch{
-		ClusterID:      clusterID,
-		PoolID:         oldID,
-		Name:           planned.Name,
-		Description:    planned.Description,
-		Labels:         planned.Labels,
-		Taints:         planned.Taints,
-		Count:          planned.NodeCount,
-		CountChanged:   !planned.NodeCount.Equal(current.NodeCount),
-		Version:        planned.KubernetesVersion,
-		VersionChanged: changed(planned.KubernetesVersion, current.KubernetesVersion),
-		Deadline:       deadline,
-	}, diags)
-	if diags.HasError() {
-		return
-	}
-
-	planned.ID = types.StringValue(oldID)
-	obj, objDiags := types.ObjectValueFrom(ctx, lksDefaultNodePoolAttrTypes, planned)
-	diags.Append(objDiags...)
-	if diags.HasError() {
-		return
-	}
-	data.DefaultNodePool = obj
 }
 
 func (r *LksResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -1168,37 +669,6 @@ func (r *LksResource) ImportState(ctx context.Context, req resource.ImportStateR
 			"update": types.StringType,
 			"delete": types.StringType,
 		}),
-	}
-
-	// Nothing marks a pool as "the default" server-side, so import adopts the
-	// first one the cluster reports and leaves the rest to be imported as
-	// latitudesh_lks_node_pool. Check the result before the next apply.
-	if adopted := r.adoptFirstNodePool(ctx, req.ID, &resp.Diagnostics); adopted != "" {
-		obj, objDiags := types.ObjectValueFrom(ctx, lksDefaultNodePoolAttrTypes, lksDefaultNodePoolModel{
-			ID:                types.StringValue(adopted),
-			Plan:              types.StringNull(),
-			NodeCount:         types.Int64Null(),
-			Name:              types.StringNull(),
-			Description:       types.StringNull(),
-			KubernetesVersion: types.StringNull(),
-			MaxPodsPerNode:    types.Int64Null(),
-			Labels:            types.MapNull(types.StringType),
-			Taints:            types.SetNull(lksTaintObjectType),
-			Type:              types.StringNull(),
-			Mode:              types.StringNull(),
-			Status:            types.StringNull(),
-			Message:           types.StringNull(),
-			Reason:            types.StringNull(),
-			ReadyNodes:        types.Int64Null(),
-			PlatformVersion:   types.StringNull(),
-			CreatedAt:         types.StringNull(),
-			UpdatedAt:         types.StringNull(),
-		})
-		resp.Diagnostics.Append(objDiags...)
-		data.DefaultNodePool = obj
-	}
-	if resp.Diagnostics.HasError() {
-		return
 	}
 
 	r.readLksInto(ctx, &data, &resp.Diagnostics)
@@ -1250,134 +720,150 @@ func lksSettled(status string) (done bool, hopeless bool) {
 	}
 }
 
-// waitForClusterExists polls GET /lks/clusters/{id} until the cluster is
-// readable, which is all Create can wait for — see the comment there. The POST
-// answers before the record is necessarily queryable, so a 404 (or a 5xx) in
-// the first moments is transient, exactly as it is for the readiness poll.
-//
-// The create's deadline is the ceiling, but this normally returns on the
-// first or second poll: it is waiting for a record to appear, not for hardware.
-func (r *LksResource) waitForClusterExists(ctx context.Context, id string, deadline time.Time, diags *diag.Diagnostics) {
-	const maxConsecutiveErrors = 5
-	pollInterval := lksReadyPollInterval
-
-	consecutiveErrors := 0
-
-	for time.Now().Before(deadline) {
-		result, err := r.client.Lks.GetLksCluster(ctx, id)
-		if err != nil {
-			if !lksRetryableDuringPoll(err) {
-				diags.AddError("Client Error", "Unable to read the LKS cluster just created: "+err.Error())
-				return
-			}
-			consecutiveErrors++
-			if consecutiveErrors >= maxConsecutiveErrors {
-				diags.AddError("Client Error", fmt.Sprintf("Unable to read the LKS cluster just created after %d consecutive attempts, last error: %s", consecutiveErrors, err.Error()))
-				return
-			}
-		} else if result != nil && result.LksCluster != nil && result.LksCluster.Data != nil {
-			return
-		}
-
-		select {
-		case <-ctx.Done():
-			diags.AddError("Client Error", "Context cancelled while waiting for the LKS cluster to appear: "+ctx.Err().Error())
-			return
-		case <-time.After(pollInterval):
-		}
-	}
-
-	diags.AddError(
-		"Timeout waiting for LKS cluster",
-		fmt.Sprintf("LKS cluster %q was created but never became readable before the create timeout expired.", id),
-	)
+// lksControlPlaneUpReasons are the reasons the platform reports on a cluster
+// whose control plane is up but which is not ready yet, because readiness
+// waits on node pools. They are the operator's client-facing reason contract
+// (lks-platform internal/status/customer_message.go), which the API passes
+// through verbatim: WaitingForNodePool is a control plane with no ready node,
+// FinishingSetup a node that has joined while the platform's own components
+// are still installing on it. The operator reports either one only after the
+// network, infrastructure and control-plane gates have passed, so both mean a
+// node pool can join.
+var lksControlPlaneUpReasons = map[string]bool{
+	"WaitingForNodePool": true,
+	"FinishingSetup":     true,
 }
 
-// waitForClusterReady polls GET /lks/clusters/{id} until status is "ready".
+// lksClusterObservation is what one poll of GET /lks/clusters/{id} reported.
+type lksClusterObservation struct {
+	status  string
+	reason  string
+	version string
+}
+
+// lksPollCluster polls GET /lks/clusters/{id} until reached accepts what the
+// platform reports, and returns the last observation. timedOut is true only
+// when the deadline passed first; every other way the poll can end — a status
+// no wait can succeed from, a non-retryable error, a cancelled context — is
+// already in diags.
+//
 // No terminal failure status is documented for this operation (unlike VM
 // backups' "Failed"), so an unrecognized or stuck status is only ever a
 // timeout, never a fast-fail.
 //
-// wantVersion, when non-empty, additionally requires kubernetes_version to
-// have reached that value before the wait is satisfied. Create passes ""
-// (whatever version comes back is the one the cluster was built with); an
-// in-place upgrade passes the requested version, because the platform leaves
-// the cluster "ready" on the old version for a moment after accepting the
-// PATCH and a status-only check would return on that pre-upgrade read.
-//
 // deadline is absolute and shared with every other wait of the same Create or
 // Update, so the configured timeout bounds the operation, not each wait.
-func (r *LksResource) waitForClusterReady(ctx context.Context, id, wantVersion string, deadline time.Time, diags *diag.Diagnostics) {
+//
+// A free function rather than a method because latitudesh_lks_node_pool runs it
+// too: see lksWaitForClusterToSettle.
+func lksPollCluster(ctx context.Context, client *latitudeshgosdk.Latitudesh, id string, deadline time.Time, diags *diag.Diagnostics, reached func(lksClusterObservation) bool) (last lksClusterObservation, timedOut bool) {
 	const maxConsecutiveErrors = 5
 	pollInterval := lksReadyPollInterval
 
-	lastStatus := ""
-	lastVersion := ""
 	consecutiveErrors := 0
 
 	for time.Now().Before(deadline) {
-		result, err := r.client.Lks.GetLksCluster(ctx, id)
+		result, err := client.Lks.GetLksCluster(ctx, id)
 		if err != nil {
 			if !lksRetryableDuringPoll(err) {
 				diags.AddError("Client Error", "Unable to check LKS cluster status: "+err.Error())
-				return
+				return last, false
 			}
 			consecutiveErrors++
 			if consecutiveErrors >= maxConsecutiveErrors {
 				diags.AddError("Client Error", fmt.Sprintf("Unable to check LKS cluster status after %d consecutive attempts, last error: %s", consecutiveErrors, err.Error()))
-				return
+				return last, false
 			}
-			select {
-			case <-ctx.Done():
-				diags.AddError("Client Error", "Context cancelled while waiting for LKS cluster to be ready: "+ctx.Err().Error())
-				return
-			case <-time.After(pollInterval):
-				continue
-			}
-		}
-		consecutiveErrors = 0
+		} else {
+			consecutiveErrors = 0
 
-		if result != nil && result.LksCluster != nil && result.LksCluster.Data != nil && result.LksCluster.Data.Attributes != nil {
-			attrs := result.LksCluster.Data.Attributes
-			if version := attrs.KubernetesVersion; version != nil {
-				lastVersion = *version
-			}
-			if status := attrs.Status; status != nil {
-				lastStatus = *status
-
-				done, hopeless := lksSettled(lastStatus)
-				if hopeless {
-					diags.AddError(
-						"LKS cluster cannot become ready",
-						fmt.Sprintf("LKS cluster %q is %q, which no amount of waiting will change.", id, lastStatus),
-					)
-					return
+			if result != nil && result.LksCluster != nil && result.LksCluster.Data != nil && result.LksCluster.Data.Attributes != nil {
+				attrs := result.LksCluster.Data.Attributes
+				if version := attrs.KubernetesVersion; version != nil {
+					last.version = *version
 				}
-				if done && (wantVersion == "" || lastVersion == wantVersion) {
-					return
+				last.reason = ""
+				if reason := attrs.Reason; reason != nil {
+					last.reason = *reason
+				}
+				if status := attrs.Status; status != nil {
+					last.status = *status
+
+					if _, hopeless := lksSettled(last.status); hopeless {
+						diags.AddError(
+							"LKS cluster cannot become ready",
+							fmt.Sprintf("LKS cluster %q is %q, which no amount of waiting will change.", id, last.status),
+						)
+						return last, false
+					}
+					if reached(last) {
+						return last, false
+					}
 				}
 			}
 		}
 
 		select {
 		case <-ctx.Done():
-			diags.AddError("Client Error", "Context cancelled while waiting for LKS cluster to be ready: "+ctx.Err().Error())
-			return
+			diags.AddError("Client Error", "Context cancelled while waiting for the LKS cluster: "+ctx.Err().Error())
+			return last, false
 		case <-time.After(pollInterval):
 		}
+	}
+
+	return last, true
+}
+
+// waitForControlPlane polls until the control plane is up: the cluster is
+// settled (ready, or any state outside the in-progress set), or it reports one
+// of lksControlPlaneUpReasons. It is what Create waits for, since "ready" needs
+// a node pool that cannot exist yet — see the comment there.
+func (r *LksResource) waitForControlPlane(ctx context.Context, id string, deadline time.Time, diags *diag.Diagnostics) {
+	last, timedOut := lksPollCluster(ctx, r.client, id, deadline, diags, func(o lksClusterObservation) bool {
+		if done, _ := lksSettled(o.status); done {
+			return true
+		}
+		return lksControlPlaneUpReasons[o.reason]
+	})
+	if !timedOut {
+		return
+	}
+
+	diags.AddError(
+		"Timeout waiting for LKS control plane",
+		fmt.Sprintf("LKS cluster %q was created, but its control plane did not come up before the create timeout expired (last status: %q, last reason: %q). "+
+			"A control plane that is up reports reason \"WaitingForNodePool\" until a node pool joins.", id, last.status, last.reason),
+	)
+}
+
+// waitForClusterReady polls until the cluster is settled — status "ready", or
+// any state outside the in-progress set.
+//
+// wantVersion, when non-empty, additionally requires kubernetes_version to
+// have reached that value before the wait is satisfied. An in-place upgrade
+// passes the requested version, because the platform leaves the cluster
+// "ready" on the old version for a moment after accepting the PATCH and a
+// status-only check would return on that pre-upgrade read.
+func (r *LksResource) waitForClusterReady(ctx context.Context, id, wantVersion string, deadline time.Time, diags *diag.Diagnostics) {
+	last, timedOut := lksPollCluster(ctx, r.client, id, deadline, diags, func(o lksClusterObservation) bool {
+		done, _ := lksSettled(o.status)
+		return done && (wantVersion == "" || o.version == wantVersion)
+	})
+	if !timedOut {
+		return
 	}
 
 	if wantVersion != "" {
 		diags.AddError(
 			"Timeout waiting for LKS cluster upgrade",
-			fmt.Sprintf("LKS cluster %q did not reach status \"ready\" on kubernetes_version %q before the timeout expired (last status: %q, last version: %q).", id, wantVersion, lastStatus, lastVersion),
+			fmt.Sprintf("LKS cluster %q did not reach status \"ready\" on kubernetes_version %q before the timeout expired (last status: %q, last version: %q).", id, wantVersion, last.status, last.version),
 		)
 		return
 	}
 
 	diags.AddError(
 		"Timeout waiting for LKS cluster",
-		fmt.Sprintf("LKS cluster %q did not reach status \"ready\" before the timeout expired (last status: %q).", id, lastStatus),
+		fmt.Sprintf("LKS cluster %q did not reach status \"ready\" before the timeout expired (last status: %q, last reason: %q).", id, last.status, last.reason),
 	)
 }
 
@@ -1427,28 +913,6 @@ func (r *LksResource) waitForClusterDeleted(ctx context.Context, id string, dead
 		"Timeout waiting for LKS cluster deletion",
 		fmt.Sprintf("LKS cluster %q was not removed or marked deleted before the delete timeout expired.", id),
 	)
-}
-
-// adoptFirstNodePool returns the ID of the cluster's first node pool, or "" if
-// it has none — which for an existing cluster means it never converged.
-func (r *LksResource) adoptFirstNodePool(ctx context.Context, clusterID string, diags *diag.Diagnostics) string {
-	res, err := r.client.Lks.ListLksNodePools(ctx, clusterID)
-	if err != nil {
-		diags.AddError("Client Error", "Unable to list node pools while importing LKS cluster "+clusterID+": "+err.Error())
-		return ""
-	}
-	if res == nil || res.LksNodePools == nil || len(res.LksNodePools.Data) == 0 {
-		diags.AddWarning(
-			"Imported LKS cluster has no node pool",
-			"Cluster "+clusterID+" reports no node pool, so it cannot have finished provisioning. "+
-				"`default_node_pool` is required, so the next apply will create one.",
-		)
-		return ""
-	}
-	if id := res.LksNodePools.Data[0].ID; id != nil {
-		return *id
-	}
-	return ""
 }
 
 // lksApplyCreatedCluster records what the create response already knows about
@@ -1543,8 +1007,6 @@ func (r *LksResource) readLksInto(ctx context.Context, data *LksResourceModel, d
 	// when state already holds null, never when it holds a value to drift away
 	// from, and an explicitly configured "" still round-trips.
 	data.Description = lksDescriptionFromAPI(data.Description, fields.Description)
-
-	r.lksReadDefaultNodePoolInto(ctx, id, data, diags)
 
 	data.Status = fields.Status
 	data.Message = fields.Message

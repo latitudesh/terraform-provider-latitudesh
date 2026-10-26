@@ -1,6 +1,6 @@
-# A cluster is a control plane plus its required first node pool, created
-# together. Site, Kubernetes version and plan all come from lookups — none of
-# them is guessable, and the lookups keep this runnable on any account.
+# A cluster is a control plane; its workers are node pools. Site, Kubernetes
+# version and plan all come from lookups — none of them is guessable, and the
+# lookups keep this runnable on any account.
 data "latitudesh_lks_sites" "for_cluster" {}
 
 data "latitudesh_lks_versions" "for_cluster" {}
@@ -31,29 +31,30 @@ resource "latitudesh_lks" "example" {
   # non-empty value and ignores a null. Change it instead of clearing it.
   description = "managed by terraform"
 
-  # kubernetes_version is omitted on the pool, so it tracks the control
-  # plane: upgrading the cluster upgrades this pool in the same apply. Set it
-  # explicitly to pin the pool instead.
-  default_node_pool = {
-    node_count = 2
-    plan       = keys(data.latitudesh_lks_plans.for_cluster.stock)[0]
+  # Create returns once the control plane is up, with status "provisioning"
+  # and reason "WaitingForNodePool": the cluster becomes ready only after the
+  # pool below has nodes.
+  timeouts = {
+    create = "30m"
+    update = "60m"
+    delete = "30m"
+  }
+}
 
-    labels = {
-      "workload" = "general"
-    }
+# The cluster's workers. Without at least one pool it never becomes ready, and
+# at least one pool has to stay free of NoSchedule/NoExecute taints so the
+# platform's own components (CNI, CoreDNS) have somewhere to run.
+resource "latitudesh_lks_node_pool" "example" {
+  cluster_id = latitudesh_lks.example.id
+  node_count = 2
+  plan       = keys(data.latitudesh_lks_plans.for_cluster.stock)[0]
 
-    # `NoSchedule` and `NoExecute` are rejected on the default pool: the
-    # cluster's own system workloads have nowhere else to run, and a hard
-    # taint would leave it provisioning forever. Put those on an additional
-    # latitudesh_lks_node_pool instead.
-    taints = [{
-      key    = "dedicated"
-      value  = "general"
-      effect = "PreferNoSchedule"
-    }]
+  labels = {
+    "workload" = "general"
   }
 
-  # Bare metal: create covers the cluster and its first pool coming up.
+  # Bare metal: create waits for the nodes to come up, then for the cluster to
+  # be ready on them — this is the pool that takes it there.
   timeouts = {
     create = "90m"
     update = "90m"

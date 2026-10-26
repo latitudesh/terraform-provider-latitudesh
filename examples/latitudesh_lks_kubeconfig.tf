@@ -9,9 +9,10 @@ ephemeral "latitudesh_lks_kubeconfig" "example" {
   cluster_id = data.latitudesh_lks_clusters.kubeconfig_source.clusters[0].id
 }
 
-# Creating the cluster in the same configuration? Reference the resource
-# instead — `cluster_id = latitudesh_lks.example.id` — so the read is ordered
-# after its create returns, which is only once the control plane is ready.
+# Creating the cluster in the same configuration? Reference it —
+# `cluster_id = latitudesh_lks.example.id` — and add
+# `depends_on = [latitudesh_lks_node_pool.example]`: the kubeconfig exists only
+# once the cluster is ready, and the cluster is ready only once a pool has nodes.
 #
 # The resource exposes the document and nothing else. Pull fields out with
 # yamldecode(); see "Using it with the kubernetes provider" on this page.

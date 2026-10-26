@@ -1,7 +1,8 @@
 package latitudesh
 
-// These tests drive the asynchronous create/delete pollers
-// (waitForClusterReady / waitForClusterDeleted) directly against a local mock
+// These tests drive the asynchronous create/update/delete pollers
+// (waitForControlPlane / waitForClusterReady / waitForClusterDeleted) directly
+// against a local mock
 // of the LKS API, so no live credentials are needed. The mock serves a
 // scripted sequence of GET /lks/clusters/{id} responses (the last entry
 // repeats, so a non-terminal tail runs the poller to its timeout), which lets
@@ -14,6 +15,7 @@ package latitudesh
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -30,13 +32,15 @@ const mockLksClusterID = "lks_lifecycle1"
 
 // lksGetStep is one scripted answer to a GET of the cluster. When httpStatus
 // is 200 the mock returns a cluster with the given status, and with the given
-// kubernetes_version when one is set (the upgrade cases need to script the
-// version independently of the status); otherwise it returns that HTTP error
-// code, shaped as the typed JSON:API ErrorObject that GetLksCluster declares
-// for 403/404/502 (and the generic shape otherwise).
+// reason and kubernetes_version when they are set (the control-plane cases
+// script the reason, the upgrade cases the version, independently of the
+// status); otherwise it returns that HTTP error code, shaped as the typed
+// JSON:API ErrorObject that GetLksCluster declares for 403/404/502 (and the
+// generic shape otherwise).
 type lksGetStep struct {
 	httpStatus int
 	status     string
+	reason     string
 	version    string
 }
 
@@ -83,14 +87,17 @@ func (m *lksClusterMock) handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	if step.version == "" {
-		_, _ = fmt.Fprintf(w, `{"data":{"id":%q,"type":"lks_clusters","attributes":{"status":%q}}}`,
-			mockLksClusterID, step.status)
-		return
+	attrs := map[string]any{"status": step.status}
+	if step.reason != "" {
+		attrs["reason"] = step.reason
 	}
-	_, _ = fmt.Fprintf(w, `{"data":{"id":%q,"type":"lks_clusters","attributes":{"status":%q,"kubernetes_version":%q}}}`,
-		mockLksClusterID, step.status, step.version)
+	if step.version != "" {
+		attrs["kubernetes_version"] = step.version
+	}
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": map[string]any{"id": mockLksClusterID, "type": "lks_clusters", "attributes": attrs},
+	})
 }
 
 // newLksClusterMock starts the mock, wires a resource whose client points at
@@ -122,6 +129,213 @@ func newLksClusterMock(t *testing.T, steps ...lksGetStep) (*lksClusterMock, *Lks
 		),
 	}
 	return mock, r
+}
+
+// --- waitForControlPlane -----------------------------------------------------
+
+// The operator's own sequence for a new cluster with no pool. It never reaches
+// "ready" — it cannot, without nodes — so Create has to stop at the reason that
+// says the control plane is done.
+func TestWaitForControlPlane_ReturnsOnWaitingForNodePool(t *testing.T) {
+	mock, r := newLksClusterMock(t,
+		lksGetStep{httpStatus: 200, status: "provisioning", reason: "CreatingNetwork"},
+		lksGetStep{httpStatus: 200, status: "provisioning", reason: "CreatingControlPlane"},
+		lksGetStep{httpStatus: 200, status: "provisioning", reason: "WaitingForNodePool"},
+	)
+
+	var diags diag.Diagnostics
+	r.waitForControlPlane(context.Background(), mockLksClusterID, time.Now().Add(5*time.Second), &diags)
+
+	if diags.HasError() {
+		t.Fatalf("expected no error, got: %v", diags.Errors())
+	}
+	if got := mock.gets(); got != 3 {
+		t.Fatalf("expected 3 polls (network, control plane, waiting for a pool), got %d", got)
+	}
+}
+
+// A pool that joined while the wait ran moves the cluster past
+// WaitingForNodePool; the control plane is just as up.
+func TestWaitForControlPlane_FinishingSetupCountsAsUp(t *testing.T) {
+	mock, r := newLksClusterMock(t,
+		lksGetStep{httpStatus: 200, status: "provisioning", reason: "CreatingControlPlane"},
+		lksGetStep{httpStatus: 200, status: "provisioning", reason: "FinishingSetup"},
+	)
+
+	var diags diag.Diagnostics
+	r.waitForControlPlane(context.Background(), mockLksClusterID, time.Now().Add(5*time.Second), &diags)
+
+	if diags.HasError() {
+		t.Fatalf("expected no error, got: %v", diags.Errors())
+	}
+	if got := mock.gets(); got != 2 {
+		t.Fatalf("expected 2 polls, got %d", got)
+	}
+}
+
+func TestWaitForControlPlane_ReadyCountsAsUp(t *testing.T) {
+	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "ready"})
+
+	var diags diag.Diagnostics
+	r.waitForControlPlane(context.Background(), mockLksClusterID, time.Now().Add(time.Second), &diags)
+
+	if diags.HasError() {
+		t.Fatalf("expected no error, got: %v", diags.Errors())
+	}
+	if got := mock.gets(); got != 1 {
+		t.Fatalf("expected exactly 1 poll, got %d", got)
+	}
+}
+
+// The POST answers before the record is necessarily readable; Create relies on
+// this wait to absorb that window.
+func TestWaitForControlPlane_TransientNotFoundRightAfterCreate(t *testing.T) {
+	_, r := newLksClusterMock(t,
+		lksGetStep{httpStatus: 404},
+		lksGetStep{httpStatus: 200, status: "provisioning", reason: "WaitingForNodePool"},
+	)
+
+	var diags diag.Diagnostics
+	r.waitForControlPlane(context.Background(), mockLksClusterID, time.Now().Add(5*time.Second), &diags)
+
+	if diags.HasError() {
+		t.Fatalf("a 404 right after create must be retried, got: %v", diags.Errors())
+	}
+}
+
+// A control plane that never comes up times out, and the diagnostic carries the
+// last reason: it is what tells "still building" apart from a reason this
+// provider does not know.
+func TestWaitForControlPlane_TimeoutNamesTheLastReason(t *testing.T) {
+	_, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "provisioning", reason: "CreatingControlPlane"})
+
+	var diags diag.Diagnostics
+	r.waitForControlPlane(context.Background(), mockLksClusterID, time.Now().Add(30*time.Millisecond), &diags)
+
+	if !diags.HasError() {
+		t.Fatal("expected a timeout")
+	}
+	if summary := diags.Errors()[0].Summary(); summary != "Timeout waiting for LKS control plane" {
+		t.Fatalf("unexpected summary: %q", summary)
+	}
+	if detail := diags.Errors()[0].Detail(); !strings.Contains(detail, "CreatingControlPlane") {
+		t.Fatalf("timeout detail should name the last reason, got: %s", detail)
+	}
+}
+
+func TestWaitForControlPlane_PausedFailsFast(t *testing.T) {
+	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "paused"})
+
+	var diags diag.Diagnostics
+	r.waitForControlPlane(context.Background(), mockLksClusterID, time.Now().Add(time.Minute), &diags)
+
+	if !diags.HasError() {
+		t.Fatal("expected a paused cluster to fail immediately")
+	}
+	if got := mock.gets(); got != 1 {
+		t.Fatalf("expected exactly 1 poll before failing fast, got %d", got)
+	}
+}
+
+// --- lksWaitForClusterToSettle (run by a node pool's Create) -------------------
+
+// The first pool's nodes are up; the cluster is still installing its
+// components on them. The pool's create waits that out.
+func TestLksWaitForClusterToSettle_WaitsThroughFinishingSetup(t *testing.T) {
+	mock, r := newLksClusterMock(t,
+		lksGetStep{httpStatus: 200, status: "provisioning", reason: "WaitingForNodePool"},
+		lksGetStep{httpStatus: 200, status: "provisioning", reason: "FinishingSetup"},
+		lksGetStep{httpStatus: 200, status: "ready"},
+	)
+
+	var diags diag.Diagnostics
+	lksWaitForClusterToSettle(context.Background(), r.client, mockLksClusterID, time.Now().Add(5*time.Second), &diags)
+
+	if len(diags) != 0 {
+		t.Fatalf("expected no diagnostics, got: %v", diags)
+	}
+	if got := mock.gets(); got != 3 {
+		t.Fatalf("expected 3 polls (waiting, finishing, ready), got %d", got)
+	}
+}
+
+// A cluster that was ready and lost every node reports "degraded" with reason
+// NoReadyNodes. That is settled as far as lksSettled is concerned, but a new
+// pool is exactly what ends it, so the wait carries on to "ready" instead of
+// stopping there with a warning.
+func TestLksWaitForClusterToSettle_WaitsThroughNoReadyNodes(t *testing.T) {
+	mock, r := newLksClusterMock(t,
+		lksGetStep{httpStatus: 200, status: "degraded", reason: "NoReadyNodes"},
+		lksGetStep{httpStatus: 200, status: "degraded", reason: "NoReadyNodes"},
+		lksGetStep{httpStatus: 200, status: "ready"},
+	)
+
+	var diags diag.Diagnostics
+	lksWaitForClusterToSettle(context.Background(), r.client, mockLksClusterID, time.Now().Add(5*time.Second), &diags)
+
+	if len(diags) != 0 {
+		t.Fatalf("expected no diagnostics, got: %v", diags)
+	}
+	if got := mock.gets(); got != 3 {
+		t.Fatalf("expected 3 polls (degraded twice, then ready), got %d", got)
+	}
+}
+
+// An additional pool on a cluster that is already up costs one read.
+func TestLksWaitForClusterToSettle_AlreadyReadyIsOneRead(t *testing.T) {
+	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "ready"})
+
+	var diags diag.Diagnostics
+	lksWaitForClusterToSettle(context.Background(), r.client, mockLksClusterID, time.Now().Add(time.Second), &diags)
+
+	if len(diags) != 0 {
+		t.Fatalf("expected no diagnostics, got: %v", diags)
+	}
+	if got := mock.gets(); got != 1 {
+		t.Fatalf("expected exactly 1 poll, got %d", got)
+	}
+}
+
+// Every way the wait can fall short is a warning, never an error: an error
+// from the pool's Create would taint a pool that is up.
+func TestLksWaitForClusterToSettle_ShortfallsAreWarnings(t *testing.T) {
+	cases := []struct {
+		name        string
+		step        lksGetStep
+		wantSummary string
+		wantDetail  string
+	}{
+		{"never ready", lksGetStep{httpStatus: 200, status: "provisioning", reason: "FinishingSetup"}, "LKS cluster not ready yet", "FinishingSetup"},
+		// Degraded for a reason nodes do not explain (a core addon down): the
+		// pool cannot fix it, so the wait stops and says so.
+		{"settled elsewhere", lksGetStep{httpStatus: 200, status: "degraded", reason: "Degraded"}, "LKS cluster settled without becoming ready", "degraded"},
+		{"lost nodes and never recovered", lksGetStep{httpStatus: 200, status: "degraded", reason: "NoReadyNodes"}, "LKS cluster not ready yet", "NoReadyNodes"},
+		{"hopeless", lksGetStep{httpStatus: 200, status: "paused"}, "LKS cluster cannot become ready", "paused"},
+		{"non-retryable error", lksGetStep{httpStatus: 403}, "Client Error", "403"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, r := newLksClusterMock(t, tc.step)
+
+			var diags diag.Diagnostics
+			lksWaitForClusterToSettle(context.Background(), r.client, mockLksClusterID, time.Now().Add(30*time.Millisecond), &diags)
+
+			if diags.HasError() {
+				t.Fatalf("must never error, got: %v", diags.Errors())
+			}
+			warnings := diags.Warnings()
+			if len(warnings) != 1 {
+				t.Fatalf("expected exactly 1 warning, got %d: %v", len(warnings), warnings)
+			}
+			if got := warnings[0].Summary(); got != tc.wantSummary {
+				t.Fatalf("summary = %q, want %q", got, tc.wantSummary)
+			}
+			if detail := warnings[0].Detail(); !strings.Contains(detail, tc.wantDetail) || !strings.Contains(detail, "node pool itself is up") {
+				t.Fatalf("detail should name %q and say the pool is up, got: %s", tc.wantDetail, detail)
+			}
+		})
+	}
 }
 
 // --- waitForClusterReady -----------------------------------------------------
@@ -433,37 +647,27 @@ func TestWaitForClusterReady_UnknownTerminalStateEndsTheWait(t *testing.T) {
 
 // --- one deadline per operation ----------------------------------------------
 
-// Every wait inside a single Create or Update takes the SAME absolute deadline.
-// Each used to start its own clock from the configured duration, so the
-// documented budget quietly multiplied: Create's three sequential waits could
-// run the default 30 minutes three times over before failing, and an Update
-// could spend it once on the control plane and again on the pool. A deadline
-// one wait has spent is spent for every wait after it — no further polls,
-// straight to the timeout diagnostic.
+// Every wait inside a single Create or Update takes the SAME absolute deadline,
+// so the configured timeout bounds the operation rather than each wait. A
+// deadline one wait has spent is spent for every wait after it — no further
+// polls, straight to the timeout diagnostic.
 func TestWaits_ShareOneDeadlinePerOperation(t *testing.T) {
-	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "provisioning"})
+	mock, r := newLksClusterMock(t, lksGetStep{httpStatus: 200, status: "provisioning", reason: "CreatingControlPlane"})
 
 	deadline := time.Now().Add(50 * time.Millisecond)
 
-	// The record is readable at once, so this returns on its first poll.
+	// This one polls "CreatingControlPlane" until the deadline passes.
 	var diags diag.Diagnostics
-	r.waitForClusterExists(context.Background(), mockLksClusterID, deadline, &diags)
-	if diags.HasError() {
-		t.Fatalf("waitForClusterExists: %v", diags.Errors())
-	}
-
-	// This one polls "provisioning" until the deadline passes.
-	r.waitForClusterReady(context.Background(), mockLksClusterID, "", deadline, &diags)
+	r.waitForControlPlane(context.Background(), mockLksClusterID, deadline, &diags)
 	if !diags.HasError() {
-		t.Fatal("expected the readiness wait to time out: the mock never leaves provisioning")
+		t.Fatal("expected the control-plane wait to time out: the mock never gets past CreatingControlPlane")
 	}
-	if summary := diags.Errors()[0].Summary(); summary != "Timeout waiting for LKS cluster" {
+	if summary := diags.Errors()[0].Summary(); summary != "Timeout waiting for LKS control plane" {
 		t.Fatalf("expected the timeout diagnostic, got %q", summary)
 	}
 
 	// The deadline is gone. A later wait in the same operation must say so
-	// immediately, without a single further GET — a fresh 50ms here is
-	// exactly the multiplication this test exists to prevent.
+	// immediately, without a single further GET.
 	polls := mock.gets()
 	var later diag.Diagnostics
 	r.waitForClusterReady(context.Background(), mockLksClusterID, "", deadline, &later)

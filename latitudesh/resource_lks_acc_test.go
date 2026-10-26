@@ -1,6 +1,6 @@
 package latitudesh
 
-// TestAccLks_Basic exercises the resource against the live API. It is
+// TestAccLks_Basic exercises the cluster and a node pool against the live API. It is
 // skipped unless TF_ACC and LATITUDESH_AUTH_TOKEN are set (via
 // testAccTokenCheck), so `go test ./latitudesh` never reaches the network.
 //
@@ -17,6 +17,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
@@ -152,6 +153,7 @@ func testAccLksTarget(t *testing.T) (site, version, plan string) {
 
 func TestAccLks_Basic(t *testing.T) {
 	resourceName := "latitudesh_lks.test_item"
+	poolName := "latitudesh_lks_node_pool.test_item"
 	projectID := testAccProjectID()
 	site, version, plan := testAccLksTarget(t)
 
@@ -167,28 +169,40 @@ func TestAccLks_Basic(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "project", projectID),
 					resource.TestCheckResourceAttr(resourceName, "site", site),
 					resource.TestCheckResourceAttr(resourceName, "kubernetes_version", version),
-					resource.TestCheckResourceAttr(resourceName, "default_node_pool.plan", plan),
-					resource.TestCheckResourceAttr(resourceName, "default_node_pool.node_count", "1"),
+					// Recorded when the cluster's Create returned: the control
+					// plane is up and no pool exists yet.
+					resource.TestCheckResourceAttr(resourceName, "reason", "WaitingForNodePool"),
+					resource.TestCheckResourceAttr(poolName, "plan", plan),
+					resource.TestCheckResourceAttr(poolName, "node_count", "1"),
 					// The pool's own status, not ready_nodes: the live API
 					// leaves that count null even on a pool whose node is up
 					// (observed 2026-09-18), so asserting it against
 					// node_count would fail on a perfectly healthy cluster.
-					resource.TestCheckResourceAttr(resourceName, "default_node_pool.status", "ready"),
-					// Reachable only because the pool came up first.
-					resource.TestCheckResourceAttr(resourceName, "status", "ready"),
+					resource.TestCheckResourceAttr(poolName, "status", "ready"),
+					// The claim this design rests on: a pool created after
+					// the cluster is what takes it to ready.
+					testAccCheckLksBecomesReady(resourceName, 20*time.Minute),
 				),
+			},
+			{
+				RefreshState: true,
+				Check:        resource.TestCheckResourceAttr(resourceName, "status", "ready"),
 			},
 			{
 				ResourceName:      resourceName,
 				ImportState:       true,
 				ImportStateVerify: true,
+				// Platform-owned and live: the operator can rewrite them
+				// between the refresh above and the import.
+				ImportStateVerifyIgnore: []string{"status", "message", "reason", "updated_at"},
 			},
 		},
 	})
 }
 
-// default_node_pool is required, and one node because each is billable bare
-// metal. The cluster's create covers the pool, so "ready" is assertable here.
+// One node because each is billable bare metal. The pool references the
+// cluster, so Terraform orders it after the cluster's Create returns — which is
+// as soon as the control plane is up.
 func testAccLksConfigBasic(project, site, version, plan string) string {
 	return fmt.Sprintf(`
 resource "latitudesh_lks" "test_item" {
@@ -197,10 +211,15 @@ resource "latitudesh_lks" "test_item" {
   site                = %q
   kubernetes_version  = %q
 
-  default_node_pool = {
-    plan       = %q
-    node_count = 1
+  timeouts = {
+    delete = "30m"
   }
+}
+
+resource "latitudesh_lks_node_pool" "test_item" {
+  cluster_id = latitudesh_lks.test_item.id
+  plan       = %q
+  node_count = 1
 
   timeouts = {
     create = "90m"
@@ -208,6 +227,46 @@ resource "latitudesh_lks" "test_item" {
   }
 }
 `, project, testRunID, site, version, plan)
+}
+
+// testAccCheckLksBecomesReady polls the live cluster until it reports "ready".
+// The pool's create already waits for that, but runs out into a warning rather
+// than an error, so this confirms it independently of the apply's own wait.
+func testAccCheckLksBecomesReady(resourceName string, within time.Duration) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("%s not found in state", resourceName)
+		}
+		client, err := newSDKClientFromEnv()
+		if err != nil {
+			return err
+		}
+
+		lastStatus, lastReason := "", ""
+		for deadline := time.Now().Add(within); time.Now().Before(deadline); time.Sleep(15 * time.Second) {
+			res, err := client.Lks.GetLksCluster(context.Background(), rs.Primary.ID)
+			if err != nil {
+				return fmt.Errorf("reading LKS cluster %s: %w", rs.Primary.ID, err)
+			}
+			if res == nil || res.LksCluster == nil || res.LksCluster.Data == nil || res.LksCluster.Data.Attributes == nil {
+				continue
+			}
+			attrs := res.LksCluster.Data.Attributes
+			if attrs.Status != nil {
+				lastStatus = *attrs.Status
+			}
+			lastReason = ""
+			if attrs.Reason != nil {
+				lastReason = *attrs.Reason
+			}
+			if lastStatus == "ready" {
+				return nil
+			}
+		}
+		return fmt.Errorf("LKS cluster %s did not become ready within %s of its node pool (last status %q, reason %q)",
+			rs.Primary.ID, within, lastStatus, lastReason)
+	}
 }
 
 func testAccCheckLksDestroy(s *terraform.State) error {

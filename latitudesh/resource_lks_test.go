@@ -256,9 +256,15 @@ func TestLksRetryableDuringPoll(t *testing.T) {
 // --- mock-backed resource.Test (IsUnitTest) ---------------------------------
 
 // mockLksAPI is a minimal in-memory LKS cluster store backing a full
-// create/read/update/delete cycle. The mock reaches "ready" immediately on
-// create so the resource's ready-poller returns on its very first GET,
-// keeping the test fast without touching the package-level poll intervals.
+// create/read/update/delete cycle, plus the one node pool a test may hang off
+// it. By default the cluster reports "ready" immediately, standing in for one
+// whose pools are managed elsewhere, which keeps the tests that are about the
+// cluster's own attributes fast.
+// How many GETs the cluster answers FinishingSetup for after its first pool
+// appears, before "ready" — the platform installing CNI and CoreDNS on the new
+// nodes.
+const mockLksFinishingSetupPolls = 2
+
 type mockLksAPI struct {
 	mu          sync.Mutex
 	exists      bool
@@ -273,9 +279,21 @@ type mockLksAPI struct {
 	// status the GET reports; "" means "ready".
 	status string
 
-	// readyNeedsNodePool mirrors the platform: the cluster stays
-	// "provisioning" until a node pool exists.
+	// readyNeedsNodePool mirrors the platform: a new cluster walks the
+	// operator's provisioning reasons — CreatingNetwork on the POST,
+	// CreatingControlPlane on the first GET, then WaitingForNodePool — and
+	// stays there until a node pool exists. Once one does it reports
+	// FinishingSetup for mockLksFinishingSetupPolls GETs, then "ready".
 	readyNeedsNodePool bool
+	// clusterNeverReady keeps the cluster in FinishingSetup even with a pool,
+	// standing in for one whose only pool cannot run the system components.
+	clusterNeverReady bool
+	clusterGets       int
+	getsSincePool     int
+	poolPosts         int
+	// readyServed records that a GET answered "ready", i.e. something kept
+	// polling the cluster after its pool came up.
+	readyServed bool
 
 	poolID      string
 	poolPlan    string
@@ -306,10 +324,29 @@ func (m *mockLksAPI) envelope() map[string]any {
 	if status == "" {
 		status = "ready"
 	}
-	if m.readyNeedsNodePool && m.poolID == "" {
-		status = "provisioning"
-	}
 	attrs := lksLiveAttrsMap(lksLiveClusterBody)
+	finishingSetup := m.readyNeedsNodePool && m.poolID != "" &&
+		(m.clusterNeverReady || m.getsSincePool <= mockLksFinishingSetupPolls)
+	if finishingSetup {
+		status = "provisioning"
+		attrs["reason"], attrs["message"] = "FinishingSetup", "finishing cluster setup"
+		delete(attrs, "kubeconfig_url")
+	}
+	if m.readyNeedsNodePool && m.poolID == "" {
+		// Reason and message as the API (on create) and the operator (after
+		// it) word them.
+		status = "provisioning"
+		switch {
+		case m.clusterGets == 0:
+			attrs["reason"], attrs["message"] = "CreatingNetwork", "creating the cluster"
+		case m.clusterGets == 1:
+			attrs["reason"], attrs["message"] = "CreatingControlPlane", "creating the control plane"
+		default:
+			attrs["reason"], attrs["message"] = "WaitingForNodePool", "waiting for a node pool"
+		}
+		// The platform publishes the kubeconfig only once the cluster is ready.
+		delete(attrs, "kubeconfig_url")
+	}
 	attrs["name"] = m.name
 	attrs["project_id"] = m.projectID
 	attrs["site"] = m.site
@@ -400,6 +437,7 @@ func (m *mockLksAPI) handler(w http.ResponseWriter, r *http.Request) {
 			m.description = *payload.Data.Attributes.Description
 		}
 		m.exists = true
+		m.clusterGets = 0
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(m.envelope())
 
@@ -409,8 +447,16 @@ func (m *mockLksAPI) handler(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(`{"errors":[{"status":"404"}]}`))
 			return
 		}
+		m.clusterGets++
+		if m.poolID != "" {
+			m.getsSincePool++
+		}
+		envelope := m.envelope()
+		if envelope["data"].(map[string]any)["attributes"].(map[string]any)["status"] == "ready" {
+			m.readyServed = true
+		}
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(m.envelope())
+		_ = json.NewEncoder(w).Encode(envelope)
 
 	case r.Method == http.MethodPatch && r.URL.Path == "/lks/clusters/lks_mock_1":
 		clusterBody, _ := io.ReadAll(r.Body)
@@ -464,6 +510,8 @@ func (m *mockLksAPI) handler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		m.poolPosts++
+		m.getsSincePool = 0
 		m.poolID = "np_mock_1"
 		m.poolPlan = payload.Data.Attributes.Plan
 		m.poolCount = payload.Data.Attributes.Count
@@ -576,11 +624,6 @@ resource "latitudesh_lks" "test_item" {
   name                = "tf-test-cluster"
   site                = "ASH"
   kubernetes_version  = %q
-
-  default_node_pool = {
-    plan       = "c2-medium-x86"
-    node_count = 1
-  }
 }
 `, version)
 }
@@ -590,13 +633,9 @@ func TestLks_CreateUpdateImport(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(mock.handler))
 	defer server.Close()
 
-	prevReady, prevPool := lksReadyPollInterval, lksNodePoolReadyPollInterval
+	prevReady := lksReadyPollInterval
 	lksReadyPollInterval = 5 * time.Millisecond
-	lksNodePoolReadyPollInterval = 5 * time.Millisecond
-	t.Cleanup(func() {
-		lksReadyPollInterval = prevReady
-		lksNodePoolReadyPollInterval = prevPool
-	})
+	t.Cleanup(func() { lksReadyPollInterval = prevReady })
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
@@ -625,23 +664,6 @@ func TestLks_CreateUpdateImport(t *testing.T) {
 					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "created_at", "2026-09-18T15:39:51.019044Z"),
 					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "updated_at", "2026-09-18T15:46:15.110843Z"),
 					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "network.pod_cidrs.0", "10.0.0.0/16"),
-
-					// Same for the pool folded into the cluster.
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "default_node_pool.plan", "c2-medium-x86"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "default_node_pool.node_count", "1"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "default_node_pool.kubernetes_version", "1.31.0"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "default_node_pool.name", "np-b55eea9b6036"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "default_node_pool.type", "bare_metal"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "default_node_pool.mode", "on_demand"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "default_node_pool.status", "ready"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "default_node_pool.message", "the node pool is ready"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "default_node_pool.platform_version", "lks-v1.36.1-007"),
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "default_node_pool.created_at", "2026-09-18T15:39:52.045214Z"),
-
-					// Null in the live payload, and null is not zero: the
-					// platform reports neither on a pool that is up.
-					resource.TestCheckNoResourceAttr("latitudesh_lks.test_item", "default_node_pool.ready_nodes"),
-					resource.TestCheckNoResourceAttr("latitudesh_lks.test_item", "default_node_pool.max_pods_per_node"),
 				),
 			},
 			{
@@ -650,10 +672,6 @@ func TestLks_CreateUpdateImport(t *testing.T) {
 				Config: testAccLksConfig("1.32.0"),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "kubernetes_version", "1.32.0"),
-					// The config never sets default_node_pool.kubernetes_version,
-					// so it follows the cluster: bumping the control plane bumps
-					// the pool too, in the same apply.
-					resource.TestCheckResourceAttr("latitudesh_lks.test_item", "default_node_pool.kubernetes_version", "1.32.0"),
 				),
 			},
 			{
@@ -665,27 +683,21 @@ func TestLks_CreateUpdateImport(t *testing.T) {
 	})
 }
 
-// The deadlock this design avoids: a cluster only converges once it has a node
-// pool, and POST /lks/clusters takes none inline. Expressed as a separate
-// resource the pool could only be created AFTER the cluster's Create returned,
-// so Create could not wait for "ready" without waiting on itself. Folding the
-// first pool into the cluster is what makes the wait legitimate — and this
-// test is the proof: the mock only flips the cluster to "ready" once a pool
-// has been POSTed, so an implementation that skipped creating it, or waited
-// before creating it, times out here.
-func TestLks_CreateWaitsForReadyViaDefaultNodePool(t *testing.T) {
+// A cluster only becomes "ready" once a node pool has nodes, and no
+// latitudesh_lks_node_pool can be created before the cluster's Create returns.
+// So Create must return on the control plane alone — the operator's
+// WaitingForNodePool — or it waits on itself. The mock walks the real reasons
+// (CreatingNetwork, CreatingControlPlane, WaitingForNodePool) and never reaches
+// "ready" without a pool: an implementation that waited for ready times out
+// here, and one that returned on the POST would record CreatingNetwork.
+func TestLks_CreateReturnsOnceControlPlaneIsUp(t *testing.T) {
 	mock := &mockLksAPI{readyNeedsNodePool: true}
 	server := httptest.NewServer(http.HandlerFunc(mock.handler))
 	defer server.Close()
 
 	prevReady := lksReadyPollInterval
-	prevPool := lksNodePoolReadyPollInterval
 	lksReadyPollInterval = 5 * time.Millisecond
-	lksNodePoolReadyPollInterval = 5 * time.Millisecond
-	t.Cleanup(func() {
-		lksReadyPollInterval = prevReady
-		lksNodePoolReadyPollInterval = prevPool
-	})
+	t.Cleanup(func() { lksReadyPollInterval = prevReady })
 
 	const rn = "latitudesh_lks.test_item"
 
@@ -696,25 +708,195 @@ func TestLks_CreateWaitsForReadyViaDefaultNodePool(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: testAccLksConfigWithTimeout("1.31.0", `
-  default_node_pool = {
-    plan       = "c2-medium-x86"
-    node_count = 2
-  }
-
   timeouts = {
     create = "20s"
   }
 `),
 				Check: resource.ComposeTestCheckFunc(
-					// Reached only because the pool was created first.
-					resource.TestCheckResourceAttr(rn, "status", "ready"),
-					resource.TestCheckResourceAttrSet(rn, "default_node_pool.id"),
-					resource.TestCheckResourceAttr(rn, "default_node_pool.node_count", "2"),
-					resource.TestCheckResourceAttr(rn, "default_node_pool.status", "ready"),
-					// The wait settles on the pool's own status: the live API
-					// leaves ready_nodes null even with the nodes up, so state
-					// holds no count to compare against.
-					resource.TestCheckNoResourceAttr(rn, "default_node_pool.ready_nodes"),
+					resource.TestCheckResourceAttr(rn, "status", "provisioning"),
+					resource.TestCheckResourceAttr(rn, "reason", "WaitingForNodePool"),
+					resource.TestCheckResourceAttr(rn, "message", "waiting for a node pool"),
+					// Published only once the cluster is ready.
+					resource.TestCheckNoResourceAttr(rn, "kubeconfig_url"),
+				),
+			},
+		},
+	})
+
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	if mock.poolPosts != 0 {
+		t.Errorf("latitudesh_lks created %d node pool(s); pools belong to latitudesh_lks_node_pool", mock.poolPosts)
+	}
+}
+
+// The whole path a configuration takes: the cluster's Create returns on the
+// control plane, the pool is created against it, and the pool's Create waits
+// for the cluster to come through FinishingSetup to "ready" — which the
+// cluster's own state then shows on refresh. The last step also pins clearing taints and labels on a
+// pool as an in-place edit. This mock is faithful to a JSON:API PATCH — a field
+// the request omits is left alone — so without `"taints": []` and
+// `"labels": {}` on the wire (lks_clear_transport.go) the apply "succeeds"
+// while the old values stay attached.
+func TestLks_ClusterWithNodePoolBecomesReady(t *testing.T) {
+	mock := &mockLksAPI{readyNeedsNodePool: true}
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	prevReady, prevPool, prevPoolDelete := lksReadyPollInterval, lksNodePoolReadyPollInterval, lksNodePoolDeletePollInterval
+	lksReadyPollInterval = 5 * time.Millisecond
+	lksNodePoolReadyPollInterval = 5 * time.Millisecond
+	lksNodePoolDeletePollInterval = 5 * time.Millisecond
+	t.Cleanup(func() {
+		lksReadyPollInterval = prevReady
+		lksNodePoolReadyPollInterval = prevPool
+		lksNodePoolDeletePollInterval = prevPoolDelete
+	})
+
+	const (
+		cluster = "latitudesh_lks.test_item"
+		pool    = "latitudesh_lks_node_pool.workers"
+	)
+	var firstPoolID string
+
+	config := func(poolExtra string) string {
+		return testAccLksConfigWithTimeout("1.31.0", "") + fmt.Sprintf(`
+resource "latitudesh_lks_node_pool" "workers" {
+  cluster_id = latitudesh_lks.test_item.id
+  plan       = "c2-medium-x86"
+  node_count = 1
+%s
+}
+`, poolExtra)
+	}
+	withTaint := config(`
+  labels = {
+    workload = "general"
+  }
+
+  taints = [{
+    key    = "dedicated"
+    value  = "manual-test"
+    effect = "NoSchedule"
+  }]
+`)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMockLksDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: withTaint,
+				Check: resource.ComposeTestCheckFunc(
+					// Recorded when the cluster's Create returned, before the
+					// pool existed.
+					resource.TestCheckResourceAttr(cluster, "reason", "WaitingForNodePool"),
+					resource.TestCheckResourceAttr(pool, "cluster_id", "lks_mock_1"),
+					resource.TestCheckResourceAttr(pool, "status", "ready"),
+					resource.TestCheckResourceAttr(pool, "taints.#", "1"),
+					resource.TestCheckResourceAttr(pool, "labels.workload", "general"),
+					func(s *terraform.State) error {
+						firstPoolID = s.RootModule().Resources[pool].Primary.ID
+						return nil
+					},
+					// The pool's create did not return on its own nodes: it
+					// kept polling the cluster through FinishingSetup until
+					// the cluster answered "ready".
+					func(*terraform.State) error {
+						mock.mu.Lock()
+						defer mock.mu.Unlock()
+						if !mock.readyServed {
+							return fmt.Errorf("the node pool create returned before the cluster reported ready")
+						}
+						return nil
+					},
+				),
+			},
+			{
+				// The pool is what the cluster was waiting for.
+				RefreshState: true,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(cluster, "status", "ready"),
+					resource.TestCheckResourceAttr(cluster, "reason", ""),
+					resource.TestCheckResourceAttrSet(cluster, "kubeconfig_url"),
+				),
+			},
+			{
+				Config: config(""),
+				Check: resource.ComposeTestCheckFunc(
+					func(s *terraform.State) error {
+						if got := s.RootModule().Resources[pool].Primary.ID; got != firstPoolID {
+							return fmt.Errorf("node pool was rebuilt for a taint removal: %s -> %s", firstPoolID, got)
+						}
+						return nil
+					},
+					resource.TestCheckResourceAttr(pool, "taints.#", "0"),
+					resource.TestCheckNoResourceAttr(pool, "labels.workload"),
+				),
+			},
+		},
+	})
+
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	if len(mock.poolPatchBodies) == 0 {
+		t.Fatal("no PATCH reached the node pool, so nothing was updated in place")
+	}
+	last := mock.poolPatchBodies[len(mock.poolPatchBodies)-1]
+	for _, want := range []string{`"taints":[]`, `"labels":{}`} {
+		if !strings.Contains(strings.ReplaceAll(last, " ", ""), want) {
+			t.Errorf("clearing PATCH did not carry %s, so the API would keep the old value: %s", want, last)
+		}
+	}
+}
+
+// A cluster that never becomes ready must not fail the pool that waited for
+// it. The pool is up and in state, and an error from Create would taint it —
+// the next apply would then rebuild healthy bare metal over a condition of the
+// cluster's. So the wait runs out into a warning, and the pool stays clean.
+func TestLks_NodePoolCreateDoesNotFailOnANeverReadyCluster(t *testing.T) {
+	mock := &mockLksAPI{readyNeedsNodePool: true, clusterNeverReady: true}
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	prevReady, prevPool, prevPoolDelete := lksReadyPollInterval, lksNodePoolReadyPollInterval, lksNodePoolDeletePollInterval
+	lksReadyPollInterval = 5 * time.Millisecond
+	lksNodePoolReadyPollInterval = 5 * time.Millisecond
+	lksNodePoolDeletePollInterval = 5 * time.Millisecond
+	t.Cleanup(func() {
+		lksReadyPollInterval = prevReady
+		lksNodePoolReadyPollInterval = prevPool
+		lksNodePoolDeletePollInterval = prevPoolDelete
+	})
+
+	const pool = "latitudesh_lks_node_pool.workers"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMockLksDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccLksConfigWithTimeout("1.31.0", "") + `
+resource "latitudesh_lks_node_pool" "workers" {
+  cluster_id = latitudesh_lks.test_item.id
+  plan       = "c2-medium-x86"
+  node_count = 1
+
+  timeouts = {
+    create = "2s"
+  }
+}
+`,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(pool, "status", "ready"),
+					func(s *terraform.State) error {
+						if s.RootModule().Resources[pool].Primary.Tainted {
+							return fmt.Errorf("the pool was tainted over a cluster that never became ready")
+						}
+						return nil
+					},
 				),
 			},
 		},
@@ -737,102 +919,6 @@ resource "latitudesh_lks" "test_item" {
 `, version, extra)
 }
 
-// Removing a taint is an in-place edit — taints carries no RequiresReplace
-// anywhere — and it has to actually take effect. The mock is faithful to a
-// JSON:API PATCH: a field the request omits is left alone, which is what made
-// this fail before lks_clear_transport.go existed. The payload assertion is
-// the load-bearing one: without `"taints": []` on the wire the apply "succeeds"
-// while the taint stays attached.
-func TestLks_UpdateClearingTaintsIsInPlace(t *testing.T) {
-	mock := &mockLksAPI{}
-	server := httptest.NewServer(http.HandlerFunc(mock.handler))
-	defer server.Close()
-
-	prevReady, prevPool := lksReadyPollInterval, lksNodePoolReadyPollInterval
-	lksReadyPollInterval = 5 * time.Millisecond
-	lksNodePoolReadyPollInterval = 5 * time.Millisecond
-	t.Cleanup(func() {
-		lksReadyPollInterval = prevReady
-		lksNodePoolReadyPollInterval = prevPool
-	})
-
-	const rn = "latitudesh_lks.test_item"
-	var firstClusterID, firstPoolID string
-
-	withTaint := `
-  default_node_pool = {
-    plan       = "c2-medium-x86"
-    node_count = 1
-
-    labels = {
-      workload = "general"
-    }
-
-    taints = [{
-      key    = "dedicated"
-      value  = "manual-test"
-      effect = "PreferNoSchedule"
-    }]
-  }
-`
-	withoutTaint := `
-  default_node_pool = {
-    plan       = "c2-medium-x86"
-    node_count = 1
-  }
-`
-
-	resource.Test(t, resource.TestCase{
-		IsUnitTest:               true,
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
-		CheckDestroy:             testAccCheckMockLksDestroyed(mock),
-		Steps: []resource.TestStep{
-			{
-				Config: testAccLksConfigWithTimeout("1.31.0", withTaint),
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(rn, "default_node_pool.taints.#", "1"),
-					resource.TestCheckResourceAttr(rn, "default_node_pool.labels.workload", "general"),
-					func(s *terraform.State) error {
-						rs := s.RootModule().Resources[rn]
-						firstClusterID = rs.Primary.ID
-						firstPoolID = rs.Primary.Attributes["default_node_pool.id"]
-						return nil
-					},
-				),
-			},
-			{
-				Config: testAccLksConfigWithTimeout("1.31.0", withoutTaint),
-				Check: resource.ComposeTestCheckFunc(
-					func(s *terraform.State) error {
-						rs := s.RootModule().Resources[rn]
-						if rs.Primary.ID != firstClusterID {
-							return fmt.Errorf("cluster was replaced: %s -> %s", firstClusterID, rs.Primary.ID)
-						}
-						if got := rs.Primary.Attributes["default_node_pool.id"]; got != firstPoolID {
-							return fmt.Errorf("node pool was rebuilt for a taint removal: %s -> %s", firstPoolID, got)
-						}
-						return nil
-					},
-					resource.TestCheckNoResourceAttr(rn, "default_node_pool.taints.0.key"),
-					resource.TestCheckNoResourceAttr(rn, "default_node_pool.labels.workload"),
-				),
-			},
-		},
-	})
-
-	mock.mu.Lock()
-	defer mock.mu.Unlock()
-	if len(mock.poolPatchBodies) == 0 {
-		t.Fatal("no PATCH reached the node pool, so nothing was updated in place")
-	}
-	last := mock.poolPatchBodies[len(mock.poolPatchBodies)-1]
-	for _, want := range []string{`"taints":[]`, `"labels":{}`} {
-		if !strings.Contains(strings.ReplaceAll(last, " ", ""), want) {
-			t.Errorf("clearing PATCH did not carry %s, so the API would keep the old value: %s", want, last)
-		}
-	}
-}
-
 // The LKS API cannot clear a description, and the provider must not pretend
 // otherwise. Both update contracts declare `optional(:description).filled(:string)`,
 // so `""` is a 422 ("must be filled"), and an explicit null is dropped by the
@@ -846,20 +932,9 @@ func TestLks_DescriptionIsNeverSentEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(mock.handler))
 	defer server.Close()
 
-	prevReady, prevPool := lksReadyPollInterval, lksNodePoolReadyPollInterval
+	prevReady := lksReadyPollInterval
 	lksReadyPollInterval = 5 * time.Millisecond
-	lksNodePoolReadyPollInterval = 5 * time.Millisecond
-	t.Cleanup(func() {
-		lksReadyPollInterval = prevReady
-		lksNodePoolReadyPollInterval = prevPool
-	})
-
-	pool := `
-  default_node_pool = {
-    plan       = "c2-medium-x86"
-    node_count = 1
-  }
-`
+	t.Cleanup(func() { lksReadyPollInterval = prevReady })
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
@@ -867,8 +942,8 @@ func TestLks_DescriptionIsNeverSentEmpty(t *testing.T) {
 		CheckDestroy:             testAccCheckMockLksDestroyed(mock),
 		Steps: []resource.TestStep{
 			// Never had a description: the update below must not invent one.
-			{Config: testAccLksConfigWithTimeout("1.31.0", pool)},
-			{Config: testAccLksConfigWithTimeout("1.32.0", pool)},
+			{Config: testAccLksConfig("1.31.0")},
+			{Config: testAccLksConfig("1.32.0")},
 		},
 	})
 

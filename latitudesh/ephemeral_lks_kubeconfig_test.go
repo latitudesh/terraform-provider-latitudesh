@@ -100,7 +100,7 @@ func TestAccLksKubeconfig_NotReady(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config:      testAccLksKubeconfigConfig("lks_kc_1"),
-				ExpectError: regexp.MustCompile(`NOT_READY|control plane is still coming up`),
+				ExpectError: regexp.MustCompile(`NOT_READY|cluster is not ready yet`),
 			},
 		},
 	})

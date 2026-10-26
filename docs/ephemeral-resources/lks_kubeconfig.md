@@ -3,7 +3,7 @@ page_title: "latitudesh_lks_kubeconfig Ephemeral Resource - latitudesh"
 subcategory: ""
 description: |-
   Reads an LKS (Latitude Kubernetes Service) cluster's kubeconfig for the duration of the Terraform run. The credentials never reach state or plan files, which is why this is an ephemeral resource rather than a data source — a kubeconfig grants cluster-admin. Requires Terraform 1.10 or later.
-  The control plane must be up: GET /lks/clusters/{id}/kubeconfig answers 409 NOT_READY until latitudesh_lks.status is ready. For an existing cluster take the id from latitudesh_lks_clusters; for one created in the same configuration reference the latitudesh_lks resource, so the read is ordered after its create returns.
+  The cluster must be ready: the platform publishes the kubeconfig only then, which takes a node pool with nodes, and until then GET /lks/clusters/{id}/kubeconfig answers 409 NOT_READY. For an existing cluster take the id from latitudesh_lks_clusters filtered on status = "ready"; for one created in the same configuration, order the read after its node pools with depends_on — a pool's create waits for the cluster to be ready.
   An LKS kubeconfig does not expire, so this needs no renewal and stays valid across a long apply — and a copy that leaks stays valid too, which is the reason not to persist one.
 ---
 
@@ -15,11 +15,19 @@ This is an [ephemeral resource](https://developer.hashicorp.com/terraform/langua
 
 An LKS kubeconfig **does not expire**. That is why this resource needs no renewal and stays valid through an apply that runs for an hour — and equally why a copy of it must not be left lying in a state file, since a leaked one never stops working.
 
-The control plane must be up. `GET /lks/clusters/{id}/kubeconfig` answers 409 `NOT_READY` until [`latitudesh_lks`](../resources/lks.md)'s `status` is `ready`.
+The cluster must be `ready`. The platform publishes the kubeconfig only then, and until it does `GET /lks/clusters/{id}/kubeconfig` answers 409 `NOT_READY`. A cluster becomes ready only once a node pool has nodes, so the kubeconfig does not exist while [`latitudesh_lks`](../resources/lks.md) is still `provisioning` with `reason` `WaitingForNodePool`.
 
-For a cluster that already exists, read its id from [`latitudesh_lks_clusters`](../data-sources/lks_clusters.md) filtered on `status = "ready"`, as the example does. For a cluster created in the **same** configuration, reference the resource — `cluster_id = latitudesh_lks.example.id` — and the ordering follows: its create includes the required `default_node_pool` and does not return until `status` is `ready`.
+For a cluster that already exists, read its id from [`latitudesh_lks_clusters`](../data-sources/lks_clusters.md) filtered on `status = "ready"`, as the example does. For a cluster created in the **same** configuration, reference the resource and order the read after its node pools:
 
-One caveat, observed live: the platform can report `ready` a few seconds **before** it publishes the kubeconfig, and this resource performs a single read — no retry. An open that lands inside that window fails the run with the 409, but fails it *cheaply*: the cluster was already created and recorded, nothing is tainted, and running apply again just reads the now-published document.
+```terraform
+ephemeral "latitudesh_lks_kubeconfig" "new_cluster" {
+  cluster_id = latitudesh_lks.example.id
+
+  depends_on = [latitudesh_lks_node_pool.example]
+}
+```
+
+That is enough: a pool's create waits for its nodes and then for the cluster to reach `ready`. One caveat, observed live: the platform can report `ready` a few seconds **before** it publishes the kubeconfig, and this resource performs a single read, with no retry. An open that lands inside that window fails the run with the 409, but fails it *cheaply*: the cluster and its pools were already created and recorded, nothing is tainted, and running apply again reads the now-published document.
 
 ## Example Usage
 
@@ -35,9 +43,10 @@ ephemeral "latitudesh_lks_kubeconfig" "example" {
   cluster_id = data.latitudesh_lks_clusters.kubeconfig_source.clusters[0].id
 }
 
-# Creating the cluster in the same configuration? Reference the resource
-# instead — `cluster_id = latitudesh_lks.example.id` — so the read is ordered
-# after its create returns, which is only once the control plane is ready.
+# Creating the cluster in the same configuration? Reference it —
+# `cluster_id = latitudesh_lks.example.id` — and add
+# `depends_on = [latitudesh_lks_node_pool.example]`: the kubeconfig exists only
+# once the cluster is ready, and the cluster is ready only once a pool has nodes.
 #
 # The resource exposes the document and nothing else. Pull fields out with
 # yamldecode(); see "Using it with the kubernetes provider" on this page.

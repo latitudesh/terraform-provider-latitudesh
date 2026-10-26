@@ -309,7 +309,8 @@ func (r *LksNodePoolResource) Metadata(ctx context.Context, req resource.Metadat
 
 func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "A node pool for an LKS (Latitude Kubernetes Service) cluster. `latitudesh_lks` provisions a control plane only — without at least one node pool the cluster has no workers and schedules nothing.",
+		MarkdownDescription: "A node pool for an LKS (Latitude Kubernetes Service) cluster. `latitudesh_lks` provisions a control plane only: the cluster has no workers, and does not become `ready`, until at least one pool has nodes the platform's own components (CNI, CoreDNS) can schedule on.\n\n" +
+			"Create waits for the pool's nodes and then for the cluster to settle on them, so an apply that adds a cluster's first pool ends on a `ready` cluster. If the cluster does not get there within the create timeout, the apply still succeeds, with a warning: the pool itself is up.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Node pool identifier.",
@@ -407,8 +408,9 @@ func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"taints": schema.SetNestedAttribute{
-				MarkdownDescription: "Kubernetes taints applied to every node in the pool (max 50). A set rather than a list: the API imposes no ordering, and each `(key, effect)` pair must be unique.",
-				Optional:            true,
+				MarkdownDescription: "Kubernetes taints applied to every node in the pool (max 50). A set rather than a list: the API imposes no ordering, and each `(key, effect)` pair must be unique.\n\n" +
+					"Keep at least one pool in the cluster free of `NoSchedule` and `NoExecute` taints: the platform's own components do not tolerate them, so a cluster whose every pool carries one never leaves `provisioning`. The API accepts the taint, and a single pool cannot tell whether it is the only one, so this is not checked at plan time.",
+				Optional: true,
 				Validators: []validator.Set{
 					setvalidator.SizeAtMost(50),
 					lksUniqueTaintsValidator{},
@@ -472,7 +474,7 @@ func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaReq
 				Create:            true,
 				Update:            true,
 				Delete:            true,
-				CreateDescription: `Timeout for the pool to settle — the platform reporting no operation in progress, and ready_nodes reaching node_count when it reports one. Bare metal, so allow for a real deploy. Default: 60 minutes.`,
+				CreateDescription: `Budget for the entire create: the pool settling (the platform reporting no operation in progress, and ready_nodes reaching node_count when it reports one), then the cluster settling on the new nodes — normally "ready". The second part only warns when it runs out. Bare metal, so allow for a real deploy. Default: 60 minutes.`,
 				UpdateDescription: `Timeout for a scale or version change to settle. A scale and a version change in one apply are two sequential operations, each waited on, within this one budget; if the scale uses it up, the version change is not started and the next apply picks it up. Default: 60 minutes.`,
 				DeleteDescription: `Timeout for the pool to be fully removed. Default: 30 minutes.`,
 			}),
@@ -492,10 +494,9 @@ func (r *LksNodePoolResource) Configure(ctx context.Context, req resource.Config
 }
 
 // ModifyPlan makes an omitted kubernetes_version follow the cluster's control
-// plane. Set explicitly, the version is pinned and left alone. Unlike the
-// cluster's default_node_pool — where both versions are in one model — a
-// standalone pool only knows its cluster_id, so the cluster's version has to be
-// read from the API here.
+// plane. Set explicitly, the version is pinned and left alone. A pool only
+// knows its cluster_id, so the cluster's version has to be read from the API
+// here.
 //
 // This gives two-apply convergence on a control-plane upgrade: at the plan that
 // bumps the cluster, the GET below still returns the old version (the upgrade
@@ -623,13 +624,23 @@ func (r *LksNodePoolResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	r.waitForNodesReady(ctx, clusterID, id, wantNodes, time.Now().Add(createTimeout), &resp.Diagnostics)
+	// One deadline for both waits below, so the create timeout bounds the
+	// whole operation.
+	deadline := time.Now().Add(createTimeout)
+
+	r.waitForNodesReady(ctx, clusterID, id, wantNodes, deadline, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		// The pool exists even though it never came up, and the write above
 		// already recorded it, so a follow-up apply or destroy can address it
 		// instead of leaking it.
 		return
 	}
+
+	// The pool may be what the cluster was waiting for: a cluster with no
+	// ready node is not "ready", and latitudesh_lks cannot wait for that itself.
+	// Waiting here is what lets an apply that builds a cluster and its first
+	// pool end on a usable cluster.
+	lksWaitForClusterToSettle(ctx, r.client, clusterID, deadline, &resp.Diagnostics)
 
 	r.readNodePoolInto(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -991,8 +1002,8 @@ func (r *LksNodePoolResource) waitForNodesReady(ctx context.Context, clusterID, 
 	lksWaitForNodesReady(ctx, r.client, clusterID, id, want, deadline, diags)
 }
 
-// lksWaitForNodesReady is the free function behind it: latitudesh_lks runs the
-// same wait for the default_node_pool it creates inside its own Create.
+// lksWaitForNodesReady is the free function behind it, shared with
+// lksPatchNodePool.
 //
 // deadline is absolute and shared with the other waits of the same operation.
 func lksWaitForNodesReady(ctx context.Context, client *latitudeshgosdk.Latitudesh, clusterID, id string, want int64, deadline time.Time, diags *diag.Diagnostics) {
@@ -1070,6 +1081,65 @@ func lksWaitForNodesReady(ctx context.Context, client *latitudeshgosdk.Latitudes
 		fmt.Sprintf("LKS node pool %q in cluster %q did not reach %d ready node(s) before the timeout expired (last ready_nodes: %s, last status: %q).",
 			id, clusterID, want, readyNodes, lastStatus),
 	)
+}
+
+// lksClusterWaitingOnNodesReasons are the reasons under which a cluster is not
+// ready only because it has no ready node yet — exactly what a pool whose
+// nodes just came up is about to change. A cluster that was never ready
+// reports WaitingForNodePool, then FinishingSetup (both "provisioning"); one
+// that was ready and lost every node reports NoReadyNodes, as "degraded". The
+// operator's client-facing contract (lks-platform
+// internal/status/customer_message.go), passed through verbatim by the API.
+var lksClusterWaitingOnNodesReasons = map[string]bool{
+	"WaitingForNodePool": true,
+	"FinishingSetup":     true,
+	"NoReadyNodes":       true,
+}
+
+// lksWaitForClusterToSettle waits, once a pool's nodes are up, for the cluster
+// to finish its own work on them. A cluster with no ready node is not ready —
+// see lksClusterWaitingOnNodesReasons — and only a pool can take it there.
+// latitudesh_lks cannot wait for that, since no pool exists while its Create
+// runs, so the pool that ends the wait is the one that waits. It waits for
+// "ready" through every state explained by missing nodes, including the
+// "degraded" NoReadyNodes of a cluster whose previous pools are gone, and stops
+// at any other settled state. On a cluster that is already ready this is a
+// single GET.
+//
+// Everything here is a warning, never an error. The pool is up and already in
+// state, and an error from Create would taint it: the next apply would rebuild
+// healthy bare metal over a condition that belongs to the cluster.
+func lksWaitForClusterToSettle(ctx context.Context, client *latitudeshgosdk.Latitudesh, clusterID string, deadline time.Time, diags *diag.Diagnostics) {
+	const poolIsUp = "\n\nThe node pool itself is up; only the cluster's readiness could not be confirmed. Refresh to see its current status."
+
+	var pollDiags diag.Diagnostics
+	last, timedOut := lksPollCluster(ctx, client, clusterID, deadline, &pollDiags, func(o lksClusterObservation) bool {
+		if o.status == "ready" {
+			return true
+		}
+		done, _ := lksSettled(o.status)
+		return done && !lksClusterWaitingOnNodesReasons[o.reason]
+	})
+
+	for _, d := range pollDiags.Errors() {
+		diags.AddWarning(d.Summary(), d.Detail()+poolIsUp)
+	}
+
+	switch {
+	case pollDiags.HasError():
+	case timedOut:
+		diags.AddWarning(
+			"LKS cluster not ready yet",
+			fmt.Sprintf("The node pool is up, but cluster %q did not reach status \"ready\" before the create timeout expired (last status: %q, last reason: %q). "+
+				"A cluster stays \"provisioning\" while no pool can run its system components — for example, when every pool carries a NoSchedule or NoExecute taint.",
+				clusterID, last.status, last.reason)+poolIsUp,
+		)
+	case last.status != "ready":
+		diags.AddWarning(
+			"LKS cluster settled without becoming ready",
+			fmt.Sprintf("The node pool is up, but cluster %q settled as %q (reason: %q).", clusterID, last.status, last.reason)+poolIsUp,
+		)
+	}
 }
 
 // waitForNodePoolDeleted polls until the pool 404s.

@@ -16,8 +16,8 @@ Read `status` to tell whether a pool has settled. `ready_nodes` is a count the p
 ## Example Usage
 
 ```terraform
-# Every node pool in a cluster — the cluster's own default_node_pool, any
-# latitudesh_lks_node_pool you manage, and anything created outside Terraform.
+# Every node pool in a cluster — any latitudesh_lks_node_pool you manage, and
+# anything created outside Terraform.
 data "latitudesh_lks_clusters" "pool_source" {
   project = "<project-id-or-slug>"
   status  = "ready"

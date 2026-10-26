@@ -146,44 +146,60 @@ groups:
       resource, because a cluster with no node pool is a control plane that
       schedules nothing:
       - latitudesh_lks maps LksCluster (Create/Get/Update/Delete, plus
-        ListLksClusters behind latitudesh_lks_clusters, project-scoped). It
-        also carries a REQUIRED default_node_pool block, which is structural
-        rather than stylistic: a cluster converges only once it has a node
-        pool, CreateLksClusterAttributes takes none inline, and Terraform
-        will not start a separate pool resource until this Create returns —
-        so the first pool must be created inside this Create, or the cluster
-        could never be waited on at all (confirmed by the team,
-        2026-09-17). Folding it in makes the requirement enforceable at plan
-        time AND lets Create legitimately wait for status "ready"; pinned by
-        TestLks_CreateWaitsForReadyViaDefaultNodePool, whose mock reports
-        "ready" only after a pool has been POSTed. Same split as
-        azurerm_kubernetes_cluster.default_node_pool and
-        digitalocean_kubernetes_cluster.node_pool. Changing plan or
-        max_pods_per_node inside the block replaces the POOL, not the
-        cluster, building the replacement before removing the old one —
-        deliberately better than azurerm, where that edit rebuilds the whole
-        cluster. On the cluster itself, name/description/kubernetes_version
-        update in place; project, site and network carry RequiresReplace.
+        ListLksClusters behind latitudesh_lks_clusters, project-scoped): the
+        control plane alone. name/description/kubernetes_version update in
+        place; project, site and network carry RequiresReplace. A cluster
+        becomes "ready" only once a node pool has nodes — the operator's
+        AddonsReady gate needs Cilium and CoreDNS running, and their health
+        checks fail on zero nodes (lks-platform internal/addons/cilium) — and
+        no pool can be created before the cluster exists, so Create waits for
+        the CONTROL PLANE instead: it returns once the platform reports
+        reason WaitingForNodePool (or FinishingSetup, or any settled
+        status). Those reasons are the operator's client-facing contract
+        (internal/status/customer_message.go), which the API passes through
+        from NetBox verbatim; the swagger documents only that reason is an
+        open enum. Pinned by TestLks_CreateReturnsOnceControlPlaneIsUp, whose
+        mock walks CreatingNetwork, CreatingControlPlane, WaitingForNodePool
+        and never reaches ready without a pool.
+        An earlier revision carried a REQUIRED default_node_pool block (the
+        AKS/DigitalOcean shape) so that Create could create the first pool
+        itself and wait for "ready". It was removed on 2026-10-26 so that
+        every pool is a latitudesh_lks_node_pool. The
+        trade-off is that the schedulable-pool rule below can no longer be
+        enforced at plan time.
       - latitudesh_lks_node_pool maps LksNodePool (Create/Get/Update/Delete,
         plus ListLksNodePools behind latitudesh_lks_node_pools,
-        cluster-scoped) for every pool BEYOND the first. node_count (named
-        around Terraform's reserved `count` meta-argument), name,
+        cluster-scoped) for every pool, the first one included. node_count
+        (named around Terraform's reserved `count` meta-argument), name,
         description, kubernetes_version, labels and taints update in place;
         cluster_id, plan and max_pods_per_node carry RequiresReplace — the
         last because the API rejects a PATCH carrying it with 422. Apply
-        waits on ready_nodes reaching node_count rather than on a status
-        value: this endpoint documents no status enum, and a scale is
-        asynchronous. latitudesh_lks manages only the pool recorded in its
-        default_node_pool and ignores every other one, so the two resources
-        never contend for the same object — the ambiguity that makes
-        google_container_cluster.node_pool fight google_container_node_pool.
+        waits on the pool settling, refined by ready_nodes reaching
+        node_count when the platform reports the count: this endpoint
+        documents no status enum, and a scale is asynchronous. Create then
+        also waits for the CLUSTER to settle (lksWaitForClusterToSettle):
+        the first pool is what takes a cluster from WaitingForNodePool
+        through FinishingSetup to "ready", and latitudesh_lks cannot wait
+        for that itself. On an already-ready cluster it is one GET. Every
+        shortfall there is a WARNING, never an error — the pool is up and in
+        state, and an error from Create would taint it, so the next apply
+        would rebuild healthy bare metal over a cluster-side condition.
+        Pinned by TestLks_ClusterWithNodePoolBecomesReady (fails if the pool
+        returns before the cluster answers "ready") and
+        TestLks_NodePoolCreateDoesNotFailOnANeverReadyCluster.
 
       GetLksClusterKubeconfig ships as the latitudesh_lks_kubeconfig
       EPHEMERAL resource, not a data source: a kubeconfig is cluster-admin
       credentials, and a data source would write them to state and to every
-      plan file. The endpoint answers 409 NOT_READY until the control plane
-      is up — a window the cluster's own create already closes, so depending
-      on latitudesh_lks is enough to order the read. An LKS kubeconfig does
+      plan file. The endpoint answers 409 NOT_READY until the cluster is
+      ready: the operator mirrors the kubeconfig into NetBox only once the
+      cluster's state is ready (lks-platform
+      internal/controller/netboxsync/secrets.go), which takes a node pool. A
+      read in the same configuration depends on the cluster's pools, whose
+      create waits for the cluster to be ready; what remains is the few
+      seconds the platform can take to publish the kubeconfig after
+      reporting ready (observed live), and the ephemeral reads once,
+      without retrying, and documents that. An LKS kubeconfig does
       not expire (confirmed by the team,
       2026-09-17), so the ephemeral implements neither Close nor Renew:
       there is nothing to revoke and nothing to refresh mid-apply, unlike
@@ -267,16 +283,15 @@ groups:
         is the authority; the count refines it when reported. paused,
         deleting and deleted fail fast, since no amount of waiting reaches
         ready from there.
-      - The DEFAULT pool must stay schedulable: a NoSchedule or NoExecute
-        taint on latitudesh_lks.default_node_pool leaves the cluster's own
+      - At least one pool must stay schedulable: a cluster whose every pool
+        carries a NoSchedule or NoExecute taint leaves the platform's own
         system workloads with nowhere to run, so it never leaves
         "provisioning" (confirmed by the team, 2026-09-18). The API accepts
-        the taint and the apply reports success, so the only symptom is a
-        readiness wait that times out — which is why
-        lksDefaultPoolTaintsValidator rejects it at plan time instead.
-        PreferNoSchedule is allowed (soft), and latitudesh_lks_node_pool is
-        deliberately unrestricted: a hard taint on an additional pool is the
-        normal way to reserve one.
+        the taint and the apply reports success. A single
+        latitudesh_lks_node_pool cannot tell whether it is the only pool, so
+        this is documented on the taints attribute rather than validated;
+        while the cluster carried default_node_pool, a plan-time validator
+        rejected hard taints there.
       - An unset `description` comes back as "" rather than absent (seen live
         2026-09-18 on a node pool whose config never gave one). Copied into
         state verbatim that is a diff that can NEVER converge, since the API

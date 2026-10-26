@@ -71,8 +71,8 @@ func (e *LksKubeconfigEphemeral) Schema(ctx context.Context, req ephemeral.Schem
 		MarkdownDescription: "Reads an LKS (Latitude Kubernetes Service) cluster's kubeconfig for the duration of the Terraform run. " +
 			"The credentials never reach state or plan files, which is why this is an ephemeral resource rather than a data source — " +
 			"a kubeconfig grants cluster-admin. Requires Terraform 1.10 or later.\n\n" +
-			"The control plane must be up: `GET /lks/clusters/{id}/kubeconfig` answers 409 `NOT_READY` until `latitudesh_lks.status` is `ready`. " +
-			"For an existing cluster take the id from `latitudesh_lks_clusters`; for one created in the same configuration reference the `latitudesh_lks` resource, so the read is ordered after its create returns.\n\n" +
+			"The cluster must be `ready`: the platform publishes the kubeconfig only then, which takes a node pool with nodes, and until then `GET /lks/clusters/{id}/kubeconfig` answers 409 `NOT_READY`. " +
+			"For an existing cluster take the id from `latitudesh_lks_clusters` filtered on `status = \"ready\"`; for one created in the same configuration, order the read after its node pools with `depends_on` — a pool's create waits for the cluster to be ready.\n\n" +
 			"An LKS kubeconfig does not expire, so this needs no renewal and stays valid across a long apply — and a copy that leaks stays valid too, which is the reason not to persist one.",
 		Attributes: map[string]schema.Attribute{
 			"cluster_id": schema.StringAttribute{
@@ -114,7 +114,7 @@ func (e *LksKubeconfigEphemeral) Open(ctx context.Context, req ephemeral.OpenReq
 		}
 		resp.Diagnostics.AddError("Client Error",
 			fmt.Sprintf("Unable to read the kubeconfig for LKS cluster %q: %s\n\n"+
-				"A 409 NOT_READY here means the control plane is still coming up — reference the cluster resource so the read is ordered after it.",
+				"A 409 NOT_READY here means the cluster is not ready yet: it needs a node pool with nodes, and a moment after that for the platform to finish its setup — order the read after the cluster's node pools.",
 				clusterID, err))
 		return
 	}

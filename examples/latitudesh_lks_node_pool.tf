@@ -1,7 +1,6 @@
-# Node pools beyond the first. The first one is required and lives inside
-# latitudesh_lks as `default_node_pool`; use this resource to add capacity that
-# should scale, upgrade or be destroyed independently of the cluster — a GPU
-# pool, a batch pool, a pool on a different plan.
+# A cluster's workers. latitudesh_lks is the control plane alone; every pool,
+# including the first, is a latitudesh_lks_node_pool that scales, upgrades and
+# is destroyed independently of the cluster.
 data "latitudesh_lks_sites" "for_pool" {}
 
 data "latitudesh_lks_versions" "for_pool" {}
@@ -26,10 +25,18 @@ resource "latitudesh_lks" "node_pool_example" {
   name               = "example-cluster"
   site               = local.pool_site
   kubernetes_version = data.latitudesh_lks_versions.for_pool.default_version
+}
 
-  default_node_pool = {
-    node_count = 1
-    plan       = keys(data.latitudesh_lks_plans.for_pool.stock)[0]
+# The general-purpose pool. It carries no hard taint, so the platform's own
+# components (CNI, CoreDNS) can run on it — a cluster needs at least one pool
+# like this to become ready.
+resource "latitudesh_lks_node_pool" "general" {
+  cluster_id = latitudesh_lks.node_pool_example.id
+  node_count = 1
+  plan       = keys(data.latitudesh_lks_plans.for_pool.stock)[0]
+
+  labels = {
+    "workload" = "general"
   }
 }
 
@@ -52,9 +59,8 @@ resource "latitudesh_lks_node_pool" "gpu" {
     "workload" = "gpu"
   }
 
-  # A hard taint belongs here rather than on `default_node_pool`, which has to
-  # stay schedulable for the cluster's own components. Reserving a pool this
-  # way is the usual reason to add one.
+  # A hard taint reserves this pool for workloads that tolerate it. Fine here,
+  # because the general pool above stays schedulable for everything else.
   taints = [{
     key    = "dedicated"
     value  = "gpu"
@@ -62,7 +68,8 @@ resource "latitudesh_lks_node_pool" "gpu" {
   }]
 
   # Bare metal: create and scale wait until the platform reports the pool
-  # settled (and for ready_nodes to reach node_count, when it reports one).
+  # settled (and for ready_nodes to reach node_count, when it reports one);
+  # create also waits for the cluster to settle on the new nodes.
   timeouts = {
     create = "90m"
     update = "90m"
@@ -73,5 +80,5 @@ resource "latitudesh_lks_node_pool" "gpu" {
 data "latitudesh_lks_node_pools" "example" {
   cluster_id = latitudesh_lks.node_pool_example.id
 
-  depends_on = [latitudesh_lks_node_pool.gpu]
+  depends_on = [latitudesh_lks_node_pool.general, latitudesh_lks_node_pool.gpu]
 }
