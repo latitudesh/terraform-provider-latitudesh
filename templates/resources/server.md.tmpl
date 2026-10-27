@@ -11,7 +11,7 @@ The `latitudesh_server` resource allows you to deploy and manage bare metal serv
 
 > **Reinstall behavior**
 >
-> Server reinstalls require explicit opt-in. The `allow_reinstall` attribute defaults to `false`. With the default, changing `hostname` is applied in-place via PATCH; changing `operating_system`, `ssh_keys`, `user_data`, `raid`, or `ipxe` fails the plan with an error pointing at the field. Set `allow_reinstall = true` on the resource to perform reinstalls (which destroy data on disk).
+> Server reinstalls require explicit opt-in. The `allow_reinstall` attribute defaults to `false`. With the default, changing `hostname` is applied in-place via PATCH; changing `operating_system`, `ssh_keys`, `user_data`, `raid`, `disk_layout`, `ipxe`, or `persistent_netboot` fails the plan with an error pointing at the field. Set `allow_reinstall = true` on the resource to perform reinstalls (which destroy data on disk).
 >
 > When a reinstall-trigger field changes alongside `billing`, `tags`, or `project` in the same plan, the provider runs the reinstall first and follows up with an in-place PATCH so all changes are applied in a single apply.
 >
@@ -84,6 +84,41 @@ resource "latitudesh_server" "ipxe_node" {
 }
 ```
 
+By default the server network-boots its iPXE script once, at deploy time, and boots from disk afterwards. Set `persistent_netboot = true` to keep network boot enabled, so the server boots the script on every reboot (useful for diskless or stateless nodes). It is only accepted with `operating_system = "ipxe"`, and changing it on an existing server requires a reinstall:
+
+```hcl
+resource "latitudesh_server" "ipxe_node" {
+  # ...
+  operating_system   = "ipxe"
+  ipxe               = "https://pxe.factory.talos.dev/pxe/<sha>/<version>/metal-amd64"
+  persistent_netboot = true
+  allow_reinstall    = true
+}
+```
+
+### Attaching the server to a public network (bond)
+
+Set `public_network_id` to deploy the server bonded onto a public network, taking an address from it. The network must belong to the same project and the same location as the server, and have a free address. Only bond-capable servers can be attached, so the create fails with a no-stock error when none is available for the plan at that site.
+
+```hcl
+resource "latitudesh_public_network" "edge" {
+  project = "proj_..."
+  site    = "CHI"
+  size    = 29
+}
+
+resource "latitudesh_server" "edge" {
+  hostname          = "edge-01"
+  plan              = "m4-metal-small"
+  site              = "CHI"
+  operating_system  = "ubuntu_24_04_x64_lts"
+  project           = "proj_..."
+  public_network_id = latitudesh_public_network.edge.id
+}
+```
+
+The attachment is made when the server is deployed. Pointing `public_network_id` at another network recreates the server; removing it from the configuration keeps the attachment, and the attribute keeps reporting it.
+
 ### Reinstalling on user_data content changes
 
 When a server references a `latitudesh_user_data` resource via `user_data`, the provider also tracks changes to the **content** of that user_data resource. Editing the content and running `terraform apply` triggers a reinstall in a single apply (with `allow_reinstall = true`), so cloud-init updates land on existing servers without rotating the user_data ID.
@@ -122,7 +157,7 @@ resource "latitudesh_server" "h1" {
 }
 ```
 
-With the above, only `user_data` changes (ID or content) cause a reinstall. Changes to other reinstall-only fields (`operating_system`, `raid`, `ipxe`, `ssh_keys`) fail the plan with an explicit error pointing at the excluded field. `hostname` not in the list falls back to its existing in-place PATCH path.
+With the above, only `user_data` changes (ID or content) cause a reinstall. Changes to other reinstall-only fields (`operating_system`, `raid`, `disk_layout`, `ipxe`, `persistent_netboot`, `ssh_keys`) fail the plan with an explicit error pointing at the excluded field. `hostname` not in the list falls back to its existing in-place PATCH path.
 
 {{ .SchemaMarkdown | trimspace }}
 

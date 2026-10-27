@@ -92,10 +92,10 @@ func (a *ServerReinstallAction) Schema(ctx context.Context, req action.SchemaReq
 				Optional:            true,
 			},
 			"raid": schema.StringAttribute{
-				MarkdownDescription: "RAID mode: `raid-0` or `raid-1`. Mutually exclusive with `disk_layout`.",
+				MarkdownDescription: "RAID mode: `raid-0`, `raid-1` or `raid-10`. `raid-10` is only accepted at sites with RAID 10 support, on operating systems other than Proxmox, and on servers with at least 4 data disks. Mutually exclusive with `disk_layout`.",
 				Optional:            true,
 				Validators: []validator.String{
-					stringvalidator.OneOf("raid-0", "raid-1"),
+					stringvalidator.OneOf("raid-0", "raid-1", raidLevelTen),
 				},
 			},
 			"disk_layout": schema.ListNestedAttribute{
@@ -115,10 +115,10 @@ func (a *ServerReinstallAction) Schema(ctx context.Context, req action.SchemaReq
 							},
 						},
 						"raid_level": schema.StringAttribute{
-							MarkdownDescription: "RAID level for this disk group: `raid-0` or `raid-1`. Requires `count >= 2`.",
+							MarkdownDescription: "RAID level for this disk group: `raid-0`, `raid-1` or `raid-10`. `raid-0` and `raid-1` require `count >= 2`. `raid-10` is only allowed on the `storage` group, requires `count >= 4`, and is only accepted at sites with RAID 10 support and on operating systems other than Proxmox.",
 							Optional:            true,
 							Validators: []validator.String{
-								stringvalidator.OneOf("raid-0", "raid-1"),
+								stringvalidator.OneOf("raid-0", "raid-1", raidLevelTen),
 							},
 						},
 						"mount_point": schema.StringAttribute{
