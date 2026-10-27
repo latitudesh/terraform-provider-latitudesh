@@ -91,7 +91,7 @@ terraform apply -invoke=action.latitudesh_server_reinstall.rebuild
 - `ipxe` (String) The iPXE script to boot: either a URL pointing at the script, or the script encoded in base64. Required when `operating_system = "ipxe"`.
 - `operating_system` (String) The operating system slug to install. Defaults to the server's current operating system.
 - `persistent_netboot` (Boolean) Keep network boot enabled so the server iPXE-boots on every reboot instead of booting from disk. Only supported with the `ipxe` operating system.
-- `raid` (String) RAID mode: `raid-0` or `raid-1`. Mutually exclusive with `disk_layout`.
+- `raid` (String) RAID mode: `raid-0`, `raid-1` or `raid-10`. `raid-10` is only accepted at sites with RAID 10 support, on operating systems other than Proxmox, and on servers with at least 4 data disks. Mutually exclusive with `disk_layout`.
 - `ssh_keys` (List of String) SSH key IDs to install. An empty list installs no keys; omitting the attribute keeps the current ones.
 - `user_data` (String) The ID of a `latitudesh_user_data` to apply on reinstall.
 - `wait_for_ready` (Boolean) Wait for the server to finish redeploying and report `on`. Defaults to `true`; set to `false` to return as soon as the API accepts the reinstall.
@@ -108,7 +108,7 @@ Required:
 Optional:
 
 - `mount_point` (String) Mount point for this disk group, e.g. `/var/lib`. Required for the `storage` role.
-- `raid_level` (String) RAID level for this disk group: `raid-0` or `raid-1`. Requires `count >= 2`.
+- `raid_level` (String) RAID level for this disk group: `raid-0`, `raid-1` or `raid-10`. `raid-0` and `raid-1` require `count >= 2`. `raid-10` is only allowed on the `storage` group, requires `count >= 4`, and is only accepted at sites with RAID 10 support and on operating systems other than Proxmox.
 
 ## Behavior
 

@@ -5,7 +5,7 @@
 # See CONTRIBUTING.md, "Field drift".
 version: 1
 sdk_module: github.com/latitudesh/latitudesh-go-sdk
-sdk_version: v1.19.20
+sdk_version: v1.21.1
 groups:
   Billing:
     methods:
@@ -1516,7 +1516,7 @@ groups:
           - {name: "Data", wire: "data", type: "CreateVirtualNetworkPrivateNetworksData"}
       operations.CreateVirtualNetworkPrivateNetworksSite:
         doc: "6dce0dd4"
-        enum: ["ASH", "BUE", "CHI", "DAL", "FRA", "LAX", "LON", "MEX", "MEX2", "MIA", "MIA2", "NYC", "SAO", "SAO2", "SGP", "SYD", "TYO", "TYO2"]
+        enum: ["AMS", "ASH", "ASH2", "BGT", "BUE", "CHI", "DAL", "FRA", "FRA2", "LAX", "LAX2", "LON", "LON2", "MEX2", "MIA2", "NYC", "SAN3", "SAO", "SAO2", "SGP", "SJC2", "SYD", "SYD2", "TOR", "TYO3", "TYO4"]
       operations.CreateVirtualNetworkPrivateNetworksType:
         enum: ["virtual_network"]
       operations.CreateVirtualNetworkResponse:
@@ -2182,7 +2182,7 @@ groups:
         enum: ["ext4"]
       components.DeployConfigMeta:
       components.DeployConfigRaidLevel:
-        enum: ["raid-0", "raid-1"]
+        enum: ["raid-0", "raid-1", "raid-10"]
       components.DeployConfigRole:
         enum: ["os", "raw", "storage"]
       components.DeployConfigType:
@@ -2431,6 +2431,7 @@ groups:
           - {name: "ID", wire: "id", type: "*string", optional: true}
           - {name: "Name", wire: "name", type: "*string", optional: true}
           - {name: "RackID", wire: "rack_id", type: "*string", optional: true}
+          - {name: "RackName", wire: "rack_name", type: "*string", optional: true}
           - {name: "Slug", wire: "slug", type: "*string", optional: true}
       components.Stats:
         fields:
@@ -2484,7 +2485,7 @@ groups:
         enum: ["ext4", "xfs"]
       operations.CreateServerOperatingSystem:
         doc: "fdcf25e4"
-        enum: ["centos_7_4_x64", "centos_8_x64", "debian_10", "debian_11", "debian_12", "ipxe", "rhel8", "rockylinux_8", "ubuntu22_ml_in_a_box", "ubuntu24_ml_in_a_box", "ubuntu_20_04_x64_lts", "ubuntu_22_04_x64_lts", "ubuntu_24_04_x64_lts", "windows_2022_std", "windows_server_2019_std_v1"]
+        enum: ["almalinux-10", "almalinux-9", "centos-9-stream", "debian_12", "debian_13", "fedora-44", "ipxe", "opensuse-15", "oraclelinux-10", "oraclelinux-9", "proxmox-9", "proxmox-backup-server-4", "rocky-10", "rocky-9", "ubuntu24_ml_in_a_box", "ubuntu24_ml_in_a_box_sxm", "ubuntu26_ml_in_a_box", "ubuntu_24_04_x64_lts", "ubuntu_26_04_x64_lts"]
       operations.CreateServerOutOfBandResponse:
         fields:
           - {name: "OutOfBandConnection", type: "*components.OutOfBandConnection", optional: true, doc: "09de135b"}
@@ -2502,12 +2503,12 @@ groups:
         enum: ["out_of_band"]
       operations.CreateServerPlan:
         doc: "300886f5"
-        enum: ["c2-large-x86", "c2-medium-x86", "c2-small-x86", "c3-large-x86", "c3-medium-x86", "c3-small-x86", "c3-xlarge-x86", "g3-gh200", "g3-large-x86", "g3-medium-x86", "g3-small-x86", "g3-xlarge-x86", "g4-rtx6kpro-large", "m3-large-x86", "m4-metal-large", "m4-metal-small", "rs4-metal-xlarge", "s2-small-x86", "s3-large-x86"]
+        enum: ["c3-large-x86", "c3-small-x86", "c4-metal-large", "f4-metal-large", "f4-metal-medium", "f4-metal-small", "g3-h100-small", "g4-b300-large", "g4-rtx6kpro-large", "m3-large-x86", "m4-metal-large", "m4-metal-medium", "m4-metal-small", "m4-metal-xlarge", "rs4-metal-large", "rs4-metal-xlarge", "s3-large-x86"]
       operations.CreateServerRaid:
-        doc: "3430342c"
-        enum: ["raid-0", "raid-1"]
+        doc: "c2f25a37"
+        enum: ["raid-0", "raid-1", "raid-10"]
       operations.CreateServerRaidLevel:
-        enum: ["raid-0", "raid-1"]
+        enum: ["raid-0", "raid-1", "raid-10"]
       operations.CreateServerReinstallResponse:
       operations.CreateServerReinstallServersAttributes:
         fields:
@@ -2518,7 +2519,7 @@ groups:
           - {name: "PersistentNetboot", wire: "persistent_netboot", type: "*bool", optional: true, doc: "ffca1d5f"}
           - {name: "PublicNetwork", wire: "public_network", type: "*bool", optional: true, doc: "401703ef"}
           - {name: "PublicNetworkID", wire: "public_network_id", type: "*string", optional: true, doc: "cd6c033b"}
-          - {name: "Raid", wire: "raid", type: "*CreateServerReinstallServersRaid", optional: true, doc: "f2c6f5c2"}
+          - {name: "Raid", wire: "raid", type: "*CreateServerReinstallServersRaid", optional: true, doc: "0a589c45"}
           - {name: "SSHKeys", wire: "ssh_keys", type: "[]string", optional: true, doc: "e7d4f653"}
           - {name: "UserData", wire: "user_data", type: "*string", optional: true, doc: "9d2d7e48"}
       operations.CreateServerReinstallServersData:
@@ -2536,12 +2537,12 @@ groups:
         enum: ["ext4", "xfs"]
       operations.CreateServerReinstallServersOperatingSystem:
         doc: "9b6a568e"
-        enum: ["centos_7_4_x64", "centos_8_x64", "debian_10", "debian_11", "debian_12", "ipxe", "rhel8", "rockylinux_8", "ubuntu22_ml_in_a_box", "ubuntu24_ml_in_a_box", "ubuntu_20_04_x64_lts", "ubuntu_22_04_x64_lts", "ubuntu_24_04_x64_lts", "windows_2022_std", "windows_server_2019_std_v1"]
+        enum: ["almalinux-10", "almalinux-9", "centos-9-stream", "debian_12", "debian_13", "fedora-44", "ipxe", "opensuse-15", "oraclelinux-10", "oraclelinux-9", "proxmox-9", "proxmox-backup-server-4", "rocky-10", "rocky-9", "ubuntu24_ml_in_a_box", "ubuntu24_ml_in_a_box_sxm", "ubuntu26_ml_in_a_box", "ubuntu_24_04_x64_lts", "ubuntu_26_04_x64_lts"]
       operations.CreateServerReinstallServersRaid:
-        doc: "ae73c2c8"
-        enum: ["raid-0", "raid-1"]
+        doc: "2a45859b"
+        enum: ["raid-0", "raid-1", "raid-10"]
       operations.CreateServerReinstallServersRaidLevel:
-        enum: ["raid-0", "raid-1"]
+        enum: ["raid-0", "raid-1", "raid-10"]
       operations.CreateServerReinstallServersRequestBody:
         fields:
           - {name: "Data", wire: "data", type: "CreateServerReinstallServersData"}
@@ -2565,7 +2566,7 @@ groups:
           - {name: "Project", wire: "project", type: "string", doc: "f855f31f"}
           - {name: "PublicNetwork", wire: "public_network", type: "*bool", optional: true, doc: "ee4f7d57"}
           - {name: "PublicNetworkID", wire: "public_network_id", type: "*string", optional: true, doc: "80aff7c9"}
-          - {name: "Raid", wire: "raid", type: "*CreateServerRaid", optional: true, doc: "f2c6f5c2"}
+          - {name: "Raid", wire: "raid", type: "*CreateServerRaid", optional: true, doc: "0a589c45"}
           - {name: "SSHKeys", wire: "ssh_keys", type: "[]string", optional: true, doc: "cb759b5d"}
           - {name: "Site", wire: "site", type: "CreateServerSite", doc: "1fc71af8"}
           - {name: "UserData", wire: "user_data", type: "*string", optional: true, doc: "78299b0e"}
@@ -2582,7 +2583,7 @@ groups:
         enum: ["servers"]
       operations.CreateServerSite:
         doc: "3e43a70f"
-        enum: ["ASH", "BUE", "CHI", "DAL", "FRA", "LAX", "LON", "MEX", "MEX2", "MIA", "MIA2", "NYC", "SAO", "SAO2", "SGP", "SYD", "TYO", "TYO2"]
+        enum: ["AMS", "ASH", "ASH2", "BGT", "BUE", "CHI", "DAL", "FRA", "FRA2", "LAX", "LAX2", "LON", "LON2", "MEX2", "MIA2", "NYC", "SAN3", "SAO", "SAO2", "SGP", "SJC2", "SYD", "SYD2", "TOR", "TYO3", "TYO4"]
       operations.DestroyServerResponse:
       operations.GetServerDeployConfigResponse:
         fields:
@@ -2663,7 +2664,7 @@ groups:
           - {name: "PersistentNetboot", wire: "persistent_netboot", type: "*bool", optional: true, doc: "ffca1d5f"}
           - {name: "PublicNetwork", wire: "public_network", type: "*bool", optional: true, doc: "e74b8d1a"}
           - {name: "PublicNetworkID", wire: "public_network_id", type: "*string", optional: true, doc: "8b44be43"}
-          - {name: "Raid", wire: "raid", type: "*UpdateServerDeployConfigServersRaid", optional: true, doc: "f2c6f5c2"}
+          - {name: "Raid", wire: "raid", type: "*UpdateServerDeployConfigServersRaid", optional: true, doc: "0a589c45"}
           - {name: "SSHKeys", wire: "ssh_keys", type: "[]string", optional: true}
           - {name: "UserData", wire: "user_data", type: "*string", optional: true, doc: "5d0721ab"}
       operations.UpdateServerDeployConfigServersData:
@@ -2681,12 +2682,12 @@ groups:
       operations.UpdateServerDeployConfigServersFilesystem:
         enum: ["ext4"]
       operations.UpdateServerDeployConfigServersOperatingSystem:
-        enum: ["centos_7_4_x64", "centos_8_x64", "debian_10", "debian_11", "debian_12", "ipxe", "rhel8", "rockylinux_8", "ubuntu22_ml_in_a_box", "ubuntu24_ml_in_a_box", "ubuntu_20_04_x64_lts", "ubuntu_22_04_x64_lts", "ubuntu_24_04_x64_lts", "windows_2022_std", "windows_server_2019_std_v1"]
+        enum: ["almalinux-10", "almalinux-9", "centos-9-stream", "debian_12", "debian_13", "fedora-44", "ipxe", "opensuse-15", "oraclelinux-10", "oraclelinux-9", "proxmox-9", "proxmox-backup-server-4", "rocky-10", "rocky-9", "ubuntu24_ml_in_a_box", "ubuntu24_ml_in_a_box_sxm", "ubuntu26_ml_in_a_box", "ubuntu_24_04_x64_lts", "ubuntu_26_04_x64_lts"]
       operations.UpdateServerDeployConfigServersRaid:
-        doc: "d56e112c"
-        enum: ["raid-0", "raid-1"]
+        doc: "4209e137"
+        enum: ["raid-0", "raid-1", "raid-10"]
       operations.UpdateServerDeployConfigServersRaidLevel:
-        enum: ["raid-0", "raid-1"]
+        enum: ["raid-0", "raid-1", "raid-10"]
       operations.UpdateServerDeployConfigServersRequestBody:
         fields:
           - {name: "Data", wire: "data", type: "UpdateServerDeployConfigServersData"}

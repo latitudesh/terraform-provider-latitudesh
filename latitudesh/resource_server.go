@@ -24,6 +24,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/planmodifiers"
 	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
@@ -40,9 +41,18 @@ var validReinstallTriggers = []string{
 	"raid",
 	"disk_layout",
 	"ipxe",
+	"persistent_netboot",
 	"ssh_keys",
 	"hostname",
 }
+
+// raidLevelTen is the RAID level that needs a site with the raid_ten feature,
+// a non-Proxmox OS and at least raidTenMinDisks disks. In a custom disk layout
+// the API also limits it to the storage group.
+const (
+	raidLevelTen    = "raid-10"
+	raidTenMinDisks = 4
+)
 
 var _ resource.Resource = &ServerResource{}
 var _ resource.ResourceWithImportState = &ServerResource{}
@@ -73,7 +83,9 @@ type ServerResourceModel struct {
 	Raid                     types.String      `tfsdk:"raid"`
 	DiskLayout               []DiskLayoutModel `tfsdk:"disk_layout"`
 	Ipxe                     types.String      `tfsdk:"ipxe"`
+	PersistentNetboot        types.Bool        `tfsdk:"persistent_netboot"`
 	BgpReady                 types.Bool        `tfsdk:"bgp_ready"`
+	PublicNetworkID          types.String      `tfsdk:"public_network_id"`
 	Billing                  types.String      `tfsdk:"billing"`
 	Tags                     types.List        `tfsdk:"tags"`
 	AllowReinstall           types.Bool        `tfsdk:"allow_reinstall"`
@@ -180,7 +192,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				},
 			},
 			"raid": schema.StringAttribute{
-				MarkdownDescription: "RAID mode for the server. Updating raid requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error. Mutually exclusive with `disk_layout`.",
+				MarkdownDescription: "RAID mode for the server: `raid-0`, `raid-1` or `raid-10`. `raid-10` is only accepted at sites with RAID 10 support, on operating systems other than Proxmox, and on servers with at least 4 data disks; the API rejects the request otherwise. Updating raid requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error. Mutually exclusive with `disk_layout`.",
 				Optional:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
@@ -203,10 +215,10 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 							},
 						},
 						"raid_level": schema.StringAttribute{
-							MarkdownDescription: "RAID level for this disk group: `raid-0` or `raid-1`. Requires `count >= 2`.",
+							MarkdownDescription: "RAID level for this disk group: `raid-0`, `raid-1` or `raid-10`. `raid-0` and `raid-1` require `count >= 2`. `raid-10` is only allowed on the `storage` group, requires `count >= 4`, and is only accepted at sites with RAID 10 support and on operating systems other than Proxmox.",
 							Optional:            true,
 							Validators: []validator.String{
-								stringvalidator.OneOf("raid-0", "raid-1"),
+								stringvalidator.OneOf("raid-0", "raid-1", raidLevelTen),
 							},
 						},
 						"mount_point": schema.StringAttribute{
@@ -215,6 +227,14 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 						},
 					},
 				},
+			},
+			"persistent_netboot": schema.BoolAttribute{
+				MarkdownDescription: "Keep network boot enabled so the server boots its iPXE script on every reboot instead of booting from disk. " +
+					"Only supported with `operating_system = \"ipxe\"`; the plan fails with an error otherwise. " +
+					"The provider keeps the configured value in state and does not refresh it from the API. " +
+					"Omitting it and setting it to `false` are equivalent, so switching between the two changes nothing on the server. " +
+					"Any other change requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.",
+				Optional: true,
 			},
 			"ipxe": schema.StringAttribute{
 				MarkdownDescription: "The iPXE script to boot. Accepts either a URL pointing at the script, or the script encoded in base64. Required when `operating_system = \"ipxe\"`; the plan fails with an explicit error if it is missing. That check applies only when this plan sets or changes `operating_system` or `ipxe`, so a server imported with `operating_system = \"ipxe\"` and no script of its own — one provisioned through Tinkerbell, for example — keeps planning cleanly. Updating ipxe requires a reinstall and only succeeds when `allow_reinstall = true`; otherwise the plan fails with an error.",
@@ -233,6 +253,21 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					boolplanmodifier.RequiresReplace(),
 				},
 			},
+			"public_network_id": schema.StringAttribute{
+				MarkdownDescription: "ID of a public network (`latitudesh_public_network`) to attach the server onto when it is deployed. " +
+					"The server is bonded onto the network and takes an address from it. " +
+					"The network must belong to the same project and the same location as the server, and have a free address; " +
+					"the API rejects the create otherwise, and fails it with a no-stock error when no bond-capable server is available for the plan at that site. " +
+					"Changing it to another network forces the server to be recreated. " +
+					"Removing it from the configuration does not detach the server: the attachment is kept and the attribute keeps reporting it. " +
+					"It is refreshed from the server, so an imported server reports the network it is attached onto.",
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+					stringplanmodifier.RequiresReplaceIfConfigured(),
+				},
+			},
 			"billing": schema.StringAttribute{
 				MarkdownDescription: "The server billing type. Accepts `hourly` and `monthly` for on-demand projects and `yearly` for reserved projects. **Defaults to `monthly`**, which is charged upfront based on the proration of the current billing cycle. Use `hourly` for dynamic or short-lived workloads. When omitted, the plan shows the effective value (`billing = \"monthly\"` on create).",
 				Optional:            true,
@@ -249,13 +284,13 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Optional:            true,
 			},
 			"allow_reinstall": schema.BoolAttribute{
-				MarkdownDescription: "Allow server reinstallation when `operating_system`, `hostname`, `ssh_keys`, `user_data` (ID or content), `raid`, or `ipxe` changes. **Defaults to `false`.** When `false`, `hostname` changes are applied in-place via PATCH and any other reinstall-only field change fails the plan with an explicit error; set this to `true` on resources where you want reinstalls to happen automatically. See `allowed_reinstall_triggers` to further restrict which kinds of changes are permitted to cause a reinstall.",
+				MarkdownDescription: "Allow server reinstallation when `operating_system`, `hostname`, `ssh_keys`, `user_data` (ID or content), `raid`, `disk_layout`, `ipxe`, or `persistent_netboot` changes. **Defaults to `false`.** When `false`, `hostname` changes are applied in-place via PATCH and any other reinstall-only field change fails the plan with an explicit error; set this to `true` on resources where you want reinstalls to happen automatically. See `allowed_reinstall_triggers` to further restrict which kinds of changes are permitted to cause a reinstall.",
 				Optional:            true,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
 			},
 			"allowed_reinstall_triggers": schema.ListAttribute{
-				MarkdownDescription: "Optional list restricting which field changes are allowed to trigger a server reinstall when `allow_reinstall = true`. When omitted, all reinstall-only field changes trigger a reinstall (default behavior). When set, only listed names cause a reinstall; changes to reinstall-only fields not in the list fail the plan with an explicit error, except `hostname` which falls back to its in-place PATCH path. Valid values: `operating_system`, `user_data`, `raid`, `disk_layout`, `ipxe`, `ssh_keys`, `hostname`. The token `user_data` covers both ID changes and content changes of the referenced `latitudesh_user_data` resource.",
+				MarkdownDescription: "Optional list restricting which field changes are allowed to trigger a server reinstall when `allow_reinstall = true`. When omitted, all reinstall-only field changes trigger a reinstall (default behavior). When set, only listed names cause a reinstall; changes to reinstall-only fields not in the list fail the plan with an explicit error, except `hostname` which falls back to its in-place PATCH path. Valid values: `operating_system`, `user_data`, `raid`, `disk_layout`, `ipxe`, `persistent_netboot`, `ssh_keys`, `hostname`. The token `user_data` covers both ID changes and content changes of the referenced `latitudesh_user_data` resource.",
 				Optional:            true,
 				ElementType:         types.StringType,
 				Validators: []validator.List{
@@ -395,6 +430,16 @@ func (r *ServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 		return
 	}
 
+	// Plan-time guard: persistent_netboot is only accepted with the ipxe OS.
+	if err := validatePersistentNetbootOnChange(isCreate, state.OperatingSystem, state.PersistentNetboot, plan.OperatingSystem, plan.PersistentNetboot); err != nil {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("persistent_netboot"),
+			"Invalid persistent_netboot",
+			err.Error(),
+		)
+		return
+	}
+
 	// Plan-time guard: hostname shape. Lives here rather than in the schema
 	// because schema validators only ever see the configuration.
 	if err := validateHostnameOnChange(isCreate, state.Hostname, plan.Hostname); err != nil {
@@ -470,6 +515,9 @@ func (r *ServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 		}
 		if !state.Ipxe.Equal(plan.Ipxe) && (!state.Ipxe.IsNull() || !plan.Ipxe.IsNull()) {
 			reinstallOnlyReasons = append(reinstallOnlyReasons, "ipxe")
+		}
+		if persistentNetbootChanged(state.PersistentNetboot, plan.PersistentNetboot) {
+			reinstallOnlyReasons = append(reinstallOnlyReasons, "persistent_netboot")
 		}
 		if !state.SSHKeys.Equal(plan.SSHKeys) && (!state.SSHKeys.IsNull() || !plan.SSHKeys.IsNull()) {
 			reinstallOnlyReasons = append(reinstallOnlyReasons, "ssh_keys")
@@ -684,11 +732,25 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		attrs.Ipxe = &ipxe
 	}
 
+	if !data.PersistentNetboot.IsNull() && !data.PersistentNetboot.IsUnknown() {
+		persistentNetboot := data.PersistentNetboot.ValueBool()
+		attrs.PersistentNetboot = &persistentNetboot
+	}
+
 	// bgp_ready is a deploy-time only flag: the API accepts it solely on create
 	// and never returns it, so it is sent here and never read back.
 	if !data.BgpReady.IsNull() && !data.BgpReady.IsUnknown() {
 		bgpReady := data.BgpReady.ValueBool()
 		attrs.BgpReady = &bgpReady
+	}
+
+	// The API requires public_network = true and public_network_id together, so
+	// the boolean is implied by the ID rather than exposed as its own attribute.
+	if isSet(data.PublicNetworkID) {
+		publicNetwork := true
+		publicNetworkID := data.PublicNetworkID.ValueString()
+		attrs.PublicNetwork = &publicNetwork
+		attrs.PublicNetworkID = &publicNetworkID
 	}
 
 	if !data.Billing.IsNull() {
@@ -828,7 +890,7 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 	}
 
 	if needsReinstall {
-		err := r.reinstallServer(ctx, &data, &resp.Diagnostics)
+		err := r.reinstallServer(ctx, &data, &currentData, &resp.Diagnostics)
 		if err != nil {
 			resp.Diagnostics.AddError("Reinstall Error", "Unable to reinstall server: "+err.Error())
 			return
@@ -1050,6 +1112,21 @@ func inPlaceFieldsChanged(planned, current *ServerResourceModel) bool {
 	return false
 }
 
+// publicNetworkIDFromAPI refreshes public_network_id from the server's
+// public_network, whose id is the same pn_ hash as latitudesh_public_network.id.
+// A reported network always wins, which is how an imported server picks up its
+// attachment. A missing one never clears the prior value: the API omits the
+// object for servers outside a rolled-out location and while a bond is being
+// set up or torn down, and nulling a configured ID right after create would
+// fail the apply with an inconsistent result. An unknown prior value is left
+// for the caller to settle once the whole read is done.
+func publicNetworkIDFromAPI(prior types.String, pn *components.ServerDataPublicNetwork) types.String {
+	if pn != nil && pn.ID != nil && *pn.ID != "" {
+		return types.StringValue(*pn.ID)
+	}
+	return prior
+}
+
 func optionalBool(ptr *bool) types.Bool {
 	if ptr == nil {
 		return types.BoolNull()
@@ -1170,6 +1247,10 @@ func (r *ServerResource) needsReinstall(ctx context.Context, planned *ServerReso
 		reasons = append(reasons, "ipxe")
 	}
 
+	if persistentNetbootChanged(current.PersistentNetboot, planned.PersistentNetboot) && allowed("persistent_netboot") {
+		reasons = append(reasons, "persistent_netboot")
+	}
+
 	if len(reasons) > 0 {
 		return true, "Changed: " + fmt.Sprintf("%v", reasons)
 	}
@@ -1177,8 +1258,26 @@ func (r *ServerResource) needsReinstall(ctx context.Context, planned *ServerReso
 	return false, ""
 }
 
-func (r *ServerResource) reinstallServer(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) error {
+func (r *ServerResource) reinstallServer(ctx context.Context, data, current *ServerResourceModel, diags *diag.Diagnostics) error {
 	serverID := data.ID.ValueString()
+	attrs := reinstallAttributesFromResource(ctx, data, current, diags)
+
+	reinstallRequest := operations.CreateServerReinstallServersRequestBody{
+		Data: operations.CreateServerReinstallServersData{
+			Type:       operations.CreateServerReinstallServersTypeReinstalls,
+			Attributes: attrs,
+		},
+	}
+
+	_, err := r.client.Servers.Reinstall(ctx, serverID, reinstallRequest)
+	return err
+}
+
+// reinstallAttributesFromResource builds the reinstall payload from the planned
+// model. current is the prior state; it is only consulted for
+// persistent_netboot, where removing a previously enabled value has to be sent
+// as an explicit false (see reinstallPersistentNetboot).
+func reinstallAttributesFromResource(ctx context.Context, data, current *ServerResourceModel, diags *diag.Diagnostics) *operations.CreateServerReinstallServersAttributes {
 	attrs := &operations.CreateServerReinstallServersAttributes{}
 
 	if !data.OperatingSystem.IsNull() && !data.OperatingSystem.IsUnknown() {
@@ -1215,14 +1314,14 @@ func (r *ServerResource) reinstallServer(ctx context.Context, data *ServerResour
 	}
 
 	// disk_layout takes precedence over raid and the two are mutually exclusive.
+	// raid is forwarded as configured, like on create: which levels are valid
+	// depends on the site and the OS, so the API is the one to reject it. An
+	// allowlist here used to drop raid-10 from the payload without an error.
 	if len(data.DiskLayout) > 0 {
 		attrs.DiskLayout = reinstallDiskLayout(data.DiskLayout)
-	} else if !data.Raid.IsNull() && !data.Raid.IsUnknown() {
-		raidValue := data.Raid.ValueString()
-		if raidValue != "" && (raidValue == "raid-0" || raidValue == "raid-1") {
-			raid := operations.CreateServerReinstallServersRaid(raidValue)
-			attrs.Raid = &raid
-		}
+	} else if isSet(data.Raid) {
+		raid := operations.CreateServerReinstallServersRaid(data.Raid.ValueString())
+		attrs.Raid = &raid
 	}
 
 	if !data.Ipxe.IsNull() && !data.Ipxe.IsUnknown() {
@@ -1232,15 +1331,55 @@ func (r *ServerResource) reinstallServer(ctx context.Context, data *ServerResour
 		}
 	}
 
-	reinstallRequest := operations.CreateServerReinstallServersRequestBody{
-		Data: operations.CreateServerReinstallServersData{
-			Type:       operations.CreateServerReinstallServersTypeReinstalls,
-			Attributes: attrs,
-		},
-	}
+	attrs.PersistentNetboot = reinstallPersistentNetboot(current.PersistentNetboot, data.PersistentNetboot)
 
-	_, err := r.client.Servers.Reinstall(ctx, serverID, reinstallRequest)
-	return err
+	return attrs
+}
+
+// reinstallPersistentNetboot picks the persistent_netboot value for a reinstall
+// payload. A configured value is always sent. An omitted one is left off the
+// payload, because the API then keeps whatever the server already has, which
+// matches "no opinion". The exception is removing a value that was true: the
+// API would keep netbooting, so that removal is sent as an explicit false.
+func reinstallPersistentNetboot(current, planned types.Bool) *bool {
+	if !planned.IsNull() && !planned.IsUnknown() {
+		v := planned.ValueBool()
+		return &v
+	}
+	if !current.IsNull() && !current.IsUnknown() && current.ValueBool() {
+		v := false
+		return &v
+	}
+	return nil
+}
+
+// persistentNetbootChanged reports whether persistent_netboot changes between
+// two values. Null and false are equivalent: the API treats both as "do not
+// netboot", so switching between them must not force a reinstall.
+func persistentNetbootChanged(current, planned types.Bool) bool {
+	if planned.IsUnknown() {
+		return false
+	}
+	return current.ValueBool() != planned.ValueBool()
+}
+
+// validatePersistentNetbootOnChange rejects persistent_netboot = true unless
+// operating_system is "ipxe", matching the API rule. It runs only when this
+// plan creates the server or changes either value, like the other plan-time
+// guards, so an unchanged state is never re-validated. Unknown values are
+// skipped; the check runs again once Terraform resolves them.
+func validatePersistentNetbootOnChange(isCreate bool, stateOS types.String, stateNetboot types.Bool, planOS types.String, planNetboot types.Bool) error {
+	if !isCreate && stateOS.Equal(planOS) && stateNetboot.Equal(planNetboot) {
+		return nil
+	}
+	if planNetboot.IsNull() || planNetboot.IsUnknown() || !planNetboot.ValueBool() {
+		return nil
+	}
+	if planOS.IsNull() || planOS.IsUnknown() || planOS.ValueString() == "ipxe" {
+		return nil
+	}
+	return fmt.Errorf("persistent_netboot = true is only supported with operating_system = \"ipxe\" (got %q). "+
+		"Remove persistent_netboot or set it to false", planOS.ValueString())
 }
 
 func (r *ServerResource) updateServerInPlace(ctx context.Context, data *ServerResourceModel, currentData *ServerResourceModel, diags *diag.Diagnostics) (bool, string, error) {
@@ -1407,6 +1546,8 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 
 		data.LegacyNetwork = optionalBool(attrs.LegacyNetwork)
 
+		data.PublicNetworkID = publicNetworkIDFromAPI(data.PublicNetworkID, attrs.PublicNetwork)
+
 		featuresList, convertDiags := buildFeaturesList(ctx, attrs.Features)
 		diags.Append(convertDiags...)
 		if !convertDiags.HasError() {
@@ -1490,6 +1631,9 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 	}
 	if data.Features.IsUnknown() {
 		data.Features = types.ListNull(types.StringType)
+	}
+	if data.PublicNetworkID.IsUnknown() {
+		data.PublicNetworkID = types.StringNull()
 	}
 
 	// Populate user_data_content_hash on the first known read (Create-time or
@@ -1662,19 +1806,26 @@ func (r *ServerResource) ValidateConfig(ctx context.Context, req resource.Valida
 // API validation: exactly one os group, at most one storage group, per-group
 // field placement, and count constraints. Checks that depend on unknown
 // (interpolated) values are skipped so they don't produce false errors.
+//
+// Whether raid-10 is available at all depends on the site and the OS, which
+// only the API knows, so that part is left to the API.
 func validateDiskLayoutGroups(groups []DiskLayoutModel, diags *diag.Diagnostics) {
 	osCount, storageCount := 0, 0
 	rolesKnown := true
 
 	for i, d := range groups {
 		hasRaid := !d.RaidLevel.IsNull() && !d.RaidLevel.IsUnknown()
+		isRaidTen := hasRaid && d.RaidLevel.ValueString() == raidLevelTen
 		hasMount := !d.MountPoint.IsNull() && !d.MountPoint.IsUnknown() && d.MountPoint.ValueString() != ""
 		countKnown := !d.Count.IsNull() && !d.Count.IsUnknown()
 
 		if countKnown && d.Count.ValueInt64() < 1 {
 			diags.AddError("Invalid disk_layout", fmt.Sprintf("disk_layout[%d]: count must be >= 1.", i))
 		}
-		if hasRaid && countKnown && d.Count.ValueInt64() < 2 {
+		switch {
+		case isRaidTen && countKnown && d.Count.ValueInt64() < raidTenMinDisks:
+			diags.AddError("Invalid disk_layout", fmt.Sprintf("disk_layout[%d]: raid_level %q requires count >= %d.", i, raidLevelTen, raidTenMinDisks))
+		case hasRaid && !isRaidTen && countKnown && d.Count.ValueInt64() < 2:
 			diags.AddError("Invalid disk_layout", fmt.Sprintf("disk_layout[%d]: raid_level requires count >= 2.", i))
 		}
 
@@ -1687,6 +1838,9 @@ func validateDiskLayoutGroups(groups []DiskLayoutModel, diags *diag.Diagnostics)
 			osCount++
 			if hasMount {
 				diags.AddError("Invalid disk_layout", fmt.Sprintf("disk_layout[%d]: mount_point is not allowed on role \"os\".", i))
+			}
+			if isRaidTen {
+				diags.AddError("Invalid disk_layout", fmt.Sprintf("disk_layout[%d]: raid_level %q is only allowed on role \"storage\".", i, raidLevelTen))
 			}
 		case "storage":
 			storageCount++

@@ -392,6 +392,49 @@ func TestNeedsReinstall(t *testing.T) {
 			want:           true,
 		},
 		{
+			name: "enabling persistent_netboot triggers reinstall",
+			planned: ServerResourceModel{
+				Hostname:          types.StringValue("h"),
+				OperatingSystem:   types.StringValue("ipxe"),
+				PersistentNetboot: types.BoolValue(true),
+			},
+			current: ServerResourceModel{
+				Hostname:        types.StringValue("h"),
+				OperatingSystem: types.StringValue("ipxe"),
+			},
+			allowReinstall: true,
+			want:           true,
+		},
+		{
+			name: "persistent_netboot null to false is not a change",
+			planned: ServerResourceModel{
+				Hostname:          types.StringValue("h"),
+				OperatingSystem:   types.StringValue("ipxe"),
+				PersistentNetboot: types.BoolValue(false),
+			},
+			current: ServerResourceModel{
+				Hostname:        types.StringValue("h"),
+				OperatingSystem: types.StringValue("ipxe"),
+			},
+			allowReinstall: true,
+			want:           false,
+		},
+		{
+			name: "allowed_reinstall_triggers excludes persistent_netboot: change does not reinstall",
+			planned: ServerResourceModel{
+				Hostname:                 types.StringValue("h"),
+				OperatingSystem:          types.StringValue("ipxe"),
+				PersistentNetboot:        types.BoolValue(true),
+				AllowedReinstallTriggers: triggerList("ipxe"),
+			},
+			current: ServerResourceModel{
+				Hostname:        types.StringValue("h"),
+				OperatingSystem: types.StringValue("ipxe"),
+			},
+			allowReinstall: true,
+			want:           false,
+		},
+		{
 			name: "allowed_reinstall_triggers excludes user_data: content drift suppressed at apply",
 			planned: ServerResourceModel{
 				Hostname:                 types.StringValue("h"),

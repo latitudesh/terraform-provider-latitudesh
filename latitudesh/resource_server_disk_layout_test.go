@@ -1,6 +1,7 @@
 package latitudesh
 
 import (
+	"context"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -98,6 +99,31 @@ func TestValidateDiskLayoutGroups(t *testing.T) {
 			shouldErr: true,
 		},
 		{
+			name: "valid raid-10 on storage with 4 disks",
+			groups: []DiskLayoutModel{
+				dlGroup(2, "os", "raid-1", ""),
+				dlGroup(4, "storage", "raid-10", "/data"),
+			},
+		},
+		{
+			name: "raid-10 requires count >= 4",
+			groups: []DiskLayoutModel{
+				dlGroup(2, "os", "raid-1", ""),
+				dlGroup(3, "storage", "raid-10", "/data"),
+			},
+			shouldErr: true,
+		},
+		{
+			name:      "raid-10 is not allowed on os",
+			groups:    []DiskLayoutModel{dlGroup(4, "os", "raid-10", "")},
+			shouldErr: true,
+		},
+		{
+			name:      "raid-10 is not allowed on raw",
+			groups:    []DiskLayoutModel{dlGroup(1, "os", "", ""), dlGroup(4, "raw", "raid-10", "")},
+			shouldErr: true,
+		},
+		{
 			// Empty-string mount_point on os is treated as "not set" and must not
 			// error, matching how the API-mapping helpers omit it.
 			name: "empty mount_point on os is ignored",
@@ -192,4 +218,46 @@ func TestDiskLayoutChanged(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The reinstall payload used to forward raid only when it was raid-0 or
+// raid-1, so a raid-10 server reinstalled without any RAID setting and without
+// an error. raid is now forwarded as configured, like on create.
+func TestReinstallAttributesFromResource_Raid(t *testing.T) {
+	t.Parallel()
+
+	for _, raid := range []string{"raid-0", "raid-1", "raid-10"} {
+		raid := raid
+		t.Run(raid, func(t *testing.T) {
+			t.Parallel()
+			planned := &ServerResourceModel{Raid: types.StringValue(raid)}
+			var diags diag.Diagnostics
+			attrs := reinstallAttributesFromResource(context.Background(), planned, &ServerResourceModel{}, &diags)
+			if diags.HasError() {
+				t.Fatalf("unexpected diags: %v", diags)
+			}
+			if attrs.Raid == nil || string(*attrs.Raid) != raid {
+				t.Fatalf("raid = %v, want %q", attrs.Raid, raid)
+			}
+		})
+	}
+
+	t.Run("disk_layout takes precedence and carries raid-10", func(t *testing.T) {
+		t.Parallel()
+		planned := &ServerResourceModel{
+			Raid: types.StringNull(),
+			DiskLayout: []DiskLayoutModel{
+				dlGroup(2, "os", "raid-1", ""),
+				dlGroup(4, "storage", "raid-10", "/data"),
+			},
+		}
+		var diags diag.Diagnostics
+		attrs := reinstallAttributesFromResource(context.Background(), planned, &ServerResourceModel{}, &diags)
+		if attrs.Raid != nil {
+			t.Fatalf("raid = %q, want it omitted when disk_layout is set", *attrs.Raid)
+		}
+		if len(attrs.DiskLayout) != 2 || attrs.DiskLayout[1].RaidLevel == nil || string(*attrs.DiskLayout[1].RaidLevel) != "raid-10" {
+			t.Fatalf("disk_layout = %+v, want the storage group to carry raid-10", attrs.DiskLayout)
+		}
+	})
 }
