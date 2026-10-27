@@ -263,6 +263,160 @@ func TestBlockStorageAttachment_SurvivesVolumeGrowth(t *testing.T) {
 	})
 }
 
+func testAccBlockStorageAttachmentConfigTimeouts(serverID, createTimeout string) string {
+	return fmt.Sprintf(`
+provider "latitudesh" {
+  auth_token = "mock-token"
+}
+
+resource "latitudesh_block_storage" "test_item" {
+  project    = "test-project"
+  name       = "app-data"
+  region     = "ASH"
+  size_in_gb = 100
+}
+
+resource "latitudesh_block_storage_attachment" "test_item" {
+  block_storage_id = latitudesh_block_storage.test_item.id
+  server_id        = %q
+
+  timeouts = {
+    create = %q
+  }
+}
+`, serverID, createTimeout)
+}
+
+// settleMapping makes the volume's in-flight mapping finish as status on the
+// next read, and later mappings settle normally again.
+func settleMapping(mock *mockBlockStorageAPI, status string) func() {
+	return func() {
+		mock.mu.Lock()
+		defer mock.mu.Unlock()
+		mock.mapPendingReads = 1
+		for _, v := range mock.volumes {
+			if v.block != nil {
+				v.block.pending = 0
+				v.block.status = status
+			}
+		}
+	}
+}
+
+// Changing only `timeouts` reaches Update, where the computed attributes are
+// unknown in the plan. They must be carried over from state, not written as
+// unknown (which Terraform rejects), and nothing may be sent to the API.
+func TestBlockStorageAttachment_TimeoutsChangeUpdatesInPlace(t *testing.T) {
+	shrinkAttachmentPolling(t)
+
+	mock := newMockBlockStorageAPI()
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	const name = "latitudesh_block_storage_attachment.test_item"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		Steps: []resource.TestStep{
+			{Config: testAccBlockStorageAttachmentConfig("sv_mock_1")},
+			{
+				Config: testAccBlockStorageAttachmentConfigTimeouts("sv_mock_1", "20m"),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(name, "status", "mapped"),
+					resource.TestCheckResourceAttr(name, "nqn", "nqn.2014-08.sh.latitude:id:sv_mock_1"),
+					resource.TestCheckResourceAttr(name, "storage_network.vid", "2090"),
+					resource.TestCheckResourceAttr(name, "timeouts.create", "20m"),
+					func(*terraform.State) error {
+						if n := countCalls(mock, "POST /storage/volumes/"); n != 1 {
+							return fmt.Errorf("a timeouts change re-mapped the volume: %v", mock.callLog())
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+// A mapping that is still in flight when the create timeout runs out may yet
+// finish. The attachment must stay in state (tainted) so the next apply
+// detaches and re-attaches it, instead of trying a fresh map the API refuses
+// with a 409 because the volume is already mapped.
+func TestBlockStorageAttachment_PollTimeoutKeepsMappingTainted(t *testing.T) {
+	shrinkAttachmentPolling(t)
+
+	mock := newMockBlockStorageAPI()
+	mock.mapPendingReads = 1 << 30
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	const name = "latitudesh_block_storage_attachment.test_item"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy: resource.ComposeTestCheckFunc(
+			testAccCheckMockBlockStorageDetached(mock),
+			testAccCheckMockBlockStorageDestroyed(mock),
+		),
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccBlockStorageAttachmentConfigTimeouts("sv_mock_1", "1s"),
+				ExpectError: regexp.MustCompile(`was still not attached after`),
+			},
+			{
+				PreConfig: settleMapping(mock, "mapped"),
+				Config:    testAccBlockStorageAttachmentConfigTimeouts("sv_mock_1", "1s"),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(name, "status", "mapped"),
+					func(*terraform.State) error {
+						if n := countCalls(mock, "POST /storage/volumes/vol_mock_1/unmap"); n != 1 {
+							return fmt.Errorf("expected the tainted attachment to be detached once, got %d: %v", n, mock.callLog())
+						}
+						if n := countCalls(mock, "POST /storage/volumes/vol_mock_1/map"); n != 2 {
+							return fmt.Errorf("expected the volume to be mapped twice, got %d: %v", n, mock.callLog())
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+// The same in-flight mapping may instead end as `failed`, which the API rolls
+// back. Replacing the tainted attachment must then treat the unmap's 409 as
+// "nothing to detach" and attach again, rather than getting stuck.
+func TestBlockStorageAttachment_TaintedMappingThatFailedIsReplaced(t *testing.T) {
+	shrinkAttachmentPolling(t)
+
+	mock := newMockBlockStorageAPI()
+	mock.mapPendingReads = 1 << 30
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy: resource.ComposeTestCheckFunc(
+			testAccCheckMockBlockStorageDetached(mock),
+			testAccCheckMockBlockStorageDestroyed(mock),
+		),
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccBlockStorageAttachmentConfigTimeouts("sv_mock_1", "1s"),
+				ExpectError: regexp.MustCompile(`was still not attached after`),
+			},
+			{
+				PreConfig: settleMapping(mock, "failed"),
+				Config:    testAccBlockStorageAttachmentConfigTimeouts("sv_mock_1", "1s"),
+				Check:     resource.TestCheckResourceAttr("latitudesh_block_storage_attachment.test_item", "status", "mapped"),
+			},
+		},
+	})
+}
+
 // Every input must survive import, or the first plan after import proposes a
 // replacement. The import id is the volume's, since the mapping has none.
 func TestBlockStorageAttachment_Import(t *testing.T) {

@@ -204,11 +204,29 @@ func (r *BlockStorageAttachmentResource) Create(ctx context.Context, req resourc
 
 	data.ID = types.StringValue(volumeID)
 
+	// The mapping exists from here on. Persist what is already known before the
+	// wait, so a poll that errors or times out leaves the attachment in state
+	// (Terraform marks it tainted and replaces it on the next apply) instead of
+	// orphaning a mapped volume the next apply could not map again. Only known
+	// values are written: the computed attributes are still unknown.
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), volumeID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("block_storage_id"), volumeID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("server_id"), data.ServerID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("timeouts"), data.Timeouts)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	// The map response echoes the volume back, but mapping is asynchronous and
 	// the echo is the pre-mapping state, so the attachment's own attributes
 	// only become known once the poll below sees a terminal state.
-	block := r.waitForBlockStorageMapped(ctx, volumeID, createTimeout, &resp.Diagnostics)
+	block, failed := r.waitForBlockStorageMapped(ctx, volumeID, createTimeout, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
+		// The API rolls a failed mapping back, so nothing is attached and the
+		// next apply can simply map again.
+		if failed {
+			resp.State.RemoveResource(ctx)
+		}
 		return
 	}
 
@@ -255,15 +273,24 @@ func (r *BlockStorageAttachmentResource) Read(ctx context.Context, req resource.
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-// Update is unreachable: both inputs are RequiresReplace, because the API
-// offers no way to move a mapping without unmapping first.
+// Update only ever sees a change to `timeouts`: both inputs are
+// RequiresReplace, because the API offers no way to move a mapping without
+// unmapping first. Nothing is sent to the API. The computed attributes are
+// unknown in that plan, so they are carried over from state, which a mapping
+// left untouched still describes.
 func (r *BlockStorageAttachmentResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data BlockStorageAttachmentResourceModel
+	var data, state BlockStorageAttachmentResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	data.Status = state.Status
+	data.Nqn = state.Nqn
+	data.Nsid = state.Nsid
+	data.StorageNetwork = state.StorageNetwork
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -291,6 +318,13 @@ func (r *BlockStorageAttachmentResource) Delete(ctx context.Context, req resourc
 		// The volume itself may already be gone (it is destroyed right after
 		// this resource in a normal `terraform destroy`), which unmaps it.
 		if blockStorageNotFound(err) {
+			return
+		}
+		// The API answers 409 when there is no active mapping to remove. If the
+		// volume shows none (or only a failed one, which the API rolls back),
+		// there is nothing left to detach — the case of a tainted attachment
+		// whose mapping ended up failing.
+		if blockStorageConflict(err) && r.nothingMapped(ctx, volumeID) {
 			return
 		}
 		resp.Diagnostics.AddError("Client Error", "Unable to detach block storage volume, got error: "+err.Error())
@@ -329,48 +363,50 @@ func (r *BlockStorageAttachmentResource) readBlock(ctx context.Context, volumeID
 
 // waitForBlockStorageMapped polls the volume until its mapping reaches a
 // terminal state, returning the mapped block. A `failed` status, a vanished
-// volume or the timeout all produce an error diagnostic.
-func (r *BlockStorageAttachmentResource) waitForBlockStorageMapped(ctx context.Context, volumeID string, timeout time.Duration, diags *diag.Diagnostics) *components.Block {
+// volume or the timeout all produce an error diagnostic; failed reports
+// whether the API settled the mapping as `failed` (and so rolled it back), as
+// opposed to the outcome being unknown.
+func (r *BlockStorageAttachmentResource) waitForBlockStorageMapped(ctx context.Context, volumeID string, timeout time.Duration, diags *diag.Diagnostics) (block *components.Block, failed bool) {
 	deadline := time.Now().Add(timeout)
 
 	for {
-		block, found, err := r.readBlock(ctx, volumeID)
+		current, found, err := r.readBlock(ctx, volumeID)
 		if err != nil {
 			diags.AddError("Client Error", "Unable to poll block storage attachment, got error: "+err.Error())
-			return nil
+			return nil, false
 		}
 		if !found {
 			diags.AddError("API Error", fmt.Sprintf("Block storage volume %s disappeared while it was being attached.", volumeID))
-			return nil
+			return nil, false
 		}
 
-		if block != nil && block.Status != nil {
-			switch *block.Status {
+		if current != nil && current.Status != nil {
+			switch *current.Status {
 			case blockStorageStatusMapped:
-				return block
+				return current, false
 			case blockStorageStatusFailed:
 				// Project, site and eligibility are rejected synchronously by the
 				// map request, so a failure here comes from the storage side.
 				diags.AddError("API Error", fmt.Sprintf(
 					"Attaching block storage volume %s failed on the storage side. Run `terraform apply` again to retry, and contact support if it keeps failing.", volumeID))
-				return nil
+				return nil, true
 			}
 		}
 
 		if !time.Now().Before(deadline) {
 			status := "no mapping reported"
-			if block != nil && block.Status != nil {
-				status = *block.Status
+			if current != nil && current.Status != nil {
+				status = *current.Status
 			}
 			diags.AddError("Timeout", fmt.Sprintf(
-				"Block storage volume %s was still not attached after %s (last status: %s).", volumeID, timeout, status))
-			return nil
+				"Block storage volume %s was still not attached after %s (last status: %s). The attachment was saved as tainted, so the next apply detaches and re-attaches it.", volumeID, timeout, status))
+			return nil, false
 		}
 
 		select {
 		case <-ctx.Done():
 			diags.AddError("Cancelled", "Attaching block storage volume "+volumeID+" was cancelled while polling.")
-			return nil
+			return nil, false
 		case <-time.After(blockStorageAttachmentPollInterval):
 		}
 	}
@@ -479,6 +515,23 @@ func blockStorageServerNotEligible(err error) bool {
 		return false
 	}
 	return strings.Contains(apiErr.Body, "SERVER_NOT_ELIGIBLE_FOR_VOLUME_MAPPING")
+}
+
+// blockStorageConflict reports whether err is the API's 409, which unmap
+// returns when the volume has no active mapping to remove.
+func blockStorageConflict(err error) bool {
+	var apiErr *components.APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusConflict
+}
+
+// nothingMapped reports whether the volume is gone or carries no active
+// mapping (none at all, or one the API settled as failed and rolled back).
+func (r *BlockStorageAttachmentResource) nothingMapped(ctx context.Context, volumeID string) bool {
+	block, found, err := r.readBlock(ctx, volumeID)
+	if err != nil {
+		return false
+	}
+	return !found || block == nil || (block.Status != nil && *block.Status == blockStorageStatusFailed)
 }
 
 // optionalInt64 is the int64 twin of optionalString (helpers_server.go).

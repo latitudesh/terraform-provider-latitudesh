@@ -64,6 +64,11 @@ type mockBlockStorageAPI struct {
 	hideFirstGets int
 	getMisses     map[string]int
 
+	// failFirstGets makes the first N single-volume GETs of each volume fail
+	// with an error other than a 404 (a 403 here, so the client does not retry).
+	failFirstGets int
+	getFailures   map[string]int
+
 	// mapPendingReads is how many reads each mapping spends in its transient
 	// state before settling. Zero means the very first read already settles it.
 	mapPendingReads int
@@ -89,7 +94,7 @@ type mockBlockStorageAPI struct {
 }
 
 func newMockBlockStorageAPI() *mockBlockStorageAPI {
-	return &mockBlockStorageAPI{volumes: map[string]*mockVolume{}, getMisses: map[string]int{}, mapPendingReads: 1}
+	return &mockBlockStorageAPI{volumes: map[string]*mockVolume{}, getMisses: map[string]int{}, getFailures: map[string]int{}, mapPendingReads: 1}
 }
 
 // advance moves a mapping one read closer to its terminal state. Callers must
@@ -239,6 +244,13 @@ func (m *mockBlockStorageAPI) handler(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/storage/volumes/"):
 		id := strings.TrimPrefix(r.URL.Path, "/storage/volumes/")
 		v, ok := m.volumes[id]
+		if ok && m.getFailures[id] < m.failFirstGets {
+			m.getFailures[id]++
+			w.Header().Set("Content-Type", "application/vnd.api+json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"errors":[{"status":"403","title":"Forbidden"}]}`))
+			return
+		}
 		if ok && m.getMisses[id] < m.hideFirstGets {
 			m.getMisses[id]++
 			w.Header().Set("Content-Type", "application/vnd.api+json")
@@ -327,6 +339,14 @@ func (m *mockBlockStorageAPI) handler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		// Like the API, refuse a second mapping while one is active; a failed
+		// one has been rolled back and does not count.
+		if v.block != nil && v.block.status != "failed" {
+			w.Header().Set("Content-Type", "application/vnd.api+json")
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"errors":[{"code":"STORAGE_CONFLICT","status":"409","detail":"This volume is already mapped to a server."}]}`))
+			return
+		}
 		if m.ineligibleServers[payload.Data.Attributes.ServerID] {
 			w.Header().Set("Content-Type", "application/vnd.api+json")
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -347,10 +367,15 @@ func (m *mockBlockStorageAPI) handler(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(`{"errors":[{"status":"404"}]}`))
 			return
 		}
-		if v.block != nil {
-			v.block.status = "unmapping"
-			v.block.pending = m.mapPendingReads
+		// Like the API, only a settled mapping can be unmapped.
+		if v.block == nil || v.block.status != "mapped" {
+			w.Header().Set("Content-Type", "application/vnd.api+json")
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"errors":[{"code":"STORAGE_CONFLICT","status":"409","detail":"This volume is not currently mapped to the server."}]}`))
+			return
 		}
+		v.block.status = "unmapping"
+		v.block.pending = m.mapPendingReads
 		w.Header().Set("Content-Type", "application/vnd.api+json")
 		w.WriteHeader(http.StatusAccepted)
 		_ = json.NewEncoder(w).Encode(m.envelope(v))
@@ -654,6 +679,37 @@ func TestBlockStorage_CreateSurvivesUnreadableVolume(t *testing.T) {
 // blockStorageNotFound must accept only a 404 APIError, never a 403 or a
 // transient 5xx (which would otherwise read as "gone" and drop a live volume
 // from state, or make destroy report false success).
+// A read-back that fails with anything but a 404 must not cost the volume its
+// place in state either: it was created and is billing, so the apply saves it
+// from the create response (with a warning) instead of leaking it.
+func TestBlockStorage_CreateSurvivesReadBackError(t *testing.T) {
+	mock := newMockBlockStorageAPI()
+	mock.failFirstGets = 1
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMockBlockStorageDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccBlockStorageConfig("test-project", "app-data", "ASH", 100),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "id", "vol_mock_1"),
+					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "size_in_gb", "100"),
+					func(*terraform.State) error {
+						if n := countCalls(mock, "POST /storage/volumes"); n != 1 {
+							return fmt.Errorf("expected exactly one volume to be created, got %d: %v", n, mock.callLog())
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
 func TestBlockStorageNotFound(t *testing.T) {
 	cases := []struct {
 		name string

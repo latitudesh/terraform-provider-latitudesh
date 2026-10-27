@@ -176,10 +176,17 @@ func (r *BlockStorageResource) Create(ctx context.Context, req resource.CreateRe
 	// the create response is what stops that from writing a null id (which
 	// Terraform rejects as an inconsistent result, leaving the volume out of
 	// state entirely and leaking it).
+	// Any other read-back failure is no reason to drop the volume either: it
+	// exists and is billing, so it is saved from the create response and the
+	// error is only reported, for the next refresh to catch up.
 	refreshed := data
-	found := r.readBlockStorageInto(ctx, &refreshed, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
+	var refreshDiags diag.Diagnostics
+	found := r.readBlockStorageInto(ctx, &refreshed, &refreshDiags)
+	if refreshDiags.HasError() {
+		resp.Diagnostics.AddWarning("Block storage volume created, but reading it back failed",
+			"The volume was created and saved from the create response; the next refresh will read it again. Read error: "+
+				refreshDiags.Errors()[0].Detail())
+		found = false
 	}
 	if found {
 		data = refreshed
