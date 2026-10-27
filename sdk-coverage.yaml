@@ -135,7 +135,12 @@ groups:
       latitudesh_lks_node_pools, latitudesh_lks_kubeconfig, latitudesh_lks_sites,
       latitudesh_lks_versions]
     notes: >-
-      Fully mapped: all 13 methods. LKS (Latitude Kubernetes Service) is an
+      13 of the group's 15 methods in SDK v1.21.1. Not mapped yet:
+      ListLksNodes (the nodes of one pool) and ListLksAllocatableServers
+      (servers that can join an allocated pool) — both added with allocated
+      node pools — and latitudesh_lks_node_pool creates on_demand pools only
+      (the SDK defaults `mode`; `server_ids` is not exposed). Allocated pools
+      are a follow-up. LKS (Latitude Kubernetes Service) is an
       acronym, not a plural, so every type keeps the trailing s
       (SuggestTypeName's singularize rule would otherwise propose
       latitudesh_lk). Each object the family manages is named after itself

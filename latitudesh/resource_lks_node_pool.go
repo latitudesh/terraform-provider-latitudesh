@@ -564,9 +564,13 @@ func (r *LksNodePoolResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
+	// plan and count are pointers since SDK v1.21.1, because an "allocated"
+	// pool rejects both. This resource only builds on_demand pools — the SDK
+	// fills mode with that default — and both attributes are Required, so they
+	// are always set here.
 	attrs := components.CreateLksNodePoolAttributes{
-		Plan:              data.Plan.ValueString(),
-		Count:             data.NodeCount.ValueInt64(),
+		Plan:              data.Plan.ValueStringPointer(),
+		Count:             data.NodeCount.ValueInt64Pointer(),
 		KubernetesVersion: lksStringPtrIfSet(data.KubernetesVersion),
 		MaxPodsPerNode:    lksInt64PtrIfSet(data.MaxPodsPerNode),
 		Name:              lksStringPtrIfSet(data.Name),
