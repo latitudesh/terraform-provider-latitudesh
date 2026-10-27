@@ -434,7 +434,13 @@ func testSharedFixtureTeardown() {
 	// if one leaked, the project delete below logs the failure rather than hanging.
 	testAccWaitServersGone(ctx, client, serverIDs)
 
-	if _, err := client.Projects.Delete(ctx, testProjectID); err != nil {
+	// Block storage volumes release their storage VLAN and IPs after the volume
+	// itself is gone, and the project cannot be deleted until they are: reuse the
+	// resource's own retry so a lagging teardown does not leak the project.
+	if err := deleteProjectWithRetry(ctx, func(ctx context.Context) error {
+		_, err := client.Projects.Delete(ctx, testProjectID)
+		return err
+	}); err != nil {
 		fmt.Fprintf(os.Stderr, "shared fixture teardown: failed to delete project %s: %s\n", testProjectID, err)
 	}
 }

@@ -72,6 +72,37 @@ groups:
   Billing:
     implemented_by: [latitudesh_billing]
 
+  BlockStorage:
+    implemented_by: [latitudesh_block_storage, latitudesh_block_storages, latitudesh_block_storage_attachment]
+    notes: >-
+      CreateVolume/RetrieveVolume/ListVolumes/DeleteVolume back the resource and
+      its data sources (singular: lookup by id or by name/project; plural:
+      server-side project filter, newest first). UpdateVolume backs an in-place
+      grow of `size_in_gb`: it is synchronous, grow-only (the API rejects a
+      smaller or equal size) and allowed while the volume is mapped, so a
+      smaller size and every other attribute stay RequiresReplace. MapVolume/UnmapVolume back
+      latitudesh_block_storage_attachment: both are asynchronous, so the
+      resource polls the volume's `block` object until the mapping settles
+      (`mapped`, or null once an unmap completes). A volume maps to at most one
+      server and the mapping has no id of its own, so the attachment's id is the
+      volume's. Unmapped on purpose: MountVolume, the allowed-list-by-NQN flow
+      the API itself documents as deprecated — it is the mechanism behind the
+      legacy `namespace_id`/`connector_id`/`initiators` fields, superseded by
+      map. Not exposed, by team decision:
+      `keyring`/`cluster_user`/`volume_path` (SDK doc comment: dashboard-origin
+      responses only, always null for API-driven requests), `initiators`
+      (deprecated mount flow), `created_at` and the nested `team` envelope
+      (presentation/account metadata, not provisioning inputs) and region
+      `city`/`country`/site `id`/`name`/`facility` (only the site slug is
+      round-tripped, same as latitudesh_object_storage's `region`). The plural
+      data source's `volumes[].created_at` is the one exception, kept solely to
+      order results newest-first as latitudesh_virtual_machine_backups does.
+      `namespace_id` is null on everything created through the current flow; it
+      is only populated on volumes attached through the deprecated mount flow,
+      where the live API returns it as an integer — the SDK typed it as a string
+      until v1.19.27, which is why this group is pinned to that version or
+      later.
+
   ElasticIps:
     implemented_by: [latitudesh_elastic_ip, latitudesh_elastic_ip_bgp]
 
@@ -464,18 +495,6 @@ groups:
     notes: >-
       Full CRUD, but managing API keys through Terraform means the key material
       lands in state — weigh that when reviewing.
-
-  BlockStorage:
-    notes: >-
-      Methods are HTTP-verb prefixed (PostStorageVolumes, DeleteStorageVolumes),
-      DeleteStorageVolumes deletes a single volume despite the plural, and the
-      API has no volume update, so the CR-D shape is real and not a spec gap.
-      Beyond that shape sit three attachment verbs the derived CRUD cannot
-      express: PostStorageVolumesMap and PostStorageVolumesUnmap (map a
-      high-performance volume to a server over NVMe-TCP, and unmap it) and
-      PostStorageVolumesMount (mount by adding the client to an allowed list).
-      Decide on review whether attachment belongs on the volume resource or on a
-      separate type.
 
   Traffic:
     notes: >-

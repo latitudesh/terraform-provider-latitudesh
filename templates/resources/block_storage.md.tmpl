@@ -1,0 +1,57 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Creates and manages a persistent NVMe-TCP block storage volume on [Latitude.sh](https://latitude.sh/).
+
+Attaching the volume to a server is managed by [`latitudesh_block_storage_attachment`](block_storage_attachment).
+
+Destroying a volume returns as soon as the volume itself is gone, but its storage VLAN and IPs are released a few seconds later. Destroying the volume and its project in the same run therefore waits for that teardown before the project can be deleted.
+
+## Resizing
+
+Increasing `size_in_gb` resizes the volume in place, even while it is attached, and the new size is billed prorated from the change. The volume keeps its ID, its data and its attachment. Inside the server, grow the filesystem to use the new space (for example `resize2fs` for ext4 or `xfs_growfs` for XFS); if the server does not report the new size yet, rescan the namespace with `nvme ns-rescan`.
+
+Volumes cannot shrink. Decreasing `size_in_gb` forces a new resource, which destroys the volume and its data, so the plan shows it as a replacement. Changing any other attribute also forces a new resource.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+You can import a block storage resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_block_storage` resource can be imported by specifying the volume ID:
+
+```sh
+terraform import latitudesh_block_storage.example <VOLUME_ID>
+```
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration.
+
+```hcl
+import {
+  to = latitudesh_block_storage.example
+  id = "<VOLUME_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_block_storage.tf
+```
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.

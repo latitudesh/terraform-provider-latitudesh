@@ -1,0 +1,16 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Retrieve a [block storage](https://www.latitude.sh/dashboard) volume by `id`, or by `name` (optionally narrowed with `project`).
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}

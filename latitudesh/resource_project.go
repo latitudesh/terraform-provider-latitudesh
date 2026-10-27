@@ -2,6 +2,10 @@ package latitudesh
 
 import (
 	"context"
+	"errors"
+	"net/http"
+	"strings"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -293,11 +297,61 @@ func (r *ProjectResource) Delete(ctx context.Context, req resource.DeleteRequest
 
 	projectID := data.ID.ValueString()
 
-	_, err := r.client.Projects.Delete(ctx, projectID)
+	err := deleteProjectWithRetry(ctx, func(ctx context.Context) error {
+		_, err := r.client.Projects.Delete(ctx, projectID)
+		return err
+	})
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to delete project, got error: "+err.Error())
 		return
 	}
+}
+
+// The API rejects a project delete while the project still holds resources it
+// is releasing asynchronously. Deleting a block storage volume, for example,
+// returns as soon as the volume is gone but tears its storage VLAN and IPs
+// down seconds later, so a `terraform destroy` that removes the volume and the
+// project in one pass reaches the project first and gets a 422. Retrying for a
+// bounded window turns that race into a wait instead of a failed destroy that
+// leaves the project behind.
+//
+// Vars, not consts, so tests can shrink the wait.
+var (
+	projectDeleteRetryTimeout  = 3 * time.Minute
+	projectDeleteRetryInterval = 10 * time.Second
+)
+
+// deleteProjectWithRetry calls del until it succeeds, returns an error that is
+// not the pending-teardown 422, or the retry window closes (in which case the
+// last error is returned, so the user still sees exactly what the API said).
+func deleteProjectWithRetry(ctx context.Context, del func(context.Context) error) error {
+	deadline := time.Now().Add(projectDeleteRetryTimeout)
+
+	for {
+		err := del(ctx)
+		if err == nil || !projectDeleteBlockedByTeardown(err) || !time.Now().Before(deadline) {
+			return err
+		}
+
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(projectDeleteRetryInterval):
+		}
+	}
+}
+
+// projectDeleteBlockedByTeardown reports whether err is the 422 the API
+// returns while resources attached to the project are still being released
+// ("cannot be deleted because it has IPs attached", "... because it still has
+// associated vlans: [...]"). Any other 422 - and any other status - is a real
+// failure and must not be retried.
+func projectDeleteBlockedByTeardown(err error) bool {
+	var apiErr *components.APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusUnprocessableEntity {
+		return false
+	}
+	return strings.Contains(strings.ToLower(apiErr.Body), "cannot be deleted because")
 }
 
 func (r *ProjectResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
