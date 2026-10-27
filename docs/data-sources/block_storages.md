@@ -43,7 +43,7 @@ Read-Only:
 - `created_at` (String) Timestamp when the volume was created.
 - `id` (String) Volume ID.
 - `name` (String) Volume name.
-- `namespace_id` (String) NVMe namespace identifier assigned to the volume.
+- `namespace_id` (Number) NVMe namespace identifier assigned to the volume. Only volumes attached through the deprecated mount flow carry one; it is null otherwise.
 - `project` (String) Project (slug, falling back to ID) that owns the volume.
 - `region` (String) Site slug where the volume is provisioned.
 - `size_in_gb` (Number) Volume size, in GB.

@@ -42,7 +42,7 @@ type BlockStorageDataSourceModel struct {
 	// Attributes
 	Region      types.String `tfsdk:"region"`
 	SizeInGb    types.Int64  `tfsdk:"size_in_gb"`
-	NamespaceID types.String `tfsdk:"namespace_id"`
+	NamespaceID types.Int64  `tfsdk:"namespace_id"`
 	ConnectorID types.String `tfsdk:"connector_id"`
 }
 
@@ -102,8 +102,8 @@ func (d *BlockStorageDataSource) Schema(ctx context.Context, req datasource.Sche
 				MarkdownDescription: "Volume size, in GB.",
 				Computed:            true,
 			},
-			"namespace_id": schema.StringAttribute{
-				MarkdownDescription: "NVMe namespace identifier assigned to the volume.",
+			"namespace_id": schema.Int64Attribute{
+				MarkdownDescription: "NVMe namespace identifier assigned to the volume. Only volumes attached through the deprecated mount flow carry one; it is null otherwise.",
 				Computed:            true,
 			},
 			"connector_id": schema.StringAttribute{
@@ -194,7 +194,7 @@ func selectorDescription(data BlockStorageDataSourceModel) string {
 }
 
 func (d *BlockStorageDataSource) getByID(ctx context.Context, id string) (*components.VolumeData, error) {
-	res, err := d.client.BlockStorage.GetStorageVolume(ctx, id)
+	res, err := d.client.BlockStorage.RetrieveVolume(ctx, id)
 	if err != nil {
 		if blockStorageNotFound(err) {
 			return nil, nil
@@ -217,7 +217,7 @@ func (d *BlockStorageDataSource) findByName(ctx context.Context, name, project s
 		filterProject = &project
 	}
 
-	res, err := d.client.BlockStorage.GetStorageVolumes(ctx, filterProject)
+	res, err := d.client.BlockStorage.ListVolumes(ctx, filterProject)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list block storage volumes: %w", err)
 	}

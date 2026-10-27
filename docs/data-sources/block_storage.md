@@ -47,6 +47,6 @@ data "latitudesh_block_storage" "by_name" {
 ### Read-Only
 
 - `connector_id` (String) Connector identifier used to reach the volume over NVMe-TCP.
-- `namespace_id` (String) NVMe namespace identifier assigned to the volume.
+- `namespace_id` (Number) NVMe namespace identifier assigned to the volume. Only volumes attached through the deprecated mount flow carry one; it is null otherwise.
 - `region` (String) Site slug where the volume is provisioned.
 - `size_in_gb` (Number) Volume size, in GB.

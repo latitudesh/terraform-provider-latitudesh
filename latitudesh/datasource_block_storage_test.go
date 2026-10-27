@@ -50,7 +50,7 @@ func TestBlockStorageDataSource_ByID(t *testing.T) {
 					resource.TestCheckResourceAttr("data.latitudesh_block_storage.by_id", "name", "app-data"),
 					resource.TestCheckResourceAttr("data.latitudesh_block_storage.by_id", "region", "ASH"),
 					resource.TestCheckResourceAttr("data.latitudesh_block_storage.by_id", "size_in_gb", "100"),
-					resource.TestCheckResourceAttr("data.latitudesh_block_storage.by_id", "namespace_id", "ns_mock_1"),
+					resource.TestCheckResourceAttr("data.latitudesh_block_storage.by_id", "namespace_id", "1"),
 				),
 			},
 		},

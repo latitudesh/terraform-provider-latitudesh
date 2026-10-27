@@ -24,9 +24,10 @@ var _ resource.ResourceWithImportState = &BlockStorageResource{}
 
 // BlockStorageResource manages a block storage volume. The SDK exposes no
 // update endpoint for volumes, so every attribute that affects the volume
-// forces a replacement. Mapping a volume to a server (PostStorageVolumesMap)
-// and mounting it (PostStorageVolumesMount) are separate lifecycle verbs not
-// modeled by this resource - see sdk-coverage.yaml.
+// forces a replacement. Mapping a volume to a server (MapVolume/UnmapVolume)
+// is a separate lifecycle owned by latitudesh_block_storage_map; MountVolume
+// is the deprecated allowed-list flow and is not modeled - see
+// sdk-coverage.yaml.
 type BlockStorageResource struct {
 	client         *latitudeshgosdk.Latitudesh
 	defaultProject string
@@ -38,7 +39,7 @@ type BlockStorageResourceModel struct {
 	Name        types.String `tfsdk:"name"`
 	Region      types.String `tfsdk:"region"`
 	SizeInGb    types.Int64  `tfsdk:"size_in_gb"`
-	NamespaceID types.String `tfsdk:"namespace_id"`
+	NamespaceID types.Int64  `tfsdk:"namespace_id"`
 	ConnectorID types.String `tfsdk:"connector_id"`
 }
 
@@ -52,7 +53,7 @@ func (r *BlockStorageResource) Metadata(ctx context.Context, req resource.Metada
 
 func (r *BlockStorageResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Block Storage volume resource. Creates and manages a persistent NVMe-TCP volume on [Latitude.sh](https://latitude.sh/). There is no update endpoint for volumes, so changing any attribute forces a new resource. Mapping the volume to a server or mounting it are not managed here.",
+		MarkdownDescription: "Block Storage volume resource. Creates and manages a persistent NVMe-TCP volume on [Latitude.sh](https://latitude.sh/). There is no update endpoint for volumes, so changing any attribute forces a new resource. Attaching the volume to a server is managed by `latitudesh_block_storage_attachment`.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Block storage volume identifier.",
@@ -91,8 +92,8 @@ func (r *BlockStorageResource) Schema(ctx context.Context, req resource.SchemaRe
 					int64planmodifier.RequiresReplace(),
 				},
 			},
-			"namespace_id": schema.StringAttribute{
-				MarkdownDescription: "NVMe namespace identifier assigned to the volume.",
+			"namespace_id": schema.Int64Attribute{
+				MarkdownDescription: "NVMe namespace identifier assigned to the volume. Only volumes attached through the deprecated mount flow carry one; it is null otherwise.",
 				Computed:            true,
 			},
 			"connector_id": schema.StringAttribute{
@@ -135,10 +136,10 @@ func (r *BlockStorageResource) Create(ctx context.Context, req resource.CreateRe
 		return
 	}
 
-	createRequest := operations.PostStorageVolumesBlockStorageRequestBody{
-		Data: operations.PostStorageVolumesBlockStorageData{
-			Type: operations.PostStorageVolumesBlockStorageTypeVolumes,
-			Attributes: operations.PostStorageVolumesBlockStorageAttributes{
+	createRequest := operations.CreateVolumeBlockStorageRequestBody{
+		Data: operations.CreateVolumeBlockStorageData{
+			Type: operations.CreateVolumeBlockStorageTypeVolumes,
+			Attributes: operations.CreateVolumeBlockStorageAttributes{
 				Project:  project,
 				Name:     data.Name.ValueString(),
 				Region:   data.Region.ValueString(),
@@ -147,7 +148,7 @@ func (r *BlockStorageResource) Create(ctx context.Context, req resource.CreateRe
 		},
 	}
 
-	result, err := r.client.BlockStorage.PostStorageVolumes(ctx, createRequest)
+	result, err := r.client.BlockStorage.CreateVolume(ctx, createRequest)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to create block storage volume, got error: "+err.Error())
 		return
@@ -182,7 +183,7 @@ func (r *BlockStorageResource) Create(ctx context.Context, req resource.CreateRe
 		// Purely-computed attributes stay unknown if the create response had
 		// no `attributes` at all, and unknowns cannot be written to state.
 		if data.NamespaceID.IsUnknown() {
-			data.NamespaceID = types.StringNull()
+			data.NamespaceID = types.Int64Null()
 		}
 		if data.ConnectorID.IsUnknown() {
 			data.ConnectorID = types.StringNull()
@@ -248,7 +249,7 @@ func (r *BlockStorageResource) Delete(ctx context.Context, req resource.DeleteRe
 
 	id := data.ID.ValueString()
 
-	_, err := r.client.BlockStorage.DeleteStorageVolumes(ctx, id)
+	_, err := r.client.BlockStorage.DeleteVolume(ctx, id)
 	if err != nil {
 		if blockStorageNotFound(err) {
 			return
@@ -263,7 +264,7 @@ func (r *BlockStorageResource) ImportState(ctx context.Context, req resource.Imp
 }
 
 // blockStorageNotFound reports whether err is a 404 from the BlockStorage
-// group. GetStorageVolume and DeleteStorageVolumes only ever return the
+// group. RetrieveVolume and DeleteVolume only ever return the
 // generic *components.APIError (no typed *components.ErrorObject branch is
 // generated for either), unlike groups such as ElasticIps.
 func blockStorageNotFound(err error) bool {
@@ -281,7 +282,7 @@ func blockStorageNotFound(err error) bool {
 func (r *BlockStorageResource) readBlockStorageInto(ctx context.Context, data *BlockStorageResourceModel, diags *diag.Diagnostics) bool {
 	id := data.ID.ValueString()
 
-	result, err := r.client.BlockStorage.GetStorageVolume(ctx, id)
+	result, err := r.client.BlockStorage.RetrieveVolume(ctx, id)
 	if err != nil {
 		if blockStorageNotFound(err) {
 			data.ID = types.StringNull()
@@ -325,9 +326,9 @@ func mapBlockStorageVolume(data *BlockStorageResourceModel, volume *components.V
 	// Purely-computed fields (known only after apply): nil from the API is set
 	// to null rather than left stale.
 	if a.NamespaceID != nil {
-		data.NamespaceID = types.StringValue(*a.NamespaceID)
+		data.NamespaceID = types.Int64Value(*a.NamespaceID)
 	} else {
-		data.NamespaceID = types.StringNull()
+		data.NamespaceID = types.Int64Null()
 	}
 	if a.ConnectorID != nil {
 		data.ConnectorID = types.StringValue(*a.ConnectorID)

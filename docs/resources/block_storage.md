@@ -2,14 +2,14 @@
 page_title: "latitudesh_block_storage Resource - latitudesh"
 subcategory: ""
 description: |-
-  Block Storage volume resource. Creates and manages a persistent NVMe-TCP volume on Latitude.sh https://latitude.sh/. There is no update endpoint for volumes, so changing any attribute forces a new resource. Mapping the volume to a server or mounting it are not managed here.
+  Block Storage volume resource. Creates and manages a persistent NVMe-TCP volume on Latitude.sh https://latitude.sh/. There is no update endpoint for volumes, so changing any attribute forces a new resource. Attaching the volume to a server is managed by latitudesh_block_storage_attachment.
 ---
 
 # latitudesh_block_storage (Resource)
 
 Creates and manages a persistent NVMe-TCP block storage volume on [Latitude.sh](https://latitude.sh/).
 
-There is no update endpoint for volumes, so changing any attribute forces a new resource. Mapping the volume to a server or mounting it to a client are separate lifecycle operations not managed by this resource.
+There is no update endpoint for volumes, so changing any attribute forces a new resource. Attaching the volume to a server is managed by [`latitudesh_block_storage_attachment`](block_storage_attachment).
 
 Destroying a volume returns as soon as the volume itself is gone, but its storage VLAN and IPs are released a few seconds later. Destroying the volume and its project in the same run therefore waits for that teardown before the project can be deleted.
 
@@ -56,7 +56,7 @@ data "latitudesh_block_storage" "by_name" {
 
 - `connector_id` (String) Connector identifier used to reach the volume over NVMe-TCP.
 - `id` (String) Block storage volume identifier.
-- `namespace_id` (String) NVMe namespace identifier assigned to the volume.
+- `namespace_id` (Number) NVMe namespace identifier assigned to the volume. Only volumes attached through the deprecated mount flow carry one; it is null otherwise.
 
 ## Import
 

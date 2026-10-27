@@ -46,7 +46,7 @@ type BlockStorageItemModel struct {
 	Name        types.String `tfsdk:"name"`
 	Region      types.String `tfsdk:"region"`
 	SizeInGb    types.Int64  `tfsdk:"size_in_gb"`
-	NamespaceID types.String `tfsdk:"namespace_id"`
+	NamespaceID types.Int64  `tfsdk:"namespace_id"`
 	ConnectorID types.String `tfsdk:"connector_id"`
 	Project     types.String `tfsdk:"project"`
 	CreatedAt   types.String `tfsdk:"created_at"`
@@ -58,7 +58,7 @@ var blockStorageItemObjectType = types.ObjectType{
 		"name":         types.StringType,
 		"region":       types.StringType,
 		"size_in_gb":   types.Int64Type,
-		"namespace_id": types.StringType,
+		"namespace_id": types.Int64Type,
 		"connector_id": types.StringType,
 		"project":      types.StringType,
 		"created_at":   types.StringType,
@@ -110,8 +110,8 @@ func (d *BlockStoragesDataSource) Schema(ctx context.Context, req datasource.Sch
 							MarkdownDescription: "Volume size, in GB.",
 							Computed:            true,
 						},
-						"namespace_id": schema.StringAttribute{
-							MarkdownDescription: "NVMe namespace identifier assigned to the volume.",
+						"namespace_id": schema.Int64Attribute{
+							MarkdownDescription: "NVMe namespace identifier assigned to the volume. Only volumes attached through the deprecated mount flow carry one; it is null otherwise.",
 							Computed:            true,
 						},
 						"connector_id": schema.StringAttribute{
@@ -156,7 +156,7 @@ func (d *BlockStoragesDataSource) Read(ctx context.Context, req datasource.ReadR
 
 	projectFilter := strings.TrimSpace(data.Project.ValueString())
 
-	// GetStorageVolumes takes no page parameters and returns no pagination
+	// ListVolumes takes no page parameters and returns no pagination
 	// metadata, unlike the paginated list operations elsewhere in this SDK
 	// (servers, projects, firewalls, ...): one call is the whole collection
 	// for the requested project scope.
@@ -165,7 +165,7 @@ func (d *BlockStoragesDataSource) Read(ctx context.Context, req datasource.ReadR
 		filterProject = &projectFilter
 	}
 
-	res, err := d.client.BlockStorage.GetStorageVolumes(ctx, filterProject)
+	res, err := d.client.BlockStorage.ListVolumes(ctx, filterProject)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to list block storage volumes, got error: "+err.Error())
 		return

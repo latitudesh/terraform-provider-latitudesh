@@ -32,10 +32,22 @@ type mockVolume struct {
 	name        string
 	region      string
 	sizeInGb    int64
-	namespaceID string
+	namespaceID int64
 	connectorID string
 	createdAt   string
 	deleted     bool
+
+	// block is the NVMe-TCP mapping, nil when the volume is not attached.
+	block *mockBlockMapping
+}
+
+// mockBlockMapping models the asynchronous map/unmap state machine: each read
+// burns one `pending` tick, and the transition happens on the read after that
+// ("mapping" becomes "mapped", "unmapping" clears the mapping entirely).
+type mockBlockMapping struct {
+	status   string
+	serverID string
+	pending  int
 }
 
 type mockBlockStorageAPI struct {
@@ -50,10 +62,82 @@ type mockBlockStorageAPI struct {
 	// question only the live suite can settle.
 	hideFirstGets int
 	getMisses     map[string]int
+
+	// mapPendingReads is how many reads each mapping spends in its transient
+	// state before settling. Zero means the very first read already settles it.
+	mapPendingReads int
+
+	// failMapping settles new mappings into "failed" instead of "mapped".
+	failMapping bool
+
+	// failUnmapping settles unmaps back into "mapped", which is how the API
+	// reports a detach that failed.
+	failUnmapping bool
+
+	// ineligibleServers are rejected by the map request with the API's 422, as
+	// servers that are not cabled for a bond are.
+	ineligibleServers map[string]bool
+
+	// calls records every mutating request in order, so tests can assert the
+	// sequence Terraform drove (unmap before the volume delete, say).
+	calls []string
 }
 
 func newMockBlockStorageAPI() *mockBlockStorageAPI {
-	return &mockBlockStorageAPI{volumes: map[string]*mockVolume{}, getMisses: map[string]int{}}
+	return &mockBlockStorageAPI{volumes: map[string]*mockVolume{}, getMisses: map[string]int{}, mapPendingReads: 1}
+}
+
+// advance moves a mapping one read closer to its terminal state. Callers must
+// hold the lock.
+func (m *mockBlockStorageAPI) advance(v *mockVolume) {
+	if v.block == nil {
+		return
+	}
+	if v.block.pending > 0 {
+		v.block.pending--
+		return
+	}
+	switch v.block.status {
+	case "mapping":
+		if m.failMapping {
+			v.block.status = "failed"
+			return
+		}
+		v.block.status = "mapped"
+	case "unmapping":
+		if m.failUnmapping {
+			v.block.status = "mapped"
+			return
+		}
+		v.block = nil
+	}
+}
+
+// clearMappings unmaps every volume behind Terraform's back.
+func (m *mockBlockStorageAPI) clearMappings() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, v := range m.volumes {
+		v.block = nil
+	}
+}
+
+// callLog returns the mutating requests received so far, in order.
+func (m *mockBlockStorageAPI) callLog() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.calls...)
+}
+
+// mapping returns the volume's current mapping, for assertions in tests.
+func (m *mockBlockStorageAPI) mapping(id string) *mockBlockMapping {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	v, ok := m.volumes[id]
+	if !ok {
+		return nil
+	}
+	return v.block
 }
 
 func (m *mockBlockStorageAPI) envelope(v *mockVolume) map[string]any {
@@ -81,7 +165,28 @@ func (m *mockBlockStorageAPI) envelope(v *mockVolume) map[string]any {
 					"id":   v.project,
 					"slug": "test-project",
 				},
+				"block": mockBlockEnvelope(v.block),
 			},
+		},
+	}
+}
+
+func mockBlockEnvelope(b *mockBlockMapping) any {
+	if b == nil {
+		return nil
+	}
+	return map[string]any{
+		"status":    b.status,
+		"nqn":       "nqn.2014-08.sh.latitude:id:" + b.serverID,
+		"nsid":      1,
+		"server_id": b.serverID,
+		"storage_network": map[string]any{
+			"vid":           2090,
+			"host_cidr":     "10.248.6.4/24",
+			"gateway":       "10.248.6.1",
+			"routes":        []string{"10.248.213.0/24", "10.248.214.0/24"},
+			"block_gateway": "10.248.213.180",
+			"block_port":    4420,
 		},
 	}
 }
@@ -89,6 +194,10 @@ func (m *mockBlockStorageAPI) envelope(v *mockVolume) map[string]any {
 func (m *mockBlockStorageAPI) handler(w http.ResponseWriter, r *http.Request) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if r.Method != http.MethodGet {
+		m.calls = append(m.calls, r.Method+" "+r.URL.Path)
+	}
 
 	switch {
 	case r.Method == http.MethodPost && r.URL.Path == "/storage/volumes":
@@ -113,7 +222,7 @@ func (m *mockBlockStorageAPI) handler(w http.ResponseWriter, r *http.Request) {
 			name:        payload.Data.Attributes.Name,
 			region:      payload.Data.Attributes.Region,
 			sizeInGb:    payload.Data.Attributes.SizeInGb,
-			namespaceID: "ns_mock_" + strconv.Itoa(m.nextID),
+			namespaceID: int64(m.nextID),
 			connectorID: "conn_mock_" + strconv.Itoa(m.nextID),
 			createdAt:   fmt.Sprintf("2026-01-%02dT00:00:00Z", m.nextID),
 		}
@@ -138,6 +247,7 @@ func (m *mockBlockStorageAPI) handler(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(`{"errors":[{"status":"404"}]}`))
 			return
 		}
+		m.advance(v)
 		w.Header().Set("Content-Type", "application/vnd.api+json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(m.envelope(v))
@@ -153,6 +263,54 @@ func (m *mockBlockStorageAPI) handler(w http.ResponseWriter, r *http.Request) {
 		}
 		v.deleted = true
 		w.WriteHeader(http.StatusNoContent)
+
+	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/map"):
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/storage/volumes/"), "/map")
+		v, ok := m.volumes[id]
+		if !ok || v.deleted {
+			w.Header().Set("Content-Type", "application/vnd.api+json")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"errors":[{"status":"404"}]}`))
+			return
+		}
+		var payload struct {
+			Data struct {
+				Attributes struct {
+					ServerID string `json:"server_id"`
+				} `json:"attributes"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if m.ineligibleServers[payload.Data.Attributes.ServerID] {
+			w.Header().Set("Content-Type", "application/vnd.api+json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"errors":[{"code":"SERVER_NOT_ELIGIBLE_FOR_VOLUME_MAPPING","status":"422","title":"Server not eligible for volume mapping","detail":"This server is not eligible to be mapped to a volume."}]}`))
+			return
+		}
+		v.block = &mockBlockMapping{status: "mapping", serverID: payload.Data.Attributes.ServerID, pending: m.mapPendingReads}
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(m.envelope(v))
+
+	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/unmap"):
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/storage/volumes/"), "/unmap")
+		v, ok := m.volumes[id]
+		if !ok || v.deleted {
+			w.Header().Set("Content-Type", "application/vnd.api+json")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"errors":[{"status":"404"}]}`))
+			return
+		}
+		if v.block != nil {
+			v.block.status = "unmapping"
+			v.block.pending = m.mapPendingReads
+		}
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(m.envelope(v))
 
 	case r.Method == http.MethodGet && r.URL.Path == "/storage/volumes":
 		filterProject := r.URL.Query().Get("filter[project]")
@@ -230,7 +388,7 @@ func TestBlockStorage_CreateReadDelete(t *testing.T) {
 					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "name", "app-data"),
 					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "region", "ASH"),
 					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "size_in_gb", "100"),
-					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "namespace_id", "ns_mock_1"),
+					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "namespace_id", "1"),
 					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "connector_id", "conn_mock_1"),
 				),
 			},
@@ -287,7 +445,7 @@ func TestBlockStorage_SizeChangeForcesReplacement(t *testing.T) {
 				Config: testAccBlockStorageConfig("test-project", "app-data", "ASH", 100),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "size_in_gb", "100"),
-					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "namespace_id", "ns_mock_2"),
+					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "namespace_id", "2"),
 				),
 			},
 		},
@@ -315,7 +473,7 @@ func TestBlockStorage_CreateSurvivesUnreadableVolume(t *testing.T) {
 					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "name", "app-data"),
 					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "size_in_gb", "100"),
 					// Filled from the create response, not the read-back.
-					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "namespace_id", "ns_mock_1"),
+					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "namespace_id", "1"),
 				),
 			},
 		},
@@ -363,7 +521,7 @@ func TestMapBlockStorageVolume(t *testing.T) {
 
 	t.Run("purely computed fields null on absence", func(t *testing.T) {
 		data := BlockStorageResourceModel{
-			NamespaceID: types.StringValue("stale"),
+			NamespaceID: types.Int64Value(99),
 			ConnectorID: types.StringValue("stale"),
 		}
 		id := "vol_1"
@@ -496,7 +654,7 @@ func testAccCheckBlockStorageDestroy(s *terraform.State) error {
 			continue
 		}
 
-		resp, err := client.BlockStorage.GetStorageVolume(ctx, id)
+		resp, err := client.BlockStorage.RetrieveVolume(ctx, id)
 		if err == nil && resp != nil && resp.Object != nil && resp.Object.Data != nil &&
 			resp.Object.Data.ID != nil && *resp.Object.Data.ID == id {
 			return fmt.Errorf("block storage volume still exists: %s", id)
@@ -506,4 +664,47 @@ func testAccCheckBlockStorageDestroy(s *terraform.State) error {
 		}
 	}
 	return nil
+}
+
+// Both shapes the live API returns must unmarshal with the pinned SDK. The
+// integer `namespace_id` below is what volumes attached through the deprecated
+// mount flow report; it used to need a response-rewriting transport, because
+// the SDK typed the field as a string until v1.19.27 corrected it to an
+// integer. This guards the regression if the type ever flips back.
+func TestVolumePayloadsUnmarshalNatively(t *testing.T) {
+	cases := map[string]struct {
+		payload         string
+		wantNamespaceID *int64
+	}{
+		"deprecated mount flow, integer namespace_id": {
+			payload: `{"id":"vol_zrPm0dmlNKOw3","type":"volumes","attributes":{"name":"test-pery-bs","size_in_gb":32,` +
+				`"namespace_id":1,"connector_id":"nqn.2001-07.com.ceph:jv6m5JyZDNLPe-test-pery-bs",` +
+				`"initiators":[{"nqn":"nqn.2014-08.org.nvmexpress:uuid:6e839400","mounted_at":"2025-11-17T19:45:11Z"}],"block":null,` +
+				`"region":{"site":{"slug":"DAL"}},"project":{"id":"proj_jv6m5JyZDNLPe","slug":"devtools-qa"}}}`,
+			wantNamespaceID: func() *int64 { v := int64(1); return &v }(),
+		},
+		"mapped volume, null namespace_id": {
+			payload: `{"id":"vol_x3egaQB77046Q","type":"volumes","attributes":{"name":"chi-file001","size_in_gb":32,` +
+				`"namespace_id":null,"connector_id":null,"initiators":null,` +
+				`"block":{"status":"mapped","nqn":"nqn.2014-08.sh.latitude:id:sv-dYjv5rEp1Nqp7","nsid":null,"server_id":"sv_dYjv5rEp1Nqp7",` +
+				`"storage_network":{"vid":2090,"host_cidr":"10.248.6.4/24","gateway":"10.248.6.1","block_port":4420}},` +
+				`"region":{"site":{"slug":"CHI"}},"project":{"id":"proj_XDO7NYlD80Pgw","slug":"new-test-project"}}}`,
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			var volume components.VolumeData
+			if err := json.Unmarshal([]byte(tc.payload), &volume); err != nil {
+				t.Fatalf("live payload no longer unmarshals: %v", err)
+			}
+			got := volume.Attributes.NamespaceID
+			switch {
+			case tc.wantNamespaceID == nil && got != nil:
+				t.Errorf("namespace_id = %d, want null", *got)
+			case tc.wantNamespaceID != nil && (got == nil || *got != *tc.wantNamespaceID):
+				t.Errorf("namespace_id = %v, want %d", got, *tc.wantNamespaceID)
+			}
+		})
+	}
 }

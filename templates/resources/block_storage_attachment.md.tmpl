@@ -1,0 +1,60 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Attaches a [Latitude.sh](https://latitude.sh/) block storage volume to a server over NVMe-TCP.
+
+Attaching and detaching are asynchronous: the resource waits for the mapping to settle, and publishes the storage network the server needs under `storage_network`.
+
+## Requirements
+
+The API checks these when the attachment is requested, and rejects it with a `422` otherwise:
+
+- The volume and the server are in the **same project**.
+- They are in the **same site**, and that site sells block storage (`ASH`, `CHI`, `LAX2`, `LON2`, `NYC`, `TYO4` at the time of writing — check `latitudesh_plan` for the current list).
+- The server is **eligible for storage**: it is enabled for bonding and cabled with two NICs to two different switches. Not every server of a plan qualifies, and there is no attribute to check it beforehand. To get one, deploy the server onto a public network with `public_network_id` on `latitudesh_server`, as in the example below: that deploy only picks servers that pass the same check, and fails with a no-stock error when there is none.
+- The volume is not attached to another server. A volume maps to one server at a time.
+
+A volume can be attached to a single server, so changing `server_id` (or `block_storage_id`) forces a new resource. Mounting a volume by adding a client NQN to an allowed list is a deprecated, separate mechanism and is not managed here.
+
+## Configuring the server
+
+Attaching a volume sets up the storage network on the Latitude.sh side, but not inside the server's operating system. The OS is only configured for the volume (storage VLAN and NVMe-TCP connection) when the server is deployed or reinstalled while the volume is attached, and in a configuration like the example below Terraform deploys the server first. Either configure the server from the values in `storage_network` — a VLAN interface with `vid` and `host_cidr`, the `routes` via `gateway`, and an NVMe-TCP connection to `block_gateway` on `block_port` — or reinstall the server once the volume is attached.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+The mapping has no identifier of its own — a volume is attached to at most one server — so an attachment is imported with the **volume** ID.
+
+**CLI Import**
+
+```sh
+terraform import latitudesh_block_storage_attachment.example <VOLUME_ID>
+```
+
+**Import Block (Experimental)**
+
+```hcl
+import {
+  to = latitudesh_block_storage_attachment.example
+  id = "<VOLUME_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_block_storage_attachment.tf
+```
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.

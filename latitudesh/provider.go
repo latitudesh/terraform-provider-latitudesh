@@ -132,15 +132,9 @@ func (p *latitudeshProvider) Configure(ctx context.Context, req provider.Configu
 	if baseTransport == nil {
 		baseTransport = http.DefaultTransport
 	}
-	// Each sanitizer only rewrites payloads on its own endpoints, so the order
-	// of the chain does not matter; see their doc comments for the API
-	// contract violations they work around.
-	sanitizedTransport := &objectStorageSanitizerTransport{
-		base: &blockStorageSanitizerTransport{base: baseTransport},
-	}
 	httpClient := &http.Client{
 		Transport: &userAgentTransport{
-			base:      sanitizedTransport,
+			base:      &objectStorageSanitizerTransport{base: baseTransport},
 			userAgent: userAgent,
 		},
 		Timeout:       baseClient.Timeout,
@@ -200,6 +194,7 @@ func (p *latitudeshProvider) Resources(ctx context.Context) []func() resource.Re
 		NewVirtualMachineBackupResource,
 		NewPublicNetworkResource,
 		NewBlockStorageResource,
+		NewBlockStorageAttachmentResource,
 	}
 }
 
