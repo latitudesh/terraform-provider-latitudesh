@@ -294,6 +294,9 @@ type mockLksAPI struct {
 	// readyServed records that a GET answered "ready", i.e. something kept
 	// polling the cluster after its pool came up.
 	readyServed bool
+	// onClusterGetWithPool, when set, runs on every cluster GET once a pool
+	// exists — the point a pool's Create is waiting on the cluster.
+	onClusterGetWithPool func()
 
 	poolID      string
 	poolPlan    string
@@ -450,6 +453,9 @@ func (m *mockLksAPI) handler(w http.ResponseWriter, r *http.Request) {
 		m.clusterGets++
 		if m.poolID != "" {
 			m.getsSincePool++
+			if m.onClusterGetWithPool != nil {
+				m.onClusterGetWithPool()
+			}
 		}
 		envelope := m.envelope()
 		if envelope["data"].(map[string]any)["attributes"].(map[string]any)["status"] == "ready" {

@@ -636,18 +636,26 @@ func (r *LksNodePoolResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	// The pool may be what the cluster was waiting for: a cluster with no
-	// ready node is not "ready", and latitudesh_lks_cluster cannot wait for that itself.
-	// Waiting here is what lets an apply that builds a cluster and its first
-	// pool end on a usable cluster.
-	lksWaitForClusterToSettle(ctx, r.client, clusterID, deadline, &resp.Diagnostics)
-
+	// Read and record the pool BEFORE waiting on the cluster. That wait only
+	// ever warns, and nothing after it may turn a healthy pool into an error:
+	// an error from Create taints the pool, and the next apply rebuilds its
+	// bare metal. Reading afterwards did exactly that on a cancelled run — an
+	// interrupt cancels this context, the wait ended in a warning, and the read
+	// that followed failed on the same context.
 	r.readNodePoolInto(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// The pool may be what the cluster was waiting for: a cluster with no
+	// ready node is not "ready", and latitudesh_lks_cluster cannot wait for
+	// that itself. Waiting here is what lets an apply that builds a cluster and
+	// its first pool end on a usable cluster. It must stay the last step.
+	lksWaitForClusterToSettle(ctx, r.client, clusterID, deadline, &resp.Diagnostics)
 }
 
 func (r *LksNodePoolResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
