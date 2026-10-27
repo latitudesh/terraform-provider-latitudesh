@@ -925,3 +925,44 @@ func TestLksPatchNodePool_SpentDeadlineDoesNotStartVersionChange(t *testing.T) {
 		t.Fatalf("the scale PATCH should carry count 3: %s", patches[0])
 	}
 }
+
+// `labels = {}` and `taints = []` are known empty values, not "unset". The API
+// reports no entries for both — and the mapper turns that into null so that an
+// omitted attribute sees no diff — but replacing a configured empty collection
+// with null is "Provider produced inconsistent result after apply". Read-back
+// has to keep the empty value the configuration asked for.
+func TestLksNodePool_ExplicitEmptyCollectionsSurviveApply(t *testing.T) {
+	mock := &mockLksNodePoolAPI{}
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	prevReady, prevDelete := lksNodePoolReadyPollInterval, lksNodePoolDeletePollInterval
+	lksNodePoolReadyPollInterval = 5 * time.Millisecond
+	lksNodePoolDeletePollInterval = 5 * time.Millisecond
+	t.Cleanup(func() {
+		lksNodePoolReadyPollInterval = prevReady
+		lksNodePoolDeletePollInterval = prevDelete
+	})
+
+	const rn = "latitudesh_lks_node_pool.test"
+	config := testAccLksNodePoolConfig(1, `
+  labels = {}
+  taints = []
+`)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMockLksNodePoolDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(rn, "labels.%", "0"),
+					resource.TestCheckResourceAttr(rn, "taints.#", "0"),
+				),
+			},
+			{Config: config, PlanOnly: true},
+		},
+	})
+}

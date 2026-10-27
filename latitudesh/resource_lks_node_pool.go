@@ -275,6 +275,26 @@ func lksDescriptionFromAPI(configured, reported types.String) types.String {
 	return reported
 }
 
+// lksKeepEmptyMap and lksKeepEmptySet keep a collection the configuration set
+// to empty. The API reports "no entries" for labels and taints, and the mapper
+// turns that into null so an omitted attribute sees no diff — but `labels = {}`
+// is a known empty value, and replacing it with null fails the apply with
+// "inconsistent result". Only the empty case is reconciled: any entry the API
+// reports wins, so drift still shows.
+func lksKeepEmptyMap(current, reported types.Map) types.Map {
+	if reported.IsNull() && !current.IsNull() && !current.IsUnknown() && len(current.Elements()) == 0 {
+		return current
+	}
+	return reported
+}
+
+func lksKeepEmptySet(current, reported types.Set) types.Set {
+	if reported.IsNull() && !current.IsNull() && !current.IsUnknown() && len(current.Elements()) == 0 {
+		return current
+	}
+	return reported
+}
+
 // lksDescriptionForUpdate carries description through an update unchanged.
 //
 // It exists to hold a finding, not to transform anything: `description` LOOKS
@@ -994,8 +1014,8 @@ func lksApplyNodePoolAttributes(ctx context.Context, data *LksNodePoolResourceMo
 	// assigning unconditionally is what makes an out-of-band change show up as
 	// drift (the mistake latitudesh_lks_cluster shipped with for description).
 	data.Description = lksDescriptionFromAPI(data.Description, fields.Description)
-	data.Labels = fields.Labels
-	data.Taints = fields.Taints
+	data.Labels = lksKeepEmptyMap(data.Labels, fields.Labels)
+	data.Taints = lksKeepEmptySet(data.Taints, fields.Taints)
 
 	data.Mode = fields.Mode
 	data.Status = fields.Status

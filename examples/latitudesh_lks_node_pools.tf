@@ -19,10 +19,11 @@ output "lks_pools_still_working" {
   ]
 }
 
-# Labels and taints are what tell one pool from another.
+# Labels and taints are what tell one pool from another. A pool with no labels
+# reports `labels` as null, which lookup() rejects, so index inside try().
 output "lks_pools_by_workload" {
   value = {
     for pool in data.latitudesh_lks_node_pools.by_cluster.node_pools :
-    pool.id => lookup(pool.labels, "workload", "unlabelled")
+    pool.id => try(pool.labels["workload"], "unlabelled")
   }
 }

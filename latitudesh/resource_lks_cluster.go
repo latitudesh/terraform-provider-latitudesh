@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -175,6 +176,38 @@ func mapLksNetwork(n *components.Network) (types.Object, diag.Diagnostics) {
 	return obj, diags
 }
 
+// lksMergeNetwork fills the CIDR lists the configuration left open from what
+// the API reports, and keeps the ones it set. A partially configured `network`
+// is a known object with unknown children, so backfilling only a null or
+// unknown object never reached it, and Create returned unknown values.
+// Configured lists stay as configured: `network` carries RequiresReplace, and
+// echoing an API value over one would plan a replacement nobody asked for.
+func lksMergeNetwork(current, fromAPI types.Object, diags *diag.Diagnostics) types.Object {
+	if current.IsNull() || current.IsUnknown() {
+		return fromAPI
+	}
+
+	reported := map[string]attr.Value{}
+	if !fromAPI.IsNull() && !fromAPI.IsUnknown() {
+		reported = fromAPI.Attributes()
+	}
+
+	merged := make(map[string]attr.Value, len(lksNetworkAttrTypes))
+	for name, v := range current.Attributes() {
+		if v.IsNull() || v.IsUnknown() {
+			v = types.SetNull(types.StringType)
+			if r, ok := reported[name]; ok {
+				v = r
+			}
+		}
+		merged[name] = v
+	}
+
+	obj, d := types.ObjectValue(lksNetworkAttrTypes, merged)
+	diags.Append(d...)
+	return obj
+}
+
 // lksNetworkFromObject converts the configured `network` object into the
 // create request's shape. A null or unknown object (network left unset)
 // yields a nil pointer, so the platform default is used.
@@ -269,18 +302,27 @@ func (r *LksClusterResource) Schema(ctx context.Context, req resource.SchemaRequ
 						ElementType:         types.StringType,
 						Optional:            true,
 						Computed:            true,
+						PlanModifiers: []planmodifier.Set{
+							setplanmodifier.UseStateForUnknown(),
+						},
 					},
 					"service_cidrs": schema.SetAttribute{
 						MarkdownDescription: "Service CIDR ranges.",
 						ElementType:         types.StringType,
 						Optional:            true,
 						Computed:            true,
+						PlanModifiers: []planmodifier.Set{
+							setplanmodifier.UseStateForUnknown(),
+						},
 					},
 					"node_cidrs": schema.SetAttribute{
 						MarkdownDescription: "Node CIDR ranges.",
 						ElementType:         types.StringType,
 						Optional:            true,
 						Computed:            true,
+						PlanModifiers: []planmodifier.Set{
+							setplanmodifier.UseStateForUnknown(),
+						},
 					},
 				},
 				PlanModifiers: []planmodifier.Object{
@@ -357,22 +399,6 @@ func (r *LksClusterResource) ModifyPlan(ctx context.Context, req resource.Modify
 		return
 	}
 
-	// Reject lowering kubernetes_version in place. The platform forbids it (422
-	// DOWNGRADE_NOT_ALLOWED), but only once the apply reaches the PATCH.
-	// Comparing here turns that into a plan error. Only runs on update (prior
-	// state exists).
-	if !req.State.Raw.IsNull() {
-		var state LksClusterResourceModel
-		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		lksCheckNoDowngrade(state.KubernetesVersion, plan.KubernetesVersion, path.Root("kubernetes_version"), &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-	}
-
 	switch {
 	case cfg.Project.IsUnknown():
 		// Project comes from another resource not created yet; leave it unknown
@@ -389,7 +415,39 @@ func (r *LksClusterResource) ModifyPlan(ctx context.Context, req resource.Modify
 		return
 	}
 
+	// Reject lowering kubernetes_version in place. The platform forbids it (422
+	// DOWNGRADE_NOT_ALLOWED), but only once the apply reaches the PATCH.
+	// Comparing here turns that into a plan error. Only on update, and only when
+	// the plan keeps the cluster: one that is being replaced is a new cluster,
+	// and it may start on any version the platform offers. Runs after project
+	// resolution, because a changed project is one of the replacements.
+	if !req.State.Raw.IsNull() {
+		var state LksClusterResourceModel
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if !lksClusterReplaced(plan, state) {
+			lksCheckNoDowngrade(state.KubernetesVersion, plan.KubernetesVersion, path.Root("kubernetes_version"), &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+		}
+	}
+
 	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+}
+
+// lksClusterReplaced reports whether the plan replaces the cluster: one of the
+// attributes carrying RequiresReplace — project, site, network — differs from
+// state. The framework does not tell a resource's ModifyPlan which attributes
+// already required replacement (it starts that response empty), so this
+// repeats the test RequiresReplace itself applies: a planned value that is not
+// equal to state, unknown included.
+func lksClusterReplaced(plan, state LksClusterResourceModel) bool {
+	return !plan.Project.Equal(state.Project) ||
+		!plan.Site.Equal(state.Site) ||
+		!plan.Network.Equal(state.Network)
 }
 
 // lksCheckNoDowngrade fails the plan when kubernetes_version would move
@@ -932,9 +990,7 @@ func lksApplyCreatedCluster(data *LksClusterResourceModel, attrs *components.Lks
 	if data.Site.IsNull() || data.Site.IsUnknown() {
 		data.Site = fields.Site
 	}
-	if data.Network.IsNull() || data.Network.IsUnknown() {
-		data.Network = fields.Network
-	}
+	data.Network = lksMergeNetwork(data.Network, fields.Network, diags)
 
 	data.Status = fields.Status
 	data.Message = fields.Message
@@ -989,9 +1045,7 @@ func (r *LksClusterResource) readLksInto(ctx context.Context, data *LksClusterRe
 	if data.Site.IsNull() || data.Site.IsUnknown() {
 		data.Site = fields.Site
 	}
-	if data.Network.IsNull() || data.Network.IsUnknown() {
-		data.Network = fields.Network
-	}
+	data.Network = lksMergeNetwork(data.Network, fields.Network, diags)
 
 	data.Name = fields.Name
 	data.KubernetesVersion = fields.KubernetesVersion

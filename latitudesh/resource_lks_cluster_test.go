@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -289,6 +290,7 @@ type mockLksAPI struct {
 	// standing in for one whose only pool cannot run the system components.
 	clusterNeverReady bool
 	clusterGets       int
+	clusterPosts      int
 	getsSincePool     int
 	poolPosts         int
 	// readyServed records that a GET answered "ready", i.e. something kept
@@ -441,6 +443,7 @@ func (m *mockLksAPI) handler(w http.ResponseWriter, r *http.Request) {
 		}
 		m.exists = true
 		m.clusterGets = 0
+		m.clusterPosts++
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(m.envelope())
 
@@ -992,4 +995,113 @@ func TestLksCheckNoDowngrade(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Configuring only part of `network` leaves the other CIDR lists to the
+// platform. They are Computed, so the create plan holds them unknown; the API
+// answers with all three, and state must take the ones the configuration left
+// open while keeping the one it set. The rename that follows pins the other
+// half: when anything else changes, the framework marks unset Computed values
+// unknown again, and since `network` carries RequiresReplace an unknown child
+// would turn a rename into a replacement. Each child keeps its state value.
+func TestLks_PartialNetworkFillsTheRestFromTheAPI(t *testing.T) {
+	mock := &mockLksAPI{}
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	prevReady := lksReadyPollInterval
+	lksReadyPollInterval = 5 * time.Millisecond
+	t.Cleanup(func() { lksReadyPollInterval = prevReady })
+
+	const rn = "latitudesh_lks_cluster.test_item"
+	network := `
+  network = {
+    pod_cidrs = ["10.0.0.0/16"]
+  }
+`
+	config := testAccLksConfigWithTimeout("1.31.0", network)
+	renamed := strings.Replace(config, `"tf-test-cluster"`, `"tf-test-renamed"`, 1)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMockLksDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(rn, "network.pod_cidrs.0", "10.0.0.0/16"),
+					resource.TestCheckResourceAttr(rn, "network.service_cidrs.0", "10.1.0.0/16"),
+					resource.TestCheckResourceAttr(rn, "network.node_cidrs.0", "10.2.0.0/16"),
+				),
+			},
+			{Config: config, PlanOnly: true},
+			{
+				Config: renamed,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(rn, "name", "tf-test-renamed"),
+					resource.TestCheckResourceAttr(rn, "network.service_cidrs.0", "10.1.0.0/16"),
+				),
+			},
+		},
+	})
+
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	if mock.clusterPosts != 1 {
+		t.Errorf("the rename replaced the cluster: %d cluster creates, want 1", mock.clusterPosts)
+	}
+}
+
+// Lowering kubernetes_version is a plan error only when it would happen in
+// place. A plan that already replaces the cluster — here, a new site — builds a
+// new one, which may start on any version the platform offers; blocking it as
+// a "downgrade" would make that replacement impossible to plan.
+func TestLks_DowngradeIsOnlyRejectedInPlace(t *testing.T) {
+	mock := &mockLksAPI{}
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	prevReady, prevDelete := lksReadyPollInterval, lksDeletePollInterval
+	lksReadyPollInterval = 5 * time.Millisecond
+	lksDeletePollInterval = 5 * time.Millisecond
+	t.Cleanup(func() {
+		lksReadyPollInterval = prevReady
+		lksDeletePollInterval = prevDelete
+	})
+
+	config := func(site, version string) string {
+		return fmt.Sprintf(`
+provider "latitudesh" {
+  auth_token = "mock-token"
+}
+
+resource "latitudesh_lks_cluster" "test_item" {
+  project            = "proj_mock_1"
+  name               = "tf-test-cluster"
+  site               = %q
+  kubernetes_version = %q
+}
+`, site, version)
+	}
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMockLksDestroyed(mock),
+		Steps: []resource.TestStep{
+			{Config: config("ASH", "1.32.0")},
+			{
+				Config:      config("ASH", "1.31.0"),
+				ExpectError: regexp.MustCompile(`downgrade is not allowed`),
+			},
+			{
+				Config: config("LAX", "1.31.0"),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "site", "LAX"),
+					resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "kubernetes_version", "1.31.0"),
+				),
+			},
+		},
+	})
 }
