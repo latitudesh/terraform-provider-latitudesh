@@ -22,12 +22,12 @@ import (
 var _ resource.Resource = &BlockStorageResource{}
 var _ resource.ResourceWithImportState = &BlockStorageResource{}
 
-// BlockStorageResource manages a block storage volume. The SDK exposes no
-// update endpoint for volumes, so every attribute that affects the volume
-// forces a replacement. Mapping a volume to a server (MapVolume/UnmapVolume)
-// is a separate lifecycle owned by latitudesh_block_storage_map; MountVolume
-// is the deprecated allowed-list flow and is not modeled - see
-// sdk-coverage.yaml.
+// BlockStorageResource manages a block storage volume. The only in-place
+// change the API offers is growing size_in_gb (UpdateVolume); a smaller size
+// and every other attribute force a replacement. Mapping a volume to a server
+// (MapVolume/UnmapVolume) is a separate lifecycle owned by
+// latitudesh_block_storage_attachment; MountVolume is the deprecated
+// allowed-list flow and is not modeled - see sdk-coverage.yaml.
 type BlockStorageResource struct {
 	client         *latitudeshgosdk.Latitudesh
 	defaultProject string
@@ -53,7 +53,7 @@ func (r *BlockStorageResource) Metadata(ctx context.Context, req resource.Metada
 
 func (r *BlockStorageResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Block Storage volume resource. Creates and manages a persistent NVMe-TCP volume on [Latitude.sh](https://latitude.sh/). There is no update endpoint for volumes, so changing any attribute forces a new resource. Attaching the volume to a server is managed by `latitudesh_block_storage_attachment`.",
+		MarkdownDescription: "Block Storage volume resource. Creates and manages a persistent NVMe-TCP volume on [Latitude.sh](https://latitude.sh/). Increasing `size_in_gb` resizes the volume in place; volumes cannot shrink, so a smaller size forces a new resource, as does changing any other attribute. Attaching the volume to a server is managed by `latitudesh_block_storage_attachment`.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Block storage volume identifier.",
@@ -86,10 +86,14 @@ func (r *BlockStorageResource) Schema(ctx context.Context, req resource.SchemaRe
 				},
 			},
 			"size_in_gb": schema.Int64Attribute{
-				MarkdownDescription: "Volume size, in GB. Changing this forces a new resource.",
+				MarkdownDescription: "Volume size, in GB. Increasing it resizes the volume in place, even while it is attached to a server. Volumes cannot shrink, so decreasing it forces a new resource and the data on the volume is lost.",
 				Required:            true,
 				PlanModifiers: []planmodifier.Int64{
-					int64planmodifier.RequiresReplace(),
+					int64planmodifier.RequiresReplaceIf(
+						blockStorageShrinkRequiresReplace,
+						"Volumes can only grow, so a smaller size forces a new resource.",
+						"Volumes can only grow, so a smaller `size_in_gb` forces a new resource.",
+					),
 				},
 			},
 			"namespace_id": schema.Int64Attribute{
@@ -214,16 +218,32 @@ func (r *BlockStorageResource) Read(ctx context.Context, req resource.ReadReques
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-// Update is unreachable in practice: every attribute that participates in the
-// plan is RequiresReplace because the SDK exposes no update call for volumes.
-// It only exists to satisfy resource.Resource; it re-reads rather than
-// sending any write.
+// Update only ever has to grow the volume: size_in_gb is the one input that
+// does not force a replacement, and only when it increases. The resize is
+// synchronous, so the read-back already reports the new size.
 func (r *BlockStorageResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data BlockStorageResourceModel
+	var data, state BlockStorageResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// The API rejects a resize to the current size, so only call it on a change.
+	if !data.SizeInGb.Equal(state.SizeInGb) {
+		_, err := r.client.BlockStorage.UpdateVolume(ctx, state.ID.ValueString(), operations.UpdateVolumeBlockStorageRequestBody{
+			Data: operations.UpdateVolumeBlockStorageData{
+				Type: operations.UpdateVolumeBlockStorageTypeVolumes,
+				Attributes: operations.UpdateVolumeBlockStorageAttributes{
+					SizeInGb: data.SizeInGb.ValueInt64(),
+				},
+			},
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Client Error", "Unable to resize block storage volume, got error: "+err.Error())
+			return
+		}
 	}
 
 	found := r.readBlockStorageInto(ctx, &data, &resp.Diagnostics)
@@ -261,6 +281,17 @@ func (r *BlockStorageResource) Delete(ctx context.Context, req resource.DeleteRe
 
 func (r *BlockStorageResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+// blockStorageShrinkRequiresReplace replaces the volume only when size_in_gb
+// decreases, since UpdateVolume can only grow it. An unknown size is left to
+// Update, where the API rejects a shrink, rather than risking a replacement
+// that would destroy the volume's data.
+func blockStorageShrinkRequiresReplace(ctx context.Context, req planmodifier.Int64Request, resp *int64planmodifier.RequiresReplaceIfFuncResponse) {
+	if req.StateValue.IsNull() || req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
+		return
+	}
+	resp.RequiresReplace = req.PlanValue.ValueInt64() < req.StateValue.ValueInt64()
 }
 
 // blockStorageNotFound reports whether err is a 404 from the BlockStorage

@@ -29,6 +29,10 @@ func shrinkAttachmentPolling(t *testing.T) {
 }
 
 func testAccBlockStorageAttachmentConfig(serverID string) string {
+	return testAccBlockStorageAttachmentConfigSized(serverID, 100)
+}
+
+func testAccBlockStorageAttachmentConfigSized(serverID string, sizeInGb int) string {
 	return fmt.Sprintf(`
 provider "latitudesh" {
   auth_token = "mock-token"
@@ -38,14 +42,14 @@ resource "latitudesh_block_storage" "test_item" {
   project    = "test-project"
   name       = "app-data"
   region     = "ASH"
-  size_in_gb = 100
+  size_in_gb = %d
 }
 
 resource "latitudesh_block_storage_attachment" "test_item" {
   block_storage_id = latitudesh_block_storage.test_item.id
   server_id        = %q
 }
-`, serverID)
+`, sizeInGb, serverID)
 }
 
 func testAccCheckMockBlockStorageDetached(mock *mockBlockStorageAPI) resource.TestCheckFunc {
@@ -209,6 +213,51 @@ resource "latitudesh_block_storage" "test_item" {
 					}
 					return nil
 				},
+			},
+		},
+	})
+}
+
+// Growing an attached volume resizes it in place, so the attachment must not
+// be touched: no unmap and no new mapping, only the resize.
+func TestBlockStorageAttachment_SurvivesVolumeGrowth(t *testing.T) {
+	shrinkAttachmentPolling(t)
+
+	mock := newMockBlockStorageAPI()
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	const name = "latitudesh_block_storage_attachment.test_item"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy: resource.ComposeTestCheckFunc(
+			testAccCheckMockBlockStorageDetached(mock),
+			testAccCheckMockBlockStorageDestroyed(mock),
+		),
+		Steps: []resource.TestStep{
+			{Config: testAccBlockStorageAttachmentConfigSized("sv_mock_1", 100)},
+			{
+				Config: testAccBlockStorageAttachmentConfigSized("sv_mock_1", 200),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "size_in_gb", "200"),
+					resource.TestCheckResourceAttr(name, "status", "mapped"),
+					func(*terraform.State) error {
+						if n := countCalls(mock, "PATCH "); n != 1 {
+							return fmt.Errorf("expected one resize, got %d: %v", n, mock.callLog())
+						}
+						for _, call := range mock.callLog() {
+							if strings.HasSuffix(call, "/unmap") || strings.HasPrefix(call, "DELETE ") {
+								return fmt.Errorf("growing the volume disturbed the attachment: %v", mock.callLog())
+							}
+						}
+						if n := countCalls(mock, "POST /storage/volumes/"); n != 1 {
+							return fmt.Errorf("expected the volume to be mapped once, got %d: %v", n, mock.callLog())
+						}
+						return nil
+					},
+				),
 			},
 		},
 	})

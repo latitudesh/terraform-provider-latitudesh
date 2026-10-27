@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -69,6 +70,10 @@ type mockBlockStorageAPI struct {
 
 	// failMapping settles new mappings into "failed" instead of "mapped".
 	failMapping bool
+
+	// rejectResize answers resizes with the 422 the API returns for volumes it
+	// cannot resize (anything but high performance).
+	rejectResize bool
 
 	// failUnmapping settles unmaps back into "mapped", which is how the API
 	// reports a detach that failed.
@@ -264,6 +269,44 @@ func (m *mockBlockStorageAPI) handler(w http.ResponseWriter, r *http.Request) {
 		v.deleted = true
 		w.WriteHeader(http.StatusNoContent)
 
+	case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/storage/volumes/"):
+		id := strings.TrimPrefix(r.URL.Path, "/storage/volumes/")
+		v, ok := m.volumes[id]
+		if !ok || v.deleted {
+			w.Header().Set("Content-Type", "application/vnd.api+json")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"errors":[{"status":"404"}]}`))
+			return
+		}
+		var payload struct {
+			Data struct {
+				Attributes struct {
+					SizeInGb int64 `json:"size_in_gb"`
+				} `json:"attributes"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if m.rejectResize {
+			w.Header().Set("Content-Type", "application/vnd.api+json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"errors":[{"code":"STORAGE_OPERATION_UNSUPPORTED","status":"422","title":"Storage operation unsupported","detail":"Resizing a volume is only available for high performance volumes."}]}`))
+			return
+		}
+		// Like the API, refuse anything but growth (a resize to the same size too).
+		if payload.Data.Attributes.SizeInGb <= v.sizeInGb {
+			w.Header().Set("Content-Type", "application/vnd.api+json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"errors":[{"code":"STORAGE_VALIDATION_FAILED","status":"422","title":"Storage Validation Failed","detail":"Volumes can only be increased in size."}]}`))
+			return
+		}
+		v.sizeInGb = payload.Data.Attributes.SizeInGb
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(m.envelope(v))
+
 	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/map"):
 		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/storage/volumes/"), "/map")
 		v, ok := m.volumes[id]
@@ -425,12 +468,39 @@ func TestBlockStorage_Import(t *testing.T) {
 	})
 }
 
-// Changing size_in_gb (or any other input) must force a replacement, since
-// the SDK exposes no update call for volumes.
-func TestBlockStorage_SizeChangeForcesReplacement(t *testing.T) {
+// testAccCaptureVolumeID records the volume's id, so a later step can tell an
+// in-place update from a replacement.
+func testAccCaptureVolumeID(id *string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources["latitudesh_block_storage.test_item"]
+		if !ok {
+			return fmt.Errorf("latitudesh_block_storage.test_item not in state")
+		}
+		*id = rs.Primary.ID
+		return nil
+	}
+}
+
+// countCalls reports how many mutating requests start with prefix.
+func countCalls(mock *mockBlockStorageAPI, prefix string) int {
+	n := 0
+	for _, call := range mock.callLog() {
+		if strings.HasPrefix(call, prefix) {
+			n++
+		}
+	}
+	return n
+}
+
+// Growing size_in_gb must resize the same volume in place (UpdateVolume),
+// keeping its id and its data, instead of deleting it for a new one.
+func TestBlockStorage_GrowResizesInPlace(t *testing.T) {
 	mock := newMockBlockStorageAPI()
 	server := httptest.NewServer(http.HandlerFunc(mock.handler))
 	defer server.Close()
+
+	const name = "latitudesh_block_storage.test_item"
+	var firstID string
 
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
@@ -439,14 +509,115 @@ func TestBlockStorage_SizeChangeForcesReplacement(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: testAccBlockStorageConfig("test-project", "app-data", "ASH", 50),
-				Check:  resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "size_in_gb", "50"),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(name, "size_in_gb", "50"),
+					testAccCaptureVolumeID(&firstID),
+				),
 			},
 			{
 				Config: testAccBlockStorageConfig("test-project", "app-data", "ASH", 100),
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "size_in_gb", "100"),
-					resource.TestCheckResourceAttr("latitudesh_block_storage.test_item", "namespace_id", "2"),
+					resource.TestCheckResourceAttr(name, "size_in_gb", "100"),
+					func(s *terraform.State) error {
+						if got := s.RootModule().Resources[name].Primary.ID; got != firstID {
+							return fmt.Errorf("growing the volume replaced it: id %s became %s", firstID, got)
+						}
+						if n := countCalls(mock, "DELETE "); n != 0 {
+							return fmt.Errorf("growing the volume deleted it: %v", mock.callLog())
+						}
+						if n := countCalls(mock, "PATCH /storage/volumes/"+firstID); n != 1 {
+							return fmt.Errorf("expected one resize of %s, got %d: %v", firstID, n, mock.callLog())
+						}
+						return nil
+					},
 				),
+			},
+			{
+				// Idempotency — the resized volume must read back without drift.
+				Config:   testAccBlockStorageConfig("test-project", "app-data", "ASH", 100),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
+// Volumes cannot shrink, so a smaller size_in_gb must replace the volume
+// rather than send a resize the API would reject.
+func TestBlockStorage_ShrinkForcesReplacement(t *testing.T) {
+	mock := newMockBlockStorageAPI()
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	const name = "latitudesh_block_storage.test_item"
+	var firstID string
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMockBlockStorageDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccBlockStorageConfig("test-project", "app-data", "ASH", 100),
+				Check:  testAccCaptureVolumeID(&firstID),
+			},
+			{
+				Config: testAccBlockStorageConfig("test-project", "app-data", "ASH", 50),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(name, "size_in_gb", "50"),
+					func(s *terraform.State) error {
+						if got := s.RootModule().Resources[name].Primary.ID; got == firstID {
+							return fmt.Errorf("shrinking kept volume %s instead of replacing it", firstID)
+						}
+						if n := countCalls(mock, "PATCH "); n != 0 {
+							return fmt.Errorf("shrinking sent a resize: %v", mock.callLog())
+						}
+						if mock.exists(firstID) {
+							return fmt.Errorf("the replaced volume %s was not deleted", firstID)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+// A resize the API refuses (it only resizes high performance volumes, for
+// one) must fail the apply with the API's message and leave the size in
+// state untouched, rather than recording a resize that never happened.
+func TestBlockStorage_ResizeFailureFailsApply(t *testing.T) {
+	mock := newMockBlockStorageAPI()
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	const name = "latitudesh_block_storage.test_item"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMockBlockStorageDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccBlockStorageConfig("test-project", "app-data", "ASH", 50),
+			},
+			{
+				PreConfig: func() {
+					mock.mu.Lock()
+					defer mock.mu.Unlock()
+					mock.rejectResize = true
+				},
+				Config:      testAccBlockStorageConfig("test-project", "app-data", "ASH", 100),
+				ExpectError: regexp.MustCompile(`(?s)Unable to resize block storage volume.*STORAGE_OPERATION_UNSUPPORTED`),
+			},
+			{
+				// The failed resize must not have been written to state.
+				PreConfig: func() {
+					mock.mu.Lock()
+					defer mock.mu.Unlock()
+					mock.rejectResize = false
+				},
+				Config: testAccBlockStorageConfig("test-project", "app-data", "ASH", 50),
+				Check:  resource.TestCheckResourceAttr(name, "size_in_gb", "50"),
 			},
 		},
 	})

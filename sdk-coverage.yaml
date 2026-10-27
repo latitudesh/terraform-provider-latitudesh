@@ -75,11 +75,12 @@ groups:
   BlockStorage:
     implemented_by: [latitudesh_block_storage, latitudesh_block_storages, latitudesh_block_storage_attachment]
     notes: >-
-      The API has no volume update, so every attribute of
-      latitudesh_block_storage is RequiresReplace.
       CreateVolume/RetrieveVolume/ListVolumes/DeleteVolume back the resource and
       its data sources (singular: lookup by id or by name/project; plural:
-      server-side project filter, newest first). MapVolume/UnmapVolume back
+      server-side project filter, newest first). UpdateVolume backs an in-place
+      grow of `size_in_gb`: it is synchronous, grow-only (the API rejects a
+      smaller or equal size) and allowed while the volume is mapped, so a
+      smaller size and every other attribute stay RequiresReplace. MapVolume/UnmapVolume back
       latitudesh_block_storage_attachment: both are asynchronous, so the
       resource polls the volume's `block` object until the mapping settles
       (`mapped`, or null once an unmap completes). A volume maps to at most one
