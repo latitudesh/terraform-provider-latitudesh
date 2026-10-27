@@ -195,3 +195,96 @@ func TestRequiresIpxeAttributeOnChange(t *testing.T) {
 		})
 	}
 }
+
+func TestValidatePersistentNetbootOnChange(t *testing.T) {
+	t.Parallel()
+
+	const ubuntu = "ubuntu_24_04_x64_lts"
+
+	cases := []struct {
+		name         string
+		isCreate     bool
+		stateOS      types.String
+		stateNetboot types.Bool
+		planOS       types.String
+		planNetboot  types.Bool
+		wantErr      bool
+	}{
+		{
+			name:        "create with os=ipxe and persistent_netboot=true passes",
+			isCreate:    true,
+			planOS:      types.StringValue("ipxe"),
+			planNetboot: types.BoolValue(true),
+		},
+		{
+			name:        "create with another os and persistent_netboot=true is caught",
+			isCreate:    true,
+			planOS:      types.StringValue(ubuntu),
+			planNetboot: types.BoolValue(true),
+			wantErr:     true,
+		},
+		{
+			name:        "create with another os and persistent_netboot=false passes",
+			isCreate:    true,
+			planOS:      types.StringValue(ubuntu),
+			planNetboot: types.BoolValue(false),
+		},
+		{
+			name:        "create without persistent_netboot passes",
+			isCreate:    true,
+			planOS:      types.StringValue(ubuntu),
+			planNetboot: types.BoolNull(),
+		},
+		{
+			name:         "moving off ipxe while keeping persistent_netboot=true is caught",
+			stateOS:      types.StringValue("ipxe"),
+			stateNetboot: types.BoolValue(true),
+			planOS:       types.StringValue(ubuntu),
+			planNetboot:  types.BoolValue(true),
+			wantErr:      true,
+		},
+		{
+			name:         "moving off ipxe and dropping persistent_netboot passes",
+			stateOS:      types.StringValue("ipxe"),
+			stateNetboot: types.BoolValue(true),
+			planOS:       types.StringValue(ubuntu),
+			planNetboot:  types.BoolNull(),
+		},
+		{
+			name:         "enabling persistent_netboot on a non-ipxe server is caught",
+			stateOS:      types.StringValue(ubuntu),
+			stateNetboot: types.BoolNull(),
+			planOS:       types.StringValue(ubuntu),
+			planNetboot:  types.BoolValue(true),
+			wantErr:      true,
+		},
+		{
+			name:         "unchanged values are not re-validated",
+			stateOS:      types.StringValue(ubuntu),
+			stateNetboot: types.BoolValue(true),
+			planOS:       types.StringValue(ubuntu),
+			planNetboot:  types.BoolValue(true),
+		},
+		{
+			name:         "unknown os defers to the next plan round",
+			stateOS:      types.StringValue(ubuntu),
+			stateNetboot: types.BoolNull(),
+			planOS:       types.StringUnknown(),
+			planNetboot:  types.BoolValue(true),
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validatePersistentNetbootOnChange(tc.isCreate, tc.stateOS, tc.stateNetboot, tc.planOS, tc.planNetboot)
+			if tc.wantErr && err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+		})
+	}
+}
