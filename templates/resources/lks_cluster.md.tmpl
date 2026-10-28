@@ -1,0 +1,69 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Provisions an LKS (Latitude Kubernetes Service) cluster's **control plane**. Worker capacity is a separate resource: every node pool, the first one included, is a [`latitudesh_lks_node_pool`](lks_node_pool.md).
+
+## A cluster needs a node pool to become `ready`
+
+A cluster with no node pool never finishes converging: the platform's own components (CNI, CoreDNS) have nowhere to run, so `status` stays `provisioning` with `reason` `WaitingForNodePool` — permanently, not slowly. And no pool can be created before the cluster exists.
+
+So create waits for the **control plane**, not for `ready`. It returns as soon as the platform reports `WaitingForNodePool`, which is the point where a pool can join, and Terraform then creates the `latitudesh_lks_node_pool` resources that reference the cluster. Each pool's create waits for its nodes **and then for the cluster** to finish installing the platform's components on them (`reason` `FinishingSetup` in between), so the apply that adds the first pool ends on a `ready` cluster, with its kubeconfig published. This resource's own `status` still holds `provisioning` from its create until the next refresh.
+
+At least one pool has to stay free of `NoSchedule` and `NoExecute` taints. The platform's components do not tolerate them, so a cluster whose every pool carries one never leaves `provisioning`. The API accepts the taint, and no single pool can tell whether it is the only one, so this is not checked at plan time.
+
+## Updating
+
+`project`, `site` and `network` have no update endpoint and force a new resource if changed. `name`, `description` and `kubernetes_version` update in place; setting a newer `kubernetes_version` consents to an in-place control-plane upgrade, and apply does not return until the new version is live. Lowering `kubernetes_version` is rejected at plan time — the platform allows no in-place downgrade (422 `DOWNGRADE_NOT_ALLOWED`), so the plan fails immediately instead of the apply.
+
+Node pools upgrade separately and may never run a version newer than the control plane (`VERSION_SKEW`). A pool that omits `kubernetes_version` tracks the cluster; see [`latitudesh_lks_node_pool`](lks_node_pool.md) for how and when it follows.
+
+The platform accepts changes only while the cluster is idle: a cluster that is still `provisioning` — for instance, one waiting for its first pool — rejects an update with 409.
+
+Apply waits until the platform reports no operation in progress, rather than until `status` equals a particular word — so a status this provider has never seen still ends the wait instead of hanging it. A cluster that is `paused`, `deleting` or `deleted` fails immediately, since waiting cannot reach ready from there.
+
+`description` cannot be **removed** once set: the API declares it `filled`, so an empty string is rejected and a null is ignored. Removing it from configuration leaves a diff that cannot converge; set a new value instead.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+You can import an LKS cluster resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_lks_cluster` resource can be imported by specifying the cluster ID:
+
+```sh
+terraform import latitudesh_lks_cluster.example <LKS_CLUSTER_ID>
+```
+
+Import covers the control plane only. Import each of the cluster's node pools as its own [`latitudesh_lks_node_pool`](lks_node_pool.md).
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration.
+
+```hcl
+import {
+  to = latitudesh_lks_cluster.example
+  id = "<LKS_CLUSTER_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_lks.tf
+```
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.

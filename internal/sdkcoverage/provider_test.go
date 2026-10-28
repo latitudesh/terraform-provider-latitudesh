@@ -7,6 +7,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/action"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 )
@@ -42,6 +43,14 @@ func (a fakeAction) Metadata(_ context.Context, req action.MetadataRequest, resp
 func (fakeAction) Schema(context.Context, action.SchemaRequest, *action.SchemaResponse) {}
 func (fakeAction) Invoke(context.Context, action.InvokeRequest, *action.InvokeResponse) {}
 
+type fakeEphemeral struct{ suffix string }
+
+func (e fakeEphemeral) Metadata(_ context.Context, req ephemeral.MetadataRequest, resp *ephemeral.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_" + e.suffix
+}
+func (fakeEphemeral) Schema(context.Context, ephemeral.SchemaRequest, *ephemeral.SchemaResponse) {}
+func (fakeEphemeral) Open(context.Context, ephemeral.OpenRequest, *ephemeral.OpenResponse)       {}
+
 // fakeProvider registers ssh_key as BOTH a resource and a data source — the
 // shape that motivates the by-kind split, since the merged view collapses them.
 type fakeProvider struct{}
@@ -68,9 +77,14 @@ func (fakeProvider) Actions(context.Context) []func() action.Action {
 		func() action.Action { return fakeAction{"server_reinstall"} },
 	}
 }
+func (fakeProvider) EphemeralResources(context.Context) []func() ephemeral.EphemeralResource {
+	return []func() ephemeral.EphemeralResource{
+		func() ephemeral.EphemeralResource { return fakeEphemeral{"kubeconfig"} },
+	}
+}
 
-// fakeBareProvider registers no data sources and does not implement
-// ProviderWithActions at all.
+// fakeBareProvider registers no data sources and implements neither
+// ProviderWithActions nor ProviderWithEphemeralResources.
 type fakeBareProvider struct{}
 
 func (fakeBareProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -95,6 +109,7 @@ func TestShippedByKindSplitsRegistrationsByKind(t *testing.T) {
 		Resources:   []string{"fake_server", "fake_ssh_key"},
 		DataSources: []string{"fake_ssh_key"},
 		Actions:     []string{"fake_server_reinstall"},
+		Ephemerals:  []string{"fake_kubeconfig"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ShippedByKind = %+v, want %+v", got, want)
@@ -112,6 +127,9 @@ func TestShippedByKindEmptyKindsAreNotNil(t *testing.T) {
 	if got.Actions == nil || len(got.Actions) != 0 {
 		t.Errorf("Actions = %#v, want empty non-nil slice", got.Actions)
 	}
+	if got.Ephemerals == nil || len(got.Ephemerals) != 0 {
+		t.Errorf("Ephemerals = %#v, want empty non-nil slice", got.Ephemerals)
+	}
 	if want := []string{"fake_server"}; !reflect.DeepEqual(got.Resources, want) {
 		t.Errorf("Resources = %v, want %v", got.Resources, want)
 	}
@@ -122,7 +140,7 @@ func TestShippedByKindEmptyKindsAreNotNil(t *testing.T) {
 func TestShippedTypeNamesMergesAndDedupes(t *testing.T) {
 	got := ShippedTypeNames(context.Background(), fakeProvider{}, "fake")
 
-	want := []string{"fake_server", "fake_server_reinstall", "fake_ssh_key"}
+	want := []string{"fake_kubeconfig", "fake_server", "fake_server_reinstall", "fake_ssh_key"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ShippedTypeNames = %v, want %v", got, want)
 	}

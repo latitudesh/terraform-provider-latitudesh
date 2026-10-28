@@ -6,6 +6,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/action"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 )
@@ -16,6 +17,7 @@ type ShippedTypes struct {
 	Resources   []string `json:"resources"`
 	DataSources []string `json:"datasources"`
 	Actions     []string `json:"actions"`
+	Ephemerals  []string `json:"ephemerals"`
 }
 
 // ShippedByKind returns the Terraform type names a provider registers, asking
@@ -39,6 +41,7 @@ func ShippedByKind(ctx context.Context, p provider.Provider, providerTypeName st
 		Resources:   []string{},
 		DataSources: []string{},
 		Actions:     []string{},
+		Ephemerals:  []string{},
 	}
 
 	for _, newResource := range p.Resources(ctx) {
@@ -69,9 +72,25 @@ func ShippedByKind(ctx context.Context, p provider.Provider, providerTypeName st
 		}
 	}
 
+	// Ephemeral resources are optional on the provider interface too. They are
+	// a real mapping surface, not a footnote: latitudesh_lks_kubeconfig is the
+	// only Terraform type covering GetLksClusterKubeconfig, so a collector that
+	// skipped them would call that method unmapped and the group's coverage a
+	// fiction.
+	if withEphemerals, ok := p.(provider.ProviderWithEphemeralResources); ok {
+		for _, newEphemeral := range withEphemerals.EphemeralResources(ctx) {
+			var resp ephemeral.MetadataResponse
+			newEphemeral().Metadata(ctx, ephemeral.MetadataRequest{ProviderTypeName: providerTypeName}, &resp)
+			if resp.TypeName != "" {
+				shipped.Ephemerals = append(shipped.Ephemerals, resp.TypeName)
+			}
+		}
+	}
+
 	sort.Strings(shipped.Resources)
 	sort.Strings(shipped.DataSources)
 	sort.Strings(shipped.Actions)
+	sort.Strings(shipped.Ephemerals)
 	return shipped
 }
 
@@ -83,7 +102,7 @@ func ShippedTypeNames(ctx context.Context, p provider.Provider, providerTypeName
 
 	seen := map[string]bool{}
 	var names []string
-	for _, list := range [][]string{byKind.Resources, byKind.DataSources, byKind.Actions} {
+	for _, list := range [][]string{byKind.Resources, byKind.DataSources, byKind.Actions, byKind.Ephemerals} {
 		for _, name := range list {
 			if seen[name] {
 				continue
