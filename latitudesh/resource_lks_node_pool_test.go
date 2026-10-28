@@ -190,6 +190,11 @@ type mockLksNodePoolAPI struct {
 	exists         bool
 
 	patchBodies []string
+
+	// What an upgrade rewrites on the live API: the platform build the nodes
+	// run and the record's timestamp. Empty means the captured defaults.
+	platformVersion string
+	updatedAt       string
 }
 
 const (
@@ -218,6 +223,12 @@ func (m *mockLksNodePoolAPI) envelope() map[string]any {
 		"platform_version":   "lks-v1.36.1-007",
 		"created_at":         "2026-09-18T15:39:52.045214Z",
 		"updated_at":         "2026-09-18T15:42:14.740745Z",
+	}
+	if m.platformVersion != "" {
+		attrs["platform_version"] = m.platformVersion
+	}
+	if m.updatedAt != "" {
+		attrs["updated_at"] = m.updatedAt
 	}
 	if m.name != "" {
 		attrs["name"] = m.name
@@ -356,8 +367,13 @@ func (m *mockLksNodePoolAPI) handler(w http.ResponseWriter, r *http.Request) {
 		if a.Description != nil {
 			m.descr = *a.Description
 		}
-		if a.KubernetesVersion != nil {
+		if a.KubernetesVersion != nil && *a.KubernetesVersion != m.version {
+			// An upgrade moves the nodes to a new platform build and touches
+			// the record, exactly as the live API reports it (seen on a
+			// 1.36.1 -> 1.36.2 follow).
 			m.version = *a.KubernetesVersion
+			m.platformVersion = "lks-v" + m.version + "-001"
+			m.updatedAt = "2026-10-28T01:07:58.735292Z"
 		}
 		m.labels = a.Labels
 		m.taints = a.Taints

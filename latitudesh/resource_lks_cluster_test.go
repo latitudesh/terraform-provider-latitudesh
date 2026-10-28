@@ -472,6 +472,14 @@ func (m *mockLksAPI) handler(w http.ResponseWriter, r *http.Request) {
 		m.clusterPatchBodies = append(m.clusterPatchBodies, string(clusterBody))
 		r.Body = io.NopCloser(bytes.NewReader(clusterBody))
 
+		// The platform rejects every mutation while an operation is running —
+		// and a cluster with no pool yet is still provisioning.
+		if m.readyNeedsNodePool && m.poolID == "" {
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"errors":[{"code":"OPERATION_IN_PROGRESS","status":"conflict","detail":"operation in progress"}]}`))
+			return
+		}
+
 		if m.rejectEmptyDescription && strings.Contains(strings.ReplaceAll(string(clusterBody), " ", ""), `"description":""`) {
 			w.WriteHeader(http.StatusUnprocessableEntity)
 			_, _ = w.Write([]byte(`{"errors":[{"code":"VALIDATION_ERROR","status":"unprocessable_entity","detail":"must be filled","source":{"pointer":"description"}}]}`))
@@ -1104,4 +1112,46 @@ resource "latitudesh_lks_cluster" "test_item" {
 			},
 		},
 	})
+}
+
+// Only name, description and kubernetes_version reach the API, so a plan that
+// changes none of them — here, only `timeouts` — must not PATCH. The platform
+// rejects every mutation while a cluster is provisioning (409, observed live on
+// a cluster still waiting for its first pool), and the mock does the same: a
+// PATCH here would fail the apply.
+func TestLks_TimeoutsOnlyChangeSendsNoPatch(t *testing.T) {
+	mock := &mockLksAPI{readyNeedsNodePool: true}
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	prevReady := lksReadyPollInterval
+	lksReadyPollInterval = 5 * time.Millisecond
+	t.Cleanup(func() { lksReadyPollInterval = prevReady })
+
+	withUpdateTimeout := func(d string) string {
+		return testAccLksConfigWithTimeout("1.31.0", fmt.Sprintf(`
+  timeouts = {
+    update = %q
+  }
+`, d))
+	}
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMockLksDestroyed(mock),
+		Steps: []resource.TestStep{
+			{Config: withUpdateTimeout("30m")},
+			{
+				Config: withUpdateTimeout("45m"),
+				Check:  resource.TestCheckResourceAttr("latitudesh_lks_cluster.test_item", "timeouts.update", "45m"),
+			},
+		},
+	})
+
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	if len(mock.clusterPatchBodies) != 0 {
+		t.Errorf("a timeouts-only change sent %d PATCH(es): %v", len(mock.clusterPatchBodies), mock.clusterPatchBodies)
+	}
 }

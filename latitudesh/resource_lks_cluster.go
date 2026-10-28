@@ -627,15 +627,28 @@ func (r *LksClusterResource) Update(ctx context.Context, req resource.UpdateRequ
 
 	id := data.ID.ValueString()
 
+	// Only name, description and kubernetes_version reach the API. A plan that
+	// changes none of them — `timeouts` alone, say — must not send a PATCH: the
+	// platform rejects every mutation while the cluster is provisioning (409
+	// OPERATION_IN_PROGRESS, observed live on a cluster still waiting for its
+	// first pool), and on a ready cluster it would start an update for nothing.
+	if data.Name.Equal(state.Name) && data.Description.Equal(state.Description) && data.KubernetesVersion.Equal(state.KubernetesVersion) {
+		r.readLksInto(ctx, &data, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+		return
+	}
+
 	updateRequest := components.UpdateLksCluster{
 		Data: components.UpdateLksClusterData{
 			Type: components.UpdateLksClusterTypeLksClusters,
 			Attributes: &components.UpdateLksClusterAttributes{
 				Name: data.Name.ValueStringPointer(),
-				// Removing `description` from configuration has to reach the
-				// API as an explicit empty string; a nil pointer is omitted and
-				// the old value survives, which failed the apply on the
-				// read-back. See lksDescriptionForUpdate.
+				// The API cannot clear a description ("" is a 422, null is
+				// dropped), so a removed one sends nothing and the old value
+				// stays. See lksDescriptionForUpdate.
 				Description:       lksDescriptionForUpdate(data.Description),
 				KubernetesVersion: data.KubernetesVersion.ValueStringPointer(),
 			},

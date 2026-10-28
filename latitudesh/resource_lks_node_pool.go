@@ -565,8 +565,27 @@ func (r *LksNodePoolResource) ModifyPlan(ctx context.Context, req resource.Modif
 		return
 	}
 
-	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx,
-		path.Root("kubernetes_version"), types.StringValue(clusterVersion))...)
+	followed := types.StringValue(clusterVersion)
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("kubernetes_version"), followed)...)
+
+	// When following moves the version, this plan carries a change the
+	// framework never saw: it marks Computed attributes unknown only when the
+	// configuration changed, and here only ModifyPlan did. An upgrade rewrites
+	// what the platform reports about the pool, so leaving those prior values
+	// known fails the apply with "inconsistent result" (hit live on a
+	// 1.36.1 -> 1.36.2 follow: platform_version and updated_at).
+	if req.State.Raw.IsNull() {
+		return
+	}
+	var state LksNodePoolResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() || state.KubernetesVersion.Equal(followed) {
+		return
+	}
+	for _, name := range []string{"platform_version", "updated_at", "status", "message", "reason"} {
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root(name), types.StringUnknown())...)
+	}
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("ready_nodes"), types.Int64Unknown())...)
 }
 
 func (r *LksNodePoolResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
