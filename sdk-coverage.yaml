@@ -737,13 +737,34 @@ groups:
       provisioning).
 
   FilesystemStorage:
+    implemented_by: [latitudesh_filesystem_storage]
     notes: >-
-      The API genuinely has no single-item read (confirmed against the routes),
-      so Read and import have to locate the filesystem through ListFilesystems —
-      an API limitation, not a spec gap. AttachFilesystem and DetachFilesystem
-      manage attachment to servers; the classifier does not recognize those
-      names (like MapVolume/UnmapVolume on BlockStorage). GetFilesystemAttachment
-      is classified as a read. For a separate attachment resource,
-      latitudesh_block_storage_attachment is the precedent if they are wired
-      later. Access to filesystem storage has been gated per team, so acceptance
-      tests need a team with it enabled.
+      CreateFilesystem/ListFilesystems/UpdateFilesystem/DeleteFilesystem back the
+      resource and its data source. The API genuinely has no single-item read
+      (confirmed against the SDK — FilesystemStorage has no Get/Retrieve
+      method), so Read, import and the data source all locate the filesystem by
+      scanning ListFilesystems — an API limitation, not a spec gap.
+      UpdateFilesystem only ever grows size_in_gb ("Allow you to upgrade the
+      size of a filesystem" per its own doc comment, the same grow-only wording
+      BlockStorage's UpdateVolume uses), so a smaller size and every other
+      attribute (name, region, protocols, project) stay RequiresReplace.
+      AttachFilesystem/DetachFilesystem manage attachment to a server and are
+      asynchronous ("The attach runs asynchronously and is idempotent" per the
+      doc comment); the classifier does not recognize those names (the same
+      shape as MapVolume/UnmapVolume on BlockStorage). GetFilesystemAttachment
+      reads that attachment and is classified as a read. None of the three are
+      modeled here; the recommended home is a future
+      latitudesh_filesystem_storage_attachment, same precedent as
+      latitudesh_block_storage_attachment. No plural data source: each
+      filesystem is normally referenced by its own id (e.g. to mount it), and
+      the singular already has a unique selector (id) without one, unlike
+      backups/apps-style collections practitioners browse as a whole. Not
+      exposed, by team decision: `keyring`/`cluster_user`/`volume_path` (SDK doc
+      comment: dashboard-origin responses only, always null for API-driven
+      requests — identical wording to BlockStorage's same three fields), the
+      nested `team` envelope (account metadata, not a provisioning input) and
+      `created_at` (presentation metadata; BlockStorage made the same call on
+      its identical field). Only the site slug of `region` is round-tripped,
+      same as latitudesh_block_storage and latitudesh_object_storage. Access to
+      filesystem storage has been gated per team, so acceptance tests need a
+      team with it enabled.
