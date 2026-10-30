@@ -740,10 +740,10 @@ groups:
     notes: >-
       The API genuinely has no single-item read (confirmed against the routes),
       so Read and import have to locate the filesystem through ListFilesystems —
-      an API limitation, not a spec gap. AttachFilesystem, DetachFilesystem and
-      GetFilesystemAttachment manage attachment to servers; the classifier does
-      not recognize those names (like MapVolume/UnmapVolume on BlockStorage), so
-      the derived CRUD shape leaves them out —
+      an API limitation, not a spec gap. AttachFilesystem and DetachFilesystem
+      manage attachment to servers; the classifier does not recognize those
+      names (like MapVolume/UnmapVolume on BlockStorage). GetFilesystemAttachment
+      is classified as a read. For a separate attachment resource,
       latitudesh_block_storage_attachment is the precedent if they are wired
       later. Access to filesystem storage has been gated per team, so acceptance
       tests need a team with it enabled.
