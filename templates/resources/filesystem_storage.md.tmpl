@@ -1,0 +1,53 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+Creates and manages a persistent NFS filesystem on [Latitude.sh](https://latitude.sh/) that can be mounted by multiple servers. Access to filesystem storage is gated per team — creating this resource requires a team with it enabled.
+
+Mounting the filesystem onto a server (`AttachFilesystem`/`DetachFilesystem` in the API) is not yet modeled by this provider.
+
+## Resizing
+
+Increasing `size_in_gb` resizes the filesystem in place. Decreasing it forces a new resource, which destroys the filesystem and its data, so the plan shows it as a replacement. Changing `name`, `region` or `protocols` also forces a new resource; there is no update endpoint for any of them.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+You can import a filesystem storage resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_filesystem_storage` resource can be imported by specifying the filesystem ID:
+
+```sh
+terraform import latitudesh_filesystem_storage.example <FILESYSTEM_ID>
+```
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration.
+
+```hcl
+import {
+  to = latitudesh_filesystem_storage.example
+  id = "<FILESYSTEM_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_filesystem_storage.tf
+```
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.

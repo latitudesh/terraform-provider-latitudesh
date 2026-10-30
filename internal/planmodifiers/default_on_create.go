@@ -42,3 +42,32 @@ func (m DefaultOnCreate) PlanModifyString(_ context.Context, req planmodifier.St
 	// Create with the attribute omitted — apply the default at plan time.
 	resp.PlanValue = types.StringValue(m.Value)
 }
+
+// DefaultOnCreateInt64 is DefaultOnCreate for an optional+computed int64
+// attribute.
+type DefaultOnCreateInt64 struct {
+	Value int64
+}
+
+var _ planmodifier.Int64 = (*DefaultOnCreateInt64)(nil)
+
+func (m DefaultOnCreateInt64) Description(_ context.Context) string {
+	return fmt.Sprintf("Defaults to %d on create; preserves the state value on update.", m.Value)
+}
+
+func (m DefaultOnCreateInt64) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (m DefaultOnCreateInt64) PlanModifyInt64(_ context.Context, req planmodifier.Int64Request, resp *planmodifier.Int64Response) {
+	if !req.ConfigValue.IsNull() {
+		return
+	}
+
+	if !req.StateValue.IsNull() && !req.StateValue.IsUnknown() {
+		resp.PlanValue = req.StateValue
+		return
+	}
+
+	resp.PlanValue = types.Int64Value(m.Value)
+}
