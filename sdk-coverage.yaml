@@ -613,6 +613,15 @@ groups:
 
   # --------------------------------------------------------------- excluded ---
 
+  APIKeys:
+    ceiling: none
+    rationale: product_decision
+    notes: >-
+      Deferred (2026-10-30): not scaffolding it for now. Delete this entry to
+      queue it again. Shape context: full CRUD, but managing API keys through
+      Terraform means the key material lands in state — weigh that when it is
+      revisited.
+
   BaselinesPreview:
     ceiling: none
     rationale: product_decision
@@ -621,15 +630,13 @@ groups:
       stable, so scaffolding against it now would only churn. Revisit once the
       product ships.
 
-  FilesystemStorage:
+  Events:
     ceiling: none
     rationale: product_decision
     notes: >-
-      Filesystem storage is gated — a customer has to request access before it
-      can be created — so it is not a general Terraform surface yet. Revisit if it
-      becomes generally available. Shape context: the API genuinely has no
-      single-item read (confirmed against the routes), so import support would
-      need thought — an API limitation, not a spec gap.
+      Deferred (2026-10-30): not scaffolding it for now. Delete this entry to
+      queue it again. Shape context: List only, so it would generate a data
+      source.
 
   IPAddresses:
     ceiling: none
@@ -663,6 +670,23 @@ groups:
       Team management does not belong in Terraform, not even as a data source.
       (The API also has no DELETE and no show, so a resource could not be
       well-formed anyway — but the decision stands regardless of that.)
+
+  Traffic:
+    ceiling: none
+    rationale: product_decision
+    notes: >-
+      Deferred (2026-10-30): not scaffolding it for now. Delete this entry to
+      queue it again. Shape context: read-only reporting (Get, GetQuota), so it
+      would generate a data source; the API changes its response shape based on
+      a project feature flag, so that data source needs to handle both.
+
+  UserProfile:
+    ceiling: none
+    rationale: product_decision
+    notes: >-
+      Deferred (2026-10-30): not scaffolding it for now. Delete this entry to
+      queue it again. Shape context: Get, ListTeams and Update on the
+      authenticated user's own profile, so it would generate a data source.
 
   VpnSessions:
     ceiling: none
@@ -712,12 +736,14 @@ groups:
       project's identifying slug (account/billing management, not backup
       provisioning).
 
-  APIKeys:
+  FilesystemStorage:
     notes: >-
-      Full CRUD, but managing API keys through Terraform means the key material
-      lands in state — weigh that when reviewing.
-
-  Traffic:
-    notes: >-
-      Read-only reporting. The API changes its response shape based on a project
-      feature flag, so a data source needs to handle both.
+      The API genuinely has no single-item read (confirmed against the routes),
+      so Read and import have to locate the filesystem through ListFilesystems —
+      an API limitation, not a spec gap. AttachFilesystem, DetachFilesystem and
+      GetFilesystemAttachment manage attachment to servers; the classifier does
+      not recognize those names (like MapVolume/UnmapVolume on BlockStorage), so
+      the derived CRUD shape leaves them out —
+      latitudesh_block_storage_attachment is the precedent if they are wired
+      later. Access to filesystem storage has been gated per team, so acceptance
+      tests need a team with it enabled.
