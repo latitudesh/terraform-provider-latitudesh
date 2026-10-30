@@ -48,6 +48,11 @@ type mockFilesystemStorageAPI struct {
 	// provider itself enforces client-side.
 	rejectResize bool
 
+	// listLagAfterResize is how many list calls after a successful resize
+	// leave the filesystem out, simulating a list that has not caught up yet.
+	listLagAfterResize int
+	listMisses         int
+
 	// calls records every mutating request in order, so tests can assert the
 	// sequence Terraform drove.
 	calls []string
@@ -146,8 +151,12 @@ func (m *mockFilesystemStorageAPI) handler(w http.ResponseWriter, r *http.Reques
 	case r.Method == http.MethodGet && r.URL.Path == "/storage/filesystems":
 		filterProject := r.URL.Query().Get("filter[project]")
 		data := make([]map[string]any, 0)
+		lagging := m.listMisses > 0
+		if lagging {
+			m.listMisses--
+		}
 		for _, v := range m.items {
-			if v.deleted {
+			if v.deleted || lagging {
 				continue
 			}
 			if filterProject != "" && v.project != filterProject {
@@ -193,6 +202,7 @@ func (m *mockFilesystemStorageAPI) handler(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		v.sizeInGb = payload.Data.Attributes.SizeInGb
+		m.listMisses = m.listLagAfterResize
 		w.Header().Set("Content-Type", "application/vnd.api+json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": m.envelope(v)})
@@ -457,6 +467,105 @@ func TestFilesystemStorage_ResizeFailureFailsApply(t *testing.T) {
 	})
 }
 
+func testAccFilesystemStorageConfigNoSize(project, name, region string, protocols string) string {
+	return fmt.Sprintf(`
+provider "latitudesh" {
+  auth_token = "mock-token"
+}
+
+resource "latitudesh_filesystem_storage" "test_item" {
+  project   = %q
+  name      = %q
+  region    = %q
+  protocols = %s
+}
+`, project, name, region, protocols)
+}
+
+// The 1500 GB default applies on create only. Omitting size_in_gb on a
+// filesystem that has grown past it (or was imported larger) must keep the
+// current size, not plan a "shrink" back to 1500 that replaces the filesystem
+// and destroys its data.
+func TestFilesystemStorage_OmittedSizeKeepsCurrentSize(t *testing.T) {
+	mock := newMockFilesystemStorageAPI()
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	const name = "latitudesh_filesystem_storage.test_item"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMockFilesystemStorageDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccFilesystemStorageConfigNoSize("test-project", "shared-data", "ASH", `["nfs4"]`),
+				Check:  resource.TestCheckResourceAttr(name, "size_in_gb", "1500"),
+			},
+			{
+				Config: testAccFilesystemStorageConfig("test-project", "shared-data", "ASH", 2000, `["nfs4"]`),
+				Check:  resource.TestCheckResourceAttr(name, "size_in_gb", "2000"),
+			},
+			{
+				Config:   testAccFilesystemStorageConfigNoSize("test-project", "shared-data", "ASH", `["nfs4"]`),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
+// A resize the API accepted must not fail the apply just because the list
+// has not caught up yet; the resize response is saved instead.
+func TestFilesystemStorage_ResizeSurvivesListLag(t *testing.T) {
+	mock := newMockFilesystemStorageAPI()
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	const name = "latitudesh_filesystem_storage.test_item"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMockFilesystemStorageDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccFilesystemStorageConfig("test-project", "shared-data", "ASH", 1500, `["nfs4"]`),
+			},
+			{
+				PreConfig: func() {
+					mock.mu.Lock()
+					defer mock.mu.Unlock()
+					mock.listLagAfterResize = 1
+				},
+				Config: testAccFilesystemStorageConfig("test-project", "shared-data", "ASH", 2000, `["nfs4"]`),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(name, "size_in_gb", "2000"),
+					resource.TestCheckResourceAttr(name, "storage_class", "standard"),
+				),
+			},
+		},
+	})
+}
+
+// The API reads protocols back as lowercase enum values, so an uppercase
+// value could never match state; it must be rejected at plan time.
+func TestFilesystemStorage_RejectsUppercaseProtocols(t *testing.T) {
+	mock := newMockFilesystemStorageAPI()
+	server := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer server.Close()
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccFilesystemStorageConfig("test-project", "shared-data", "ASH", 1500, `["NFS4"]`),
+				ExpectError: regexp.MustCompile(`value must be one of`),
+			},
+		},
+	})
+}
+
 func TestFilesystemStorageNotFound(t *testing.T) {
 	cases := []struct {
 		name string
@@ -484,8 +593,14 @@ func TestFilesystemStorageNotFound(t *testing.T) {
 func TestMapFilesystemStorage(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("nil attributes leave id set and everything else untouched", func(t *testing.T) {
-		var data FilesystemStorageResourceModel
+	t.Run("nil attributes keep inputs and null the computed fields", func(t *testing.T) {
+		// As Create/Update hand it over from the plan: computed fields unknown.
+		data := FilesystemStorageResourceModel{
+			Name:         types.StringValue("shared-data"),
+			StorageClass: types.StringUnknown(),
+			NfsMountPath: types.StringUnknown(),
+			FileEndpoint: types.StringUnknown(),
+		}
 		id := "fs_1"
 		diags := mapFilesystemStorage(ctx, &data, &components.FilesystemData{ID: &id})
 		if diags.HasError() {
@@ -494,8 +609,17 @@ func TestMapFilesystemStorage(t *testing.T) {
 		if data.ID.ValueString() != "fs_1" {
 			t.Fatalf("ID = %v, want fs_1", data.ID)
 		}
-		if !data.Name.IsNull() {
-			t.Fatalf("Name = %v, want null (no attributes)", data.Name)
+		if data.Name.ValueString() != "shared-data" {
+			t.Fatalf("Name = %v, want the planned value untouched", data.Name)
+		}
+		for field, v := range map[string]types.String{
+			"StorageClass": data.StorageClass,
+			"NfsMountPath": data.NfsMountPath,
+			"FileEndpoint": data.FileEndpoint,
+		} {
+			if !v.IsNull() {
+				t.Errorf("%s = %v, want null, never unknown in state", field, v)
+			}
 		}
 	})
 

@@ -48,13 +48,13 @@ data "latitudesh_filesystem_storage" "by_name" {
 ### Required
 
 - `name` (String) Filesystem name. `block` is reserved and cannot be used. Changing this forces a new resource.
-- `protocols` (Set of String) NFS protocol version(s) to mount the filesystem with (`nfs3`, `nfs4`, case-insensitive). Pass both to allow either protocol. There is no update endpoint, so changing this forces a new resource.
+- `protocols` (Set of String) NFS protocol version(s) to mount the filesystem with (`nfs3`, `nfs4`). Pass both to allow either protocol. There is no update endpoint, so changing this forces a new resource.
 - `region` (String) Site slug where the filesystem is provisioned. Required for high performance file storage; an unknown slug is rejected by the API. Changing this forces a new resource.
 
 ### Optional
 
 - `project` (String) The project (ID or slug) to create the filesystem in. Optional here only if `project` is set on the provider block; one of the two is required. Changing it forces a new resource.
-- `size_in_gb` (Number) Filesystem size, in GB. Defaults to `1500`. Increasing it resizes the filesystem in place; decreasing it forces a new resource.
+- `size_in_gb` (Number) Filesystem size, in GB. Defaults to `1500` on create; omitting it later keeps the current size. Increasing it resizes the filesystem in place; decreasing it forces a new resource.
 
 ### Read-Only
 

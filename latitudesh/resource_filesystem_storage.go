@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
@@ -22,6 +21,7 @@ import (
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	"github.com/latitudesh/terraform-provider-latitudesh/v2/internal/planmodifiers"
 	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
 
@@ -101,14 +101,18 @@ func (r *FilesystemStorageResource) Schema(ctx context.Context, req resource.Sch
 				},
 			},
 			"size_in_gb": schema.Int64Attribute{
-				MarkdownDescription: "Filesystem size, in GB. Defaults to `1500`. Increasing it resizes the filesystem in place; decreasing it forces a new resource.",
+				MarkdownDescription: "Filesystem size, in GB. Defaults to `1500` on create; omitting it later keeps the current size. Increasing it resizes the filesystem in place; decreasing it forces a new resource.",
 				Optional:            true,
 				Computed:            true,
-				Default:             int64default.StaticInt64(1500),
 				Validators: []validator.Int64{
 					int64validator.AtLeast(1),
 				},
 				PlanModifiers: []planmodifier.Int64{
+					// Not a schema Default: that would also plan 1500 on update
+					// whenever the attribute is omitted, and against a larger
+					// imported or grown filesystem the shrink rule below would
+					// replace it, destroying its data.
+					planmodifiers.DefaultOnCreateInt64{Value: 1500},
 					int64planmodifier.RequiresReplaceIf(
 						filesystemStorageShrinkRequiresReplace,
 						"Filesystems can only grow, so a smaller size forces a new resource.",
@@ -117,13 +121,15 @@ func (r *FilesystemStorageResource) Schema(ctx context.Context, req resource.Sch
 				},
 			},
 			"protocols": schema.SetAttribute{
-				MarkdownDescription: "NFS protocol version(s) to mount the filesystem with (`nfs3`, `nfs4`, case-insensitive). Pass both to allow either protocol. There is no update endpoint, so changing this forces a new resource.",
+				MarkdownDescription: "NFS protocol version(s) to mount the filesystem with (`nfs3`, `nfs4`). Pass both to allow either protocol. There is no update endpoint, so changing this forces a new resource.",
 				Required:            true,
 				ElementType:         types.StringType,
 				Validators: []validator.Set{
 					setvalidator.SizeAtLeast(1),
+					// Lowercase only: the API reads protocols back as lowercase
+					// enum values, so `NFS4` in config could never match state.
 					setvalidator.ValueStringsAre(
-						stringvalidator.OneOfCaseInsensitive("nfs3", "nfs4"),
+						stringvalidator.OneOf("nfs3", "nfs4"),
 					),
 				},
 				PlanModifiers: []planmodifier.Set{
@@ -233,31 +239,7 @@ func (r *FilesystemStorageResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
-	// There is no single-item GET to reconcile with, only the list. A miss here
-	// only means the filesystem has not shown up in the list yet, so the create
-	// response is kept rather than dropping a filesystem that exists and bills.
-	refreshed := data
-	var refreshDiags diag.Diagnostics
-	found := r.readFilesystemStorageInto(ctx, &refreshed, &refreshDiags)
-	if refreshDiags.HasError() {
-		resp.Diagnostics.AddWarning("Filesystem storage created, but reading it back failed",
-			"The filesystem was created and saved from the create response; the next refresh will read it again. Read error: "+
-				refreshDiags.Errors()[0].Detail())
-		found = false
-	}
-	if found {
-		data = refreshed
-	} else {
-		if data.StorageClass.IsUnknown() {
-			data.StorageClass = types.StringNull()
-		}
-		if data.NfsMountPath.IsUnknown() {
-			data.NfsMountPath = types.StringNull()
-		}
-		if data.FileEndpoint.IsUnknown() {
-			data.FileEndpoint = types.StringNull()
-		}
-	}
+	r.reconcileFilesystemStorage(ctx, &data, &resp.Diagnostics)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -296,7 +278,7 @@ func (r *FilesystemStorageResource) Update(ctx context.Context, req resource.Upd
 	}
 
 	if !data.SizeInGb.Equal(state.SizeInGb) {
-		_, err := r.client.FilesystemStorage.UpdateFilesystem(ctx, state.ID.ValueString(), operations.UpdateFilesystemFilesystemStorageRequestBody{
+		result, err := r.client.FilesystemStorage.UpdateFilesystem(ctx, state.ID.ValueString(), operations.UpdateFilesystemFilesystemStorageRequestBody{
 			Data: operations.UpdateFilesystemFilesystemStorageData{
 				Type: operations.UpdateFilesystemFilesystemStorageTypeFilesystems,
 				Attributes: operations.UpdateFilesystemFilesystemStorageAttributes{
@@ -308,17 +290,18 @@ func (r *FilesystemStorageResource) Update(ctx context.Context, req resource.Upd
 			resp.Diagnostics.AddError("Client Error", "Unable to resize filesystem storage, got error: "+err.Error())
 			return
 		}
+
+		// Like Create, map the mutation response first so a list that has not
+		// caught up cannot fail an apply whose resize already succeeded.
+		if result != nil && result.Object != nil && result.Object.Data != nil {
+			resp.Diagnostics.Append(mapFilesystemStorage(ctx, &data, result.Object.Data)...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+		}
 	}
 
-	found := r.readFilesystemStorageInto(ctx, &data, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	if !found {
-		resp.Diagnostics.AddError("Filesystem storage not found",
-			"The filesystem no longer exists. Remove it from state (or refresh) and re-apply to recreate it.")
-		return
-	}
+	r.reconcileFilesystemStorage(ctx, &data, &resp.Diagnostics)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -410,6 +393,38 @@ func (r *FilesystemStorageResource) readFilesystemStorageInto(ctx context.Contex
 	return false
 }
 
+// reconcileFilesystemStorage refreshes data from ListFilesystems after a
+// successful create or resize. There is no single-item GET, and a miss there
+// only means the list has not caught up yet, so what data already holds from
+// the mutation is kept rather than failing an apply that went through.
+func (r *FilesystemStorageResource) reconcileFilesystemStorage(ctx context.Context, data *FilesystemStorageResourceModel, diags *diag.Diagnostics) {
+	refreshed := *data
+	var refreshDiags diag.Diagnostics
+	found := r.readFilesystemStorageInto(ctx, &refreshed, &refreshDiags)
+	if refreshDiags.HasError() {
+		diags.AddWarning("Filesystem storage saved, but reading it back failed",
+			"The change was applied and saved to state; the next refresh will read the filesystem again. Read error: "+
+				refreshDiags.Errors()[0].Detail())
+		found = false
+	}
+	if found {
+		*data = refreshed
+		return
+	}
+
+	// A resize whose response carried no body leaves these unknown from the
+	// plan; state must not hold unknowns after apply.
+	if data.StorageClass.IsUnknown() {
+		data.StorageClass = types.StringNull()
+	}
+	if data.NfsMountPath.IsUnknown() {
+		data.NfsMountPath = types.StringNull()
+	}
+	if data.FileEndpoint.IsUnknown() {
+		data.FileEndpoint = types.StringNull()
+	}
+}
+
 // filesystemStorageShrinkRequiresReplace replaces the filesystem only when
 // size_in_gb decreases, since UpdateFilesystem can only grow it ("Allow you to
 // upgrade the size of a filesystem" per the SDK doc comment). An unknown size
@@ -451,6 +466,13 @@ func mapFilesystemStorage(ctx context.Context, data *FilesystemStorageResourceMo
 		data.ID = types.StringValue(*fs.ID)
 	}
 
+	// Purely-computed fields (known only after apply): nil from the API is set
+	// to null rather than left stale or unknown — even when the whole
+	// attributes object is missing, or Create/Update would save unknowns.
+	data.StorageClass = types.StringNull()
+	data.NfsMountPath = types.StringNull()
+	data.FileEndpoint = types.StringNull()
+
 	a := fs.Attributes
 	if a == nil {
 		return diags
@@ -483,22 +505,14 @@ func mapFilesystemStorage(ctx context.Context, data *FilesystemStorageResourceMo
 		data.SizeInGb = types.Int64Value(*a.SizeInGb)
 	}
 
-	// Purely-computed fields (known only after apply): nil from the API is set
-	// to null rather than left stale or unknown.
 	if a.FilesystemStorageClass != nil {
 		data.StorageClass = types.StringValue(string(*a.FilesystemStorageClass))
-	} else {
-		data.StorageClass = types.StringNull()
 	}
 	if a.NfsMountPath != nil {
 		data.NfsMountPath = types.StringValue(*a.NfsMountPath)
-	} else {
-		data.NfsMountPath = types.StringNull()
 	}
 	if a.FileEndpoint != nil {
 		data.FileEndpoint = types.StringValue(*a.FileEndpoint)
-	} else {
-		data.FileEndpoint = types.StringNull()
 	}
 
 	// project accepts either a slug or an ID going in, but the API echoes back
