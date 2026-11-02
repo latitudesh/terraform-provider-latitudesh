@@ -380,7 +380,7 @@ func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"kubernetes_version": schema.StringAttribute{
-				MarkdownDescription: "Kubernetes version for the pool's nodes, from `latitudesh_lks_versions`. Omit it to keep the pool on the cluster's version, or set it to pin the pool. It can never be newer than the control plane, and any version change recycles the pool's nodes.",
+				MarkdownDescription: "Kubernetes version for the pool's nodes, from `latitudesh_lks_versions`. Omit it and the pool follows the cluster's version, with a cluster upgrade reaching the pool on the next apply; set it to pin the pool. It can never be newer than the control plane, and any version change recycles the pool's nodes.",
 				Optional:            true,
 				Computed:            true,
 				Validators: []validator.String{

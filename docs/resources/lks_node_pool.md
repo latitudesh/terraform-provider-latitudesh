@@ -9,7 +9,7 @@ description: |-
 
 The LKS node pool resource allows you to create and manage node pools within an LKS (Latitude Kubernetes Service) cluster. Every pool, the first one included, is one of these, so each scales, upgrades and is destroyed without touching the cluster. See [Node Pools](https://www.latitude.sh/docs/lks/node-pools) for how node pools work.
 
-`node_count` scales the pool in place; `cluster_id`, `plan` and `max_pods_per_node` force a new resource. Omit `kubernetes_version` to keep the pool on the cluster's Kubernetes version, or set it to pin the pool — a pool can never run a version newer than the control plane, and any version change recycles the pool's nodes.
+`node_count` scales the pool in place; `cluster_id`, `plan` and `max_pods_per_node` force a new resource. Omit `kubernetes_version` and the pool follows the cluster's Kubernetes version — a cluster upgrade reaches the pool on the **next** apply; reference the cluster's `kubernetes_version` to upgrade both in the same apply, or set a literal version to pin the pool. A pool can never run a version newer than the control plane, and any version change recycles the pool's nodes.
 
 Keep at least one pool in the cluster free of `NoSchedule` and `NoExecute` taints, or the cluster never becomes ready: keep a general-purpose pool and taint the specialized ones, as the example does.
 
@@ -89,7 +89,7 @@ resource "latitudesh_lks_node_pool" "gpu" {
 ### Optional
 
 - `description` (String) Optional description, up to 200 characters. It cannot be removed once set; change it instead.
-- `kubernetes_version` (String) Kubernetes version for the pool's nodes, from `latitudesh_lks_versions`. Omit it to keep the pool on the cluster's version, or set it to pin the pool. It can never be newer than the control plane, and any version change recycles the pool's nodes.
+- `kubernetes_version` (String) Kubernetes version for the pool's nodes, from `latitudesh_lks_versions`. Omit it and the pool follows the cluster's version, with a cluster upgrade reaching the pool on the next apply; set it to pin the pool. It can never be newer than the control plane, and any version change recycles the pool's nodes.
 - `labels` (Map of String) Kubernetes labels applied to every node in the pool, up to 50. Keys under `kubernetes.io`, `k8s.io`, `cluster.x-k8s.io` and `lks.latitude.sh` are reserved.
 - `max_pods_per_node` (Number) Maximum Pods per node, between 16 and 500. Defaults to 110. Changing it forces a new resource.
 - `name` (String) Display name for the pool. Generated when omitted.
