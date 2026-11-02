@@ -112,7 +112,7 @@ func (d *LksClustersDataSource) Schema(ctx context.Context, req datasource.Schem
 				},
 			},
 			"status": schema.StringAttribute{
-				MarkdownDescription: "Only return clusters with this status (case-insensitive), e.g. `ready` or `provisioning`. This is an open enum controlled by the platform, so no fixed set of values is enforced here.",
+				MarkdownDescription: "Only return clusters with this status, e.g. `ready`.",
 				Optional:            true,
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -177,7 +177,7 @@ func (d *LksClustersDataSource) Schema(ctx context.Context, req datasource.Schem
 							Computed:            true,
 						},
 						"reason": schema.StringAttribute{
-							MarkdownDescription: "Machine-readable status reason (open enum).",
+							MarkdownDescription: "Status reason code reported for the cluster.",
 							Computed:            true,
 						},
 						"control_plane_endpoint": schema.StringAttribute{
@@ -185,7 +185,7 @@ func (d *LksClustersDataSource) Schema(ctx context.Context, req datasource.Schem
 							Computed:            true,
 						},
 						"kubeconfig_url": schema.StringAttribute{
-							MarkdownDescription: "URL to fetch the cluster kubeconfig from. It only resolves once `status` is `ready`.",
+							MarkdownDescription: "URL to download the cluster's kubeconfig. Null until the cluster is ready.",
 							Computed:            true,
 						},
 						"platform_version": schema.StringAttribute{

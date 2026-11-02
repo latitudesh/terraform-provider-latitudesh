@@ -350,21 +350,21 @@ func (d *LksPlansDataSource) Configure(ctx context.Context, req datasource.Confi
 
 func (d *LksPlansDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "LKS (Latitude Kubernetes Service) plans data source - the machine plans an LKS node pool can be built from, with per-region availability and stock. `GET /plans/lks` is its own catalog: an ordinary server plan slug from `latitudesh_plan` is not interchangeable with one of these. Pricing is not exposed, matching `latitudesh_plan`. Never scoped to a project; `site` is the only argument — set it to get `stock`, omit it for the whole catalog.",
+		MarkdownDescription: "LKS plans data source - the plans an LKS node pool can be built from, with per-site stock. Set `site` to fill `stock`; omit it for the whole catalog.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Synthetic identifier for this query: the `site` filter, or `all` when unfiltered.",
 				Computed:            true,
 			},
 			"site": schema.StringAttribute{
-				MarkdownDescription: "Only return plans that have capacity at this site **right now**, and fill `stock` for it. Use the same slug you pass to `latitudesh_lks_cluster.site`. Omit to return the whole catalog.",
+				MarkdownDescription: "Only return plans with capacity at this site, and fill `stock` for it. Omit to return the whole catalog.",
 				Optional:            true,
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
 				},
 			},
 			"stock": schema.MapAttribute{
-				MarkdownDescription: "Nodes available at `site` right now, keyed by plan slug — every entry is greater than zero, because a plan with no capacity is not returned. This is the answer to \"which plan can I build here, and how many nodes of it\" with no loop and no filtering: `keys(...)` is the shortlist and `...[\"slug\"]` is the count. Null when `site` is not set, since a count is only meaningful for one site.",
+				MarkdownDescription: "Nodes available at `site`, keyed by plan slug. Null when `site` is not set.",
 				ElementType:         types.Int64Type,
 				Computed:            true,
 			},
@@ -386,7 +386,7 @@ func (d *LksPlansDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 							Computed:            true,
 						},
 						"in_stock_count": schema.MapAttribute{
-							MarkdownDescription: "Nodes available right now, keyed by site slug — `regions[].locations.in_stock_count` flattened, since a site belongs to exactly one region. Only sites with stock appear, so `lookup(plan.in_stock_count, site, 0) > 0` is the whole buildability test for a site+plan pair.",
+							MarkdownDescription: "Nodes available right now, keyed by site slug. Only sites with stock appear.",
 							ElementType:         types.Int64Type,
 							Computed:            true,
 						},
@@ -417,7 +417,7 @@ func (d *LksPlansDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 									},
 								},
 								"memory_total": schema.StringAttribute{
-									MarkdownDescription: "Total memory, as returned by the API. Typed as a string because the API answers either a number or free-form text here, the same way `latitudesh_plan`'s `drives.size` does.",
+									MarkdownDescription: "Total memory, as returned by the API.",
 									Computed:            true,
 								},
 								"drives": schema.ListNestedAttribute{
@@ -457,7 +457,7 @@ func (d *LksPlansDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 									},
 								},
 								"gpu": schema.SingleNestedAttribute{
-									MarkdownDescription: "GPU specification, null on plans without one. The API answers an empty object rather than null for those, which this collapses to null.",
+									MarkdownDescription: "GPU specification. Null on plans without one.",
 									Computed:            true,
 									Attributes: map[string]schema.Attribute{
 										"count": schema.Int64Attribute{
@@ -481,7 +481,7 @@ func (d *LksPlansDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 							},
 						},
 						"regions": schema.ListNestedAttribute{
-							MarkdownDescription: "Where this plan can run, and whether it currently can. `available_sites` is the full list; `in_stock_sites` is the subset with capacity right now — a plan available at a site with no stock will fail to build a node pool there.",
+							MarkdownDescription: "Where this plan can run: `available_sites` is the full list, `in_stock_sites` the subset with capacity right now.",
 							Computed:            true,
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
@@ -494,7 +494,7 @@ func (d *LksPlansDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 										Computed:            true,
 									},
 									"available_sites": schema.ListAttribute{
-										MarkdownDescription: "Site slugs where LKS can deploy this plan. These match `latitudesh_lks_sites`, and `latitudesh_lks_cluster.site`.",
+										MarkdownDescription: "Site slugs where LKS can deploy this plan.",
 										ElementType:         types.StringType,
 										Computed:            true,
 									},

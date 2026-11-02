@@ -2,22 +2,17 @@
 page_title: "latitudesh_lks_node_pools Data Source - latitudesh"
 subcategory: ""
 description: |-
-  LKS (Latitude Kubernetes Service) node pools data source - every node pool in a cluster, including any created outside Terraform. Node pools are always scoped to a cluster, so cluster_id is required.
+  LKS node pools data source - list the node pools in a cluster.
 ---
 
 # latitudesh_lks_node_pools (Data Source)
 
-Lists every node pool in an LKS (Latitude Kubernetes Service) cluster, including pools created outside Terraform. Node pools are always scoped to a cluster, so `cluster_id` is required.
-
-Each pool comes back with everything the API reports about it, `labels` and `taints` included — those are what tell one pool apart from another.
-
-Read `status` to tell whether a pool has settled. `ready_nodes` is a count the platform does not always report: it is `null` on pools it does not track it for, which is not the same as zero, so comparing it against `node_count` can fail on a null.
+List the node pools in an LKS (Latitude Kubernetes Service) cluster, including pools created outside Terraform.
 
 ## Example Usage
 
 ```terraform
-# Every node pool in a cluster — any latitudesh_lks_node_pool you manage, and
-# anything created outside Terraform.
+# Every node pool in a cluster, including pools created outside Terraform.
 data "latitudesh_lks_clusters" "pool_source" {
   project = "<project-id-or-slug>"
   status  = "ready"
@@ -27,9 +22,6 @@ data "latitudesh_lks_node_pools" "by_cluster" {
   cluster_id = data.latitudesh_lks_clusters.pool_source.clusters[0].id
 }
 
-# `status` is what says whether a pool has settled. Do not compare ready_nodes
-# against node_count for this: the platform does not always report the count,
-# and it comes back null — not zero — on pools it does not track it for.
 output "lks_pools_still_working" {
   value = [
     for pool in data.latitudesh_lks_node_pools.by_cluster.node_pools :
@@ -37,8 +29,7 @@ output "lks_pools_still_working" {
   ]
 }
 
-# Labels and taints are what tell one pool from another. A pool with no labels
-# reports `labels` as null, which lookup() rejects, so index inside try().
+# A pool with no labels reports `labels` as null, so index inside try().
 output "lks_pools_by_workload" {
   value = {
     for pool in data.latitudesh_lks_node_pools.by_cluster.node_pools :
@@ -69,15 +60,15 @@ Read-Only:
 - `id` (String) Node pool ID.
 - `kubernetes_version` (String) Kubernetes patch version running on the pool's nodes.
 - `labels` (Map of String) Kubernetes labels applied to every node in the pool.
-- `max_pods_per_node` (Number) kubelet `--max-pods` for the pool's nodes. `null` when the pool runs the platform default.
+- `max_pods_per_node` (Number) Maximum Pods per node. Null when the pool uses the default.
 - `message` (String) Human-readable detail behind the pool's current `status`.
 - `mode` (String) Provisioning mode of the pool's nodes, e.g. `on_demand`.
 - `name` (String) Display name for the pool.
 - `node_count` (Number) Nodes the pool is sized for.
 - `plan` (String) Plan the pool's nodes are provisioned from.
 - `platform_version` (String) Platform (LKS controller) version running on the pool's nodes.
-- `ready_nodes` (Number) Nodes currently ready. Below `node_count` while the pool is still building or scaling, and `null` on a pool the platform does not report it for — which is not the same as zero.
-- `reason` (String) Machine-readable status reason for the pool (open enum).
+- `ready_nodes` (Number) Nodes currently ready. Null when the platform does not report it.
+- `reason` (String) Status reason code reported for the pool.
 - `status` (String) Pool lifecycle status.
 - `taints` (Attributes Set) Kubernetes taints applied to every node in the pool. (see [below for nested schema](#nestedatt--node_pools--taints))
 - `type` (String) Node type backing the pool, e.g. `bare_metal`.

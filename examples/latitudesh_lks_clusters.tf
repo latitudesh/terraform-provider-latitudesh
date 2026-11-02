@@ -1,5 +1,4 @@
-# Every LKS cluster in a project. `status` is optional: drop it to see clusters
-# still provisioning, or being deleted, alongside the ready ones.
+# The LKS clusters in a project. `status` is optional.
 data "latitudesh_lks_clusters" "in_project" {
   project = "<project-id-or-slug>"
   status  = "ready"

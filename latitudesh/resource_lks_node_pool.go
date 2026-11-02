@@ -329,8 +329,7 @@ func (r *LksNodePoolResource) Metadata(ctx context.Context, req resource.Metadat
 
 func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "A node pool for an LKS (Latitude Kubernetes Service) cluster. `latitudesh_lks_cluster` provisions a control plane only: the cluster has no workers, and does not become `ready`, until at least one pool has nodes the platform's own components (CNI, CoreDNS) can schedule on.\n\n" +
-			"Create waits for the pool's nodes and then for the cluster to settle on them, so an apply that adds a cluster's first pool ends on a `ready` cluster. If the cluster does not get there within the create timeout, the apply still succeeds, with a warning: the pool itself is up.",
+		MarkdownDescription: "LKS node pool resource",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Node pool identifier.",
@@ -340,7 +339,7 @@ func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"cluster_id": schema.StringAttribute{
-				MarkdownDescription: "ID of the `latitudesh_lks_cluster` cluster the pool belongs to. Changing it forces a new resource; a pool cannot move between clusters.",
+				MarkdownDescription: "ID of the cluster the pool belongs to. Changing it forces a new resource.",
 				Required:            true,
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -350,7 +349,7 @@ func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"plan": schema.StringAttribute{
-				MarkdownDescription: "Plan the pool's nodes are provisioned from, as listed by `latitudesh_lks_plans` — not interchangeable with a `latitudesh_plan` server slug. Check the plan has stock at the cluster's site (`in_stock_sites`) before applying. There is no update endpoint for it, so changing it forces a new resource.",
+				MarkdownDescription: "Plan the pool's nodes are provisioned from, as listed by `latitudesh_lks_plans`. Pick one with stock at the cluster's site. Changing it forces a new resource.",
 				Required:            true,
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -362,14 +361,14 @@ func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaReq
 			// `count` itself is a reserved Terraform meta-argument, so the
 			// attribute takes the name the other Kubernetes providers use.
 			"node_count": schema.Int64Attribute{
-				MarkdownDescription: "Number of nodes in the pool. Changing it scales the pool in place; apply waits for the new count to be ready.",
+				MarkdownDescription: "Number of nodes in the pool. Changing it scales the pool in place.",
 				Required:            true,
 				Validators: []validator.Int64{
 					int64validator.AtLeast(1),
 				},
 			},
 			"type": schema.StringAttribute{
-				MarkdownDescription: "Node type. `bare_metal` is the only value the API accepts today. Set at creation; changing it forces a new resource.",
+				MarkdownDescription: "Node type. `bare_metal` is the only value accepted today. Changing it forces a new resource.",
 				Optional:            true,
 				Computed:            true,
 				Validators: []validator.String{
@@ -381,7 +380,7 @@ func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"kubernetes_version": schema.StringAttribute{
-				MarkdownDescription: "Kubernetes patch version for the pool's nodes, from `latitudesh_lks_versions`. **Omit it and the pool tracks the cluster's control-plane version**: a control-plane upgrade brings the pool with it (on the next apply, since the pool learns the new version only once the cluster is on it). Set it explicitly to pin the pool to one version instead. Either way it must never be **newer** than the control plane, which the API rejects with 422 `VERSION_SKEW` — tracking guarantees this by construction, upgrade the cluster first.",
+				MarkdownDescription: "Kubernetes version for the pool's nodes, from `latitudesh_lks_versions`. Omit it to keep the pool on the cluster's version, or set it to pin the pool. It can never be newer than the control plane, and any version change recycles the pool's nodes.",
 				Optional:            true,
 				Computed:            true,
 				Validators: []validator.String{
@@ -392,7 +391,7 @@ func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"max_pods_per_node": schema.Int64Attribute{
-				MarkdownDescription: "kubelet `--max-pods` for every node in the pool. Create-only: the API rejects a PATCH that carries it with 422, so changing it forces a new resource. Omit for the platform default (110).",
+				MarkdownDescription: "Maximum Pods per node, between 16 and 500. Defaults to 110. Changing it forces a new resource.",
 				Optional:            true,
 				Computed:            true,
 				Validators: []validator.Int64{
@@ -404,7 +403,7 @@ func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"name": schema.StringAttribute{
-				MarkdownDescription: "Display name for the pool. Generated by the platform when omitted.",
+				MarkdownDescription: "Display name for the pool. Generated when omitted.",
 				Optional:            true,
 				Computed:            true,
 				Validators: []validator.String{
@@ -415,11 +414,11 @@ func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"description": schema.StringAttribute{
-				MarkdownDescription: "Optional customer description. It cannot be removed once set — the API rejects an empty value and ignores a null — so removing it from configuration leaves a diff that cannot converge; change it instead.",
+				MarkdownDescription: "Optional description, up to 200 characters. It cannot be removed once set; change it instead.",
 				Optional:            true,
 			},
 			"labels": schema.MapAttribute{
-				MarkdownDescription: "Kubernetes labels applied to every node in the pool (max 50). Keys follow Kubernetes label-key syntax; values may be empty. Keys under `kubernetes.io`, `k8s.io`, `cluster.x-k8s.io`, `lks.latitude.sh` or their subdomains are reserved and rejected with 422.",
+				MarkdownDescription: "Kubernetes labels applied to every node in the pool, up to 50. Keys under `kubernetes.io`, `k8s.io`, `cluster.x-k8s.io` and `lks.latitude.sh` are reserved.",
 				ElementType:         types.StringType,
 				Optional:            true,
 				Validators: []validator.Map{
@@ -428,9 +427,8 @@ func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"taints": schema.SetNestedAttribute{
-				MarkdownDescription: "Kubernetes taints applied to every node in the pool (max 50). A set rather than a list: the API imposes no ordering, and each `(key, effect)` pair must be unique.\n\n" +
-					"Keep at least one pool in the cluster free of `NoSchedule` and `NoExecute` taints: the platform's own components do not tolerate them, so a cluster whose every pool carries one never leaves `provisioning`. The API accepts the taint, and a single pool cannot tell whether it is the only one, so this is not checked at plan time.",
-				Optional: true,
+				MarkdownDescription: "Kubernetes taints applied to every node in the pool, up to 50; each `(key, effect)` pair must be unique.\n\nKeep at least one pool in the cluster free of `NoSchedule` and `NoExecute` taints, or the cluster never becomes ready.",
+				Optional:            true,
 				Validators: []validator.Set{
 					setvalidator.SizeAtMost(50),
 					lksUniqueTaintsValidator{},
@@ -438,7 +436,7 @@ func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaReq
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"key": schema.StringAttribute{
-							MarkdownDescription: "Taint key. Same syntax and reserved-prefix rules as a label key.",
+							MarkdownDescription: "Taint key. Same syntax and reserved prefixes as a label key.",
 							Required:            true,
 							Validators: []validator.String{
 								stringvalidator.LengthAtLeast(1),
@@ -459,11 +457,11 @@ func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"mode": schema.StringAttribute{
-				MarkdownDescription: "Pool mode reported by the platform.",
+				MarkdownDescription: "Pool mode.",
 				Computed:            true,
 			},
 			"status": schema.StringAttribute{
-				MarkdownDescription: "Pool lifecycle status. Open enum sourced from the platform controller — new values may appear without notice, which is why apply waits until the platform reports no operation in progress rather than for one particular word.",
+				MarkdownDescription: "Pool status, e.g. `provisioning` or `ready`.",
 				Computed:            true,
 			},
 			"message": schema.StringAttribute{
@@ -471,11 +469,11 @@ func (r *LksNodePoolResource) Schema(ctx context.Context, req resource.SchemaReq
 				Computed:            true,
 			},
 			"reason": schema.StringAttribute{
-				MarkdownDescription: "Machine-readable status reason (open enum).",
+				MarkdownDescription: "Status reason code reported for the pool.",
 				Computed:            true,
 			},
 			"ready_nodes": schema.Int64Attribute{
-				MarkdownDescription: "Nodes currently ready. The platform does not always report it: it is absent while the pool is still building, and stays `null` on pools it never counts — so a null here does not mean zero. When it is reported, apply additionally waits for it to reach `node_count`.",
+				MarkdownDescription: "Nodes currently ready. Null when the platform does not report it.",
 				Computed:            true,
 			},
 			"platform_version": schema.StringAttribute{
