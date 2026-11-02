@@ -7,10 +7,15 @@ description: |-
 
 # {{.Name}} ({{.Type}})
 
-Retrieve a [filesystem storage](https://www.latitude.sh/dashboard) volume by `id`, or by `name` (optionally narrowed with `project`).
+Looks up an existing filesystem by `id`, or by `name` (optionally narrowed with `project`).
 
 ## Example Usage
 
-{{ tffile (printf "examples/%s.tf" .Name) }}
+```hcl
+data "latitudesh_filesystem_storage" "shared" {
+  name    = "shared-data"
+  project = "proj_..."
+}
+```
 
 {{ .SchemaMarkdown | trimspace }}

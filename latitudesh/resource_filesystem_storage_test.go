@@ -43,9 +43,9 @@ type mockFilesystemStorageAPI struct {
 	items  map[string]*mockFilesystem
 	nextID int
 
-	// rejectResize answers resizes with the 422 the API returns when it will
-	// not grow a filesystem, independent of the shrink-is-a-replace rule the
-	// provider itself enforces client-side.
+	// rejectResize answers resizes with the 422 the API returns when the
+	// storage backend refuses the new quota, independent of the
+	// shrink-is-a-replace rule the provider itself enforces client-side.
 	rejectResize bool
 
 	// listLagAfterResize is how many list calls after a successful resize
@@ -191,14 +191,14 @@ func (m *mockFilesystemStorageAPI) handler(w http.ResponseWriter, r *http.Reques
 		if m.rejectResize {
 			w.Header().Set("Content-Type", "application/vnd.api+json")
 			w.WriteHeader(http.StatusUnprocessableEntity)
-			_, _ = w.Write([]byte(`{"errors":[{"code":"STORAGE_OPERATION_UNSUPPORTED","status":"422","title":"Storage operation unsupported","detail":"Resizing is not available for this filesystem."}]}`))
+			_, _ = w.Write([]byte(`{"errors":[{"code":"STORAGE_VALIDATION_FAILED","status":"422","title":"Storage Validation Failed","detail":"Invalid request parameters for this storage operation."}]}`))
 			return
 		}
 		// Like the API, refuse anything but growth (a resize to the same size too).
 		if payload.Data.Attributes.SizeInGb <= v.sizeInGb {
 			w.Header().Set("Content-Type", "application/vnd.api+json")
 			w.WriteHeader(http.StatusUnprocessableEntity)
-			_, _ = w.Write([]byte(`{"errors":[{"code":"STORAGE_VALIDATION_FAILED","status":"422","title":"Storage Validation Failed","detail":"Filesystems can only be increased in size."}]}`))
+			_, _ = w.Write([]byte(`{"errors":[{"code":"UPGRADE_SIZE_ERROR","status":"422","title":"Filesystem upgrade size error","detail":"Size must be greater than current size"}]}`))
 			return
 		}
 		v.sizeInGb = payload.Data.Attributes.SizeInGb
@@ -273,7 +273,6 @@ func TestFilesystemStorage_CreateReadDelete(t *testing.T) {
 					resource.TestCheckResourceAttr("latitudesh_filesystem_storage.test_item", "name", "shared-data"),
 					resource.TestCheckResourceAttr("latitudesh_filesystem_storage.test_item", "region", "ASH"),
 					resource.TestCheckResourceAttr("latitudesh_filesystem_storage.test_item", "size_in_gb", "1500"),
-					resource.TestCheckResourceAttr("latitudesh_filesystem_storage.test_item", "storage_class", "standard"),
 					resource.TestCheckResourceAttr("latitudesh_filesystem_storage.test_item", "protocols.#", "1"),
 				),
 			},
@@ -451,7 +450,7 @@ func TestFilesystemStorage_ResizeFailureFailsApply(t *testing.T) {
 					mock.rejectResize = true
 				},
 				Config:      testAccFilesystemStorageConfig("test-project", "shared-data", "ASH", 2000, `["nfs4"]`),
-				ExpectError: regexp.MustCompile(`(?s)Unable to resize filesystem storage.*STORAGE_OPERATION_UNSUPPORTED`),
+				ExpectError: regexp.MustCompile(`(?s)Unable to resize filesystem storage.*STORAGE_VALIDATION_FAILED`),
 			},
 			{
 				// The failed resize must not have been written to state.
@@ -540,7 +539,6 @@ func TestFilesystemStorage_ResizeSurvivesListLag(t *testing.T) {
 				Config: testAccFilesystemStorageConfig("test-project", "shared-data", "ASH", 2000, `["nfs4"]`),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(name, "size_in_gb", "2000"),
-					resource.TestCheckResourceAttr(name, "storage_class", "standard"),
 				),
 			},
 		},
@@ -597,7 +595,6 @@ func TestMapFilesystemStorage(t *testing.T) {
 		// As Create/Update hand it over from the plan: computed fields unknown.
 		data := FilesystemStorageResourceModel{
 			Name:         types.StringValue("shared-data"),
-			StorageClass: types.StringUnknown(),
 			NfsMountPath: types.StringUnknown(),
 			FileEndpoint: types.StringUnknown(),
 		}
@@ -613,7 +610,6 @@ func TestMapFilesystemStorage(t *testing.T) {
 			t.Fatalf("Name = %v, want the planned value untouched", data.Name)
 		}
 		for field, v := range map[string]types.String{
-			"StorageClass": data.StorageClass,
 			"NfsMountPath": data.NfsMountPath,
 			"FileEndpoint": data.FileEndpoint,
 		} {
@@ -625,7 +621,6 @@ func TestMapFilesystemStorage(t *testing.T) {
 
 	t.Run("purely computed fields null on absence", func(t *testing.T) {
 		data := FilesystemStorageResourceModel{
-			StorageClass: types.StringValue("stale"),
 			NfsMountPath: types.StringValue("stale"),
 			FileEndpoint: types.StringValue("stale"),
 		}
@@ -641,9 +636,6 @@ func TestMapFilesystemStorage(t *testing.T) {
 		})
 		if diags.HasError() {
 			t.Fatalf("unexpected diagnostics: %v", diags)
-		}
-		if !data.StorageClass.IsNull() {
-			t.Errorf("StorageClass = %v, want null", data.StorageClass)
 		}
 		if !data.NfsMountPath.IsNull() {
 			t.Errorf("NfsMountPath = %v, want null", data.NfsMountPath)
@@ -708,13 +700,8 @@ func TestMapFilesystemStorage(t *testing.T) {
 }
 
 // TestAccFilesystemStorage_Basic exercises create, read and import against the
-// live API. The site (testFilesystemStorageSite) is not documented anywhere on
-// the FilesystemStorage group itself; ASH is reused from
-// latitudesh_block_storage / latitudesh_object_storage, whose `region`
-// attribute carries the identical "site slug" doc comment - a human should
-// confirm ASH actually has filesystem storage capacity, and that the test's
-// team has filesystem storage access enabled (gated per team per
-// sdk-coverage.yaml), before relying on this test.
+// live API. ASH offers filesystem storage; the test's team must have the site
+// open to it.
 const testFilesystemStorageSite = "ASH"
 
 func TestAccFilesystemStorage_Basic(t *testing.T) {

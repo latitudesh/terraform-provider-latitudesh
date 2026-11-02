@@ -43,7 +43,6 @@ type FilesystemStorageDataSourceModel struct {
 	Region       types.String `tfsdk:"region"`
 	SizeInGb     types.Int64  `tfsdk:"size_in_gb"`
 	Protocols    types.Set    `tfsdk:"protocols"`
-	StorageClass types.String `tfsdk:"storage_class"`
 	NfsMountPath types.String `tfsdk:"nfs_mount_path"`
 	FileEndpoint types.String `tfsdk:"file_endpoint"`
 }
@@ -62,7 +61,7 @@ func (d *FilesystemStorageDataSource) Configure(ctx context.Context, req datasou
 
 func (d *FilesystemStorageDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Filesystem Storage data source - lookup a filesystem by id, or by name (optionally scoped to a project). The API has no single-item read, so every lookup scans `ListFilesystems`.",
+		MarkdownDescription: "Looks up a filesystem by `id`, or by `name` (optionally scoped to a `project`).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Filesystem identifier to look up.",
@@ -77,7 +76,7 @@ func (d *FilesystemStorageDataSource) Schema(ctx context.Context, req datasource
 				},
 			},
 			"name": schema.StringAttribute{
-				MarkdownDescription: "Filesystem name to look up. Names are not guaranteed unique; the first match wins, so narrow the search with `project` if the lookup is ambiguous.",
+				MarkdownDescription: "Filesystem name to look up.",
 				Optional:            true,
 				Computed:            true,
 				Validators: []validator.String{
@@ -89,7 +88,7 @@ func (d *FilesystemStorageDataSource) Schema(ctx context.Context, req datasource
 				},
 			},
 			"project": schema.StringAttribute{
-				MarkdownDescription: "Project (ID or slug) to narrow a `name` lookup to. Ignored when `id` is set: an `id` lookup always reports the owning project the API returns, whatever was configured here.",
+				MarkdownDescription: "Project ID or slug to filter a `name` lookup by.",
 				Optional:            true,
 				Computed:            true,
 				Validators: []validator.String{
@@ -97,7 +96,7 @@ func (d *FilesystemStorageDataSource) Schema(ctx context.Context, req datasource
 				},
 			},
 			"region": schema.StringAttribute{
-				MarkdownDescription: "Site slug where the filesystem is provisioned.",
+				MarkdownDescription: "Region (site) slug where the filesystem is provisioned.",
 				Computed:            true,
 			},
 			"size_in_gb": schema.Int64Attribute{
@@ -105,20 +104,16 @@ func (d *FilesystemStorageDataSource) Schema(ctx context.Context, req datasource
 				Computed:            true,
 			},
 			"protocols": schema.SetAttribute{
-				MarkdownDescription: "NFS protocol version(s) the filesystem was requested to be mounted with.",
+				MarkdownDescription: "NFS protocols enabled on the filesystem: `nfs3`, `nfs4` or both.",
 				ElementType:         types.StringType,
 				Computed:            true,
 			},
-			"storage_class": schema.StringAttribute{
-				MarkdownDescription: "Backend storage tier the API assigned based on `region` (`standard` or `high_performance`).",
-				Computed:            true,
-			},
 			"nfs_mount_path": schema.StringAttribute{
-				MarkdownDescription: "Path of the NFS view backing the filesystem. Null for filesystems not backed by high performance file storage.",
+				MarkdownDescription: "Mount path of the filesystem.",
 				Computed:            true,
 			},
 			"file_endpoint": schema.StringAttribute{
-				MarkdownDescription: "Hostname of the NFS endpoint backing the filesystem. Null for filesystems not backed by high performance file storage.",
+				MarkdownDescription: "Endpoint to mount the filesystem from.",
 				Computed:            true,
 			},
 		},
@@ -195,7 +190,6 @@ func (d *FilesystemStorageDataSource) Read(ctx context.Context, req datasource.R
 	data.Region = model.Region
 	data.SizeInGb = model.SizeInGb
 	data.Protocols = model.Protocols
-	data.StorageClass = model.StorageClass
 	data.NfsMountPath = model.NfsMountPath
 	data.FileEndpoint = model.FileEndpoint
 

@@ -50,7 +50,6 @@ func TestFilesystemStorageDataSource_ByID(t *testing.T) {
 					resource.TestCheckResourceAttr("data.latitudesh_filesystem_storage.by_id", "name", "shared-data"),
 					resource.TestCheckResourceAttr("data.latitudesh_filesystem_storage.by_id", "region", "ASH"),
 					resource.TestCheckResourceAttr("data.latitudesh_filesystem_storage.by_id", "size_in_gb", "1500"),
-					resource.TestCheckResourceAttr("data.latitudesh_filesystem_storage.by_id", "storage_class", "standard"),
 				),
 			},
 		},

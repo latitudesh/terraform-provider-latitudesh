@@ -7,13 +7,43 @@ description: |-
 
 # {{.Name}} ({{.Type}})
 
-Creates and manages a persistent NFS filesystem on [Latitude.sh](https://latitude.sh/) that can be mounted by multiple servers. Access to filesystem storage is gated per team — creating this resource requires a team with it enabled.
+Creates and manages an NFS filesystem on [Latitude.sh](https://latitude.sh/) that several servers can mount at the same time. See [File storage](https://www.latitude.sh/docs/storage/filesystem) for limits, supported operating systems and mount options.
 
-Mounting the filesystem onto a server (`AttachFilesystem`/`DetachFilesystem` in the API) is not yet modeled by this provider.
+## Mounting on a server
+
+Servers mount the filesystem over your project's private storage network, and any server on that network gets read and write access, with no credentials to manage. A server joins the network when it is deployed or reinstalled on a public network in the same project and site, after the filesystem exists. With a supported operating system, the deploy also configures the storage VLAN, routes and NFS client. A server deployed before the filesystem needs a reinstall to join.
+
+The server does not reference the filesystem from the example below, so add `depends_on`, or Terraform may deploy the server first:
+
+```hcl
+resource "latitudesh_public_network" "nfs" {
+  project = "proj_..."
+  site    = "CHI"
+  size    = 28
+}
+
+resource "latitudesh_server" "nfs_client" {
+  hostname          = "nfs-client-01"
+  operating_system  = "ubuntu_24_04_x64_lts"
+  plan              = "m4-metal-small"
+  project           = "proj_..."
+  site              = "CHI"
+  public_network_id = latitudesh_public_network.nfs.id
+
+  depends_on = [latitudesh_filesystem_storage.example]
+}
+```
+
+Then mount it on the server, with `vers=3` if you only enabled `nfs3`:
+
+```sh
+sudo mkdir -p /mnt/shared-data
+sudo mount -t nfs -o vers=4 <file_endpoint>:<nfs_mount_path> /mnt/shared-data
+```
 
 ## Resizing
 
-Increasing `size_in_gb` resizes the filesystem in place. Decreasing it forces a new resource, which destroys the filesystem and its data, so the plan shows it as a replacement. Changing `name`, `region` or `protocols` also forces a new resource; there is no update endpoint for any of them.
+Increasing `size_in_gb` resizes the filesystem in place. Any other change, including a smaller size, replaces the filesystem, which permanently removes its data. Unmount it on every server before a replacement or destroy.
 
 ## Example Usage
 

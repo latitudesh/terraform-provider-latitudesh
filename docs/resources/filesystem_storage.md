@@ -2,43 +2,57 @@
 page_title: "latitudesh_filesystem_storage Resource - latitudesh"
 subcategory: ""
 description: |-
-  Filesystem Storage resource. Creates and manages a persistent NFS filesystem on Latitude.sh https://latitude.sh/ that can be mounted by multiple servers. There is no update endpoint for name, region or protocols, so changing any of them forces a new resource; size_in_gb can only grow in place, so a smaller value also forces a new resource. Access to filesystem storage is gated per team — creating this resource requires a team with it enabled.
+  Creates and manages an NFS filesystem on Latitude.sh https://latitude.sh/ that several servers can mount at the same time. size_in_gb grows in place; any other change, including a smaller size, replaces the filesystem.
 ---
 
 # latitudesh_filesystem_storage (Resource)
 
-Creates and manages a persistent NFS filesystem on [Latitude.sh](https://latitude.sh/) that can be mounted by multiple servers. Access to filesystem storage is gated per team — creating this resource requires a team with it enabled.
+Creates and manages an NFS filesystem on [Latitude.sh](https://latitude.sh/) that several servers can mount at the same time. See [File storage](https://www.latitude.sh/docs/storage/filesystem) for limits, supported operating systems and mount options.
 
-Mounting the filesystem onto a server (`AttachFilesystem`/`DetachFilesystem` in the API) is not yet modeled by this provider.
+## Mounting on a server
+
+Servers mount the filesystem over your project's private storage network, and any server on that network gets read and write access, with no credentials to manage. A server joins the network when it is deployed or reinstalled on a public network in the same project and site, after the filesystem exists. With a supported operating system, the deploy also configures the storage VLAN, routes and NFS client. A server deployed before the filesystem needs a reinstall to join.
+
+The server does not reference the filesystem from the example below, so add `depends_on`, or Terraform may deploy the server first:
+
+```hcl
+resource "latitudesh_public_network" "nfs" {
+  project = "proj_..."
+  site    = "CHI"
+  size    = 28
+}
+
+resource "latitudesh_server" "nfs_client" {
+  hostname          = "nfs-client-01"
+  operating_system  = "ubuntu_24_04_x64_lts"
+  plan              = "m4-metal-small"
+  project           = "proj_..."
+  site              = "CHI"
+  public_network_id = latitudesh_public_network.nfs.id
+
+  depends_on = [latitudesh_filesystem_storage.example]
+}
+```
+
+Then mount it on the server, with `vers=3` if you only enabled `nfs3`:
+
+```sh
+sudo mkdir -p /mnt/shared-data
+sudo mount -t nfs -o vers=4 <file_endpoint>:<nfs_mount_path> /mnt/shared-data
+```
 
 ## Resizing
 
-Increasing `size_in_gb` resizes the filesystem in place. Decreasing it forces a new resource, which destroys the filesystem and its data, so the plan shows it as a replacement. Changing `name`, `region` or `protocols` also forces a new resource; there is no update endpoint for any of them.
+Increasing `size_in_gb` resizes the filesystem in place. Any other change, including a smaller size, replaces the filesystem, which permanently removes its data. Unmount it on every server before a replacement or destroy.
 
 ## Example Usage
 
 ```terraform
-resource "latitudesh_project" "filesystem_storage" {
-  name              = "Filesystem storage example"
-  environment       = "Development"
-  provisioning_type = "on_demand"
-}
-
 resource "latitudesh_filesystem_storage" "example" {
-  project    = latitudesh_project.filesystem_storage.id
-  name       = "shared-data"
-  region     = "ASH"
-  size_in_gb = 1500
-  protocols  = ["nfs4"]
-}
-
-data "latitudesh_filesystem_storage" "by_id" {
-  id = latitudesh_filesystem_storage.example.id
-}
-
-data "latitudesh_filesystem_storage" "by_name" {
-  name    = "shared-data"
-  project = latitudesh_project.filesystem_storage.id
+  project   = "proj_..."
+  name      = "shared-data"
+  region    = "CHI"
+  protocols = ["nfs4"]
 }
 ```
 
@@ -47,21 +61,20 @@ data "latitudesh_filesystem_storage" "by_name" {
 
 ### Required
 
-- `name` (String) Filesystem name. `block` is reserved and cannot be used. Changing this forces a new resource.
+- `name` (String) Filesystem name: letters, numbers, hyphens and underscores, unique within the project. `block` is reserved and cannot be used. Changing this forces a new resource.
 - `protocols` (Set of String) NFS protocol version(s) to mount the filesystem with (`nfs3`, `nfs4`). Pass both to allow either protocol. There is no update endpoint, so changing this forces a new resource.
-- `region` (String) Site slug where the filesystem is provisioned. Required for high performance file storage; an unknown slug is rejected by the API. Changing this forces a new resource.
+- `region` (String) Region (site) slug where the filesystem is provisioned. Changing this forces a new resource.
 
 ### Optional
 
 - `project` (String) The project (ID or slug) to create the filesystem in. Optional here only if `project` is set on the provider block; one of the two is required. Changing it forces a new resource.
-- `size_in_gb` (Number) Filesystem size, in GB. Defaults to `1500` on create; omitting it later keeps the current size. Increasing it resizes the filesystem in place; decreasing it forces a new resource.
+- `size_in_gb` (Number) Filesystem size, in GB, up to `102400` (100 TB). Defaults to `1500` on create; omitting it later keeps the current size. Increasing it resizes the filesystem in place; decreasing it forces a new resource.
 
 ### Read-Only
 
-- `file_endpoint` (String) Hostname of the NFS endpoint backing the filesystem. Null for filesystems not backed by high performance file storage.
+- `file_endpoint` (String) Endpoint to mount the filesystem from.
 - `id` (String) Filesystem storage identifier.
-- `nfs_mount_path` (String) Path of the NFS view backing the filesystem. Null for filesystems not backed by high performance file storage.
-- `storage_class` (String) Backend storage tier the API assigned based on `region` (`standard` or `high_performance`).
+- `nfs_mount_path` (String) Mount path of the filesystem.
 
 ## Import
 

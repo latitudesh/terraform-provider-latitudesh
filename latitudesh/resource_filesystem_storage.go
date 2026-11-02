@@ -34,10 +34,7 @@ var _ resource.ResourceWithImportState = &FilesystemStorageResource{}
 // scanning ListFilesystems. UpdateFilesystem only ever grows size_in_gb ("Allow
 // you to upgrade the size of a filesystem" per the SDK doc comment, the same
 // grow-only wording BlockStorage's UpdateVolume uses); every other attribute
-// has no update endpoint and forces a replacement. AttachFilesystem/
-// DetachFilesystem (mounting the filesystem onto a server) are a separate
-// lifecycle, the same shape as BlockStorage's MapVolume/UnmapVolume, and are
-// deliberately not modeled here — see sdk-coverage.yaml.
+// has no update endpoint and forces a replacement.
 type FilesystemStorageResource struct {
 	client         *latitudeshgosdk.Latitudesh
 	defaultProject string
@@ -50,7 +47,6 @@ type FilesystemStorageResourceModel struct {
 	Region       types.String `tfsdk:"region"`
 	SizeInGb     types.Int64  `tfsdk:"size_in_gb"`
 	Protocols    types.Set    `tfsdk:"protocols"`
-	StorageClass types.String `tfsdk:"storage_class"`
 	NfsMountPath types.String `tfsdk:"nfs_mount_path"`
 	FileEndpoint types.String `tfsdk:"file_endpoint"`
 }
@@ -65,7 +61,7 @@ func (r *FilesystemStorageResource) Metadata(ctx context.Context, req resource.M
 
 func (r *FilesystemStorageResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Filesystem Storage resource. Creates and manages a persistent NFS filesystem on [Latitude.sh](https://latitude.sh/) that can be mounted by multiple servers. There is no update endpoint for `name`, `region` or `protocols`, so changing any of them forces a new resource; `size_in_gb` can only grow in place, so a smaller value also forces a new resource. Access to filesystem storage is gated per team — creating this resource requires a team with it enabled.",
+		MarkdownDescription: "Creates and manages an NFS filesystem on [Latitude.sh](https://latitude.sh/) that several servers can mount at the same time. `size_in_gb` grows in place; any other change, including a smaller size, replaces the filesystem.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Filesystem storage identifier.",
@@ -84,7 +80,7 @@ func (r *FilesystemStorageResource) Schema(ctx context.Context, req resource.Sch
 				},
 			},
 			"name": schema.StringAttribute{
-				MarkdownDescription: "Filesystem name. `block` is reserved and cannot be used. Changing this forces a new resource.",
+				MarkdownDescription: "Filesystem name: letters, numbers, hyphens and underscores, unique within the project. `block` is reserved and cannot be used. Changing this forces a new resource.",
 				Required:            true,
 				Validators: []validator.String{
 					stringvalidator.NoneOfCaseInsensitive("block"),
@@ -94,14 +90,14 @@ func (r *FilesystemStorageResource) Schema(ctx context.Context, req resource.Sch
 				},
 			},
 			"region": schema.StringAttribute{
-				MarkdownDescription: "Site slug where the filesystem is provisioned. Required for high performance file storage; an unknown slug is rejected by the API. Changing this forces a new resource.",
+				MarkdownDescription: "Region (site) slug where the filesystem is provisioned. Changing this forces a new resource.",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"size_in_gb": schema.Int64Attribute{
-				MarkdownDescription: "Filesystem size, in GB. Defaults to `1500` on create; omitting it later keeps the current size. Increasing it resizes the filesystem in place; decreasing it forces a new resource.",
+				MarkdownDescription: "Filesystem size, in GB, up to `102400` (100 TB). Defaults to `1500` on create; omitting it later keeps the current size. Increasing it resizes the filesystem in place; decreasing it forces a new resource.",
 				Optional:            true,
 				Computed:            true,
 				Validators: []validator.Int64{
@@ -126,8 +122,8 @@ func (r *FilesystemStorageResource) Schema(ctx context.Context, req resource.Sch
 				ElementType:         types.StringType,
 				Validators: []validator.Set{
 					setvalidator.SizeAtLeast(1),
-					// Lowercase only: the API reads protocols back as lowercase
-					// enum values, so `NFS4` in config could never match state.
+					// Lowercase only: the API accepts any case but stores and
+					// returns lowercase, so `NFS4` in config could never match state.
 					setvalidator.ValueStringsAre(
 						stringvalidator.OneOf("nfs3", "nfs4"),
 					),
@@ -136,16 +132,12 @@ func (r *FilesystemStorageResource) Schema(ctx context.Context, req resource.Sch
 					setplanmodifier.RequiresReplace(),
 				},
 			},
-			"storage_class": schema.StringAttribute{
-				MarkdownDescription: "Backend storage tier the API assigned based on `region` (`standard` or `high_performance`).",
-				Computed:            true,
-			},
 			"nfs_mount_path": schema.StringAttribute{
-				MarkdownDescription: "Path of the NFS view backing the filesystem. Null for filesystems not backed by high performance file storage.",
+				MarkdownDescription: "Mount path of the filesystem.",
 				Computed:            true,
 			},
 			"file_endpoint": schema.StringAttribute{
-				MarkdownDescription: "Hostname of the NFS endpoint backing the filesystem. Null for filesystems not backed by high performance file storage.",
+				MarkdownDescription: "Endpoint to mount the filesystem from.",
 				Computed:            true,
 			},
 		},
@@ -414,9 +406,6 @@ func (r *FilesystemStorageResource) reconcileFilesystemStorage(ctx context.Conte
 
 	// A resize whose response carried no body leaves these unknown from the
 	// plan; state must not hold unknowns after apply.
-	if data.StorageClass.IsUnknown() {
-		data.StorageClass = types.StringNull()
-	}
 	if data.NfsMountPath.IsUnknown() {
 		data.NfsMountPath = types.StringNull()
 	}
@@ -426,10 +415,11 @@ func (r *FilesystemStorageResource) reconcileFilesystemStorage(ctx context.Conte
 }
 
 // filesystemStorageShrinkRequiresReplace replaces the filesystem only when
-// size_in_gb decreases, since UpdateFilesystem can only grow it ("Allow you to
-// upgrade the size of a filesystem" per the SDK doc comment). An unknown size
-// is left to Update, where the API is expected to reject a shrink, rather than
-// risking a replacement that would destroy the filesystem's data.
+// size_in_gb decreases, since UpdateFilesystem can only grow it (the API
+// answers anything else with 422 UPGRADE_SIZE_ERROR, "Size must be greater
+// than current size"). An unknown size is left to Update, where the API
+// rejects a shrink, rather than risking a replacement that would destroy the
+// filesystem's data.
 func filesystemStorageShrinkRequiresReplace(ctx context.Context, req planmodifier.Int64Request, resp *int64planmodifier.RequiresReplaceIfFuncResponse) {
 	if req.StateValue.IsNull() || req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
 		return
@@ -455,9 +445,10 @@ func filesystemStorageNotFound(err error) bool {
 // Not exposed, by team decision (see sdk-coverage.yaml): `keyring`,
 // `cluster_user` and `volume_path` (SDK doc comment: dashboard-origin
 // responses only, always null for API-driven requests), the nested `team`
-// envelope (account metadata, not a provisioning input) and `created_at`
+// envelope (account metadata, not a provisioning input), `created_at`
 // (presentation metadata, same call BlockStorage made for the identical
-// field). Only the site slug of `region` is round-tripped, same as
+// field) and `storage_class` (not selectable when creating a filesystem).
+// Only the site slug of `region` is round-tripped, same as
 // latitudesh_block_storage and latitudesh_object_storage.
 func mapFilesystemStorage(ctx context.Context, data *FilesystemStorageResourceModel, fs *components.FilesystemData) diag.Diagnostics {
 	var diags diag.Diagnostics
@@ -469,7 +460,6 @@ func mapFilesystemStorage(ctx context.Context, data *FilesystemStorageResourceMo
 	// Purely-computed fields (known only after apply): nil from the API is set
 	// to null rather than left stale or unknown — even when the whole
 	// attributes object is missing, or Create/Update would save unknowns.
-	data.StorageClass = types.StringNull()
 	data.NfsMountPath = types.StringNull()
 	data.FileEndpoint = types.StringNull()
 
@@ -505,9 +495,6 @@ func mapFilesystemStorage(ctx context.Context, data *FilesystemStorageResourceMo
 		data.SizeInGb = types.Int64Value(*a.SizeInGb)
 	}
 
-	if a.FilesystemStorageClass != nil {
-		data.StorageClass = types.StringValue(string(*a.FilesystemStorageClass))
-	}
 	if a.NfsMountPath != nil {
 		data.NfsMountPath = types.StringValue(*a.NfsMountPath)
 	}
