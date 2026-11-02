@@ -1,0 +1,83 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+The filesystem storage resource allows you to create and manage filesystems within your [Latitude.sh](https://latitude.sh/) account.
+
+## Mounting on a server
+
+Servers deployed on a public network in the same project and location as the filesystem can mount it. See [File storage](https://www.latitude.sh/docs/storage/filesystem) for the requirements and mount options.
+
+Add `depends_on` so Terraform creates the filesystem before the server:
+
+```hcl
+resource "latitudesh_public_network" "nfs" {
+  project = "proj_..."
+  site    = "CHI"
+  size    = 28
+}
+
+resource "latitudesh_server" "nfs_client" {
+  hostname          = "nfs-client-01"
+  operating_system  = "ubuntu_24_04_x64_lts"
+  plan              = "m4-metal-small"
+  project           = "proj_..."
+  site              = "CHI"
+  public_network_id = latitudesh_public_network.nfs.id
+
+  depends_on = [latitudesh_filesystem_storage.example]
+}
+```
+
+Then mount it on the server:
+
+```sh
+sudo mkdir -p /mnt/shared-data
+sudo mount -t nfs -o vers=4 <file_endpoint>:<nfs_mount_path> /mnt/shared-data
+```
+
+## Resizing
+
+Increasing `size_in_gb` resizes the filesystem in place. Any other change, including a smaller size, replaces the filesystem, which permanently removes its data. Unmount it on every server before a replacement or destroy.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+You can import a filesystem storage resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_filesystem_storage` resource can be imported by specifying the filesystem ID:
+
+```sh
+terraform import latitudesh_filesystem_storage.example <FILESYSTEM_ID>
+```
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration.
+
+```hcl
+import {
+  to = latitudesh_filesystem_storage.example
+  id = "<FILESYSTEM_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_filesystem_storage.tf
+```
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.

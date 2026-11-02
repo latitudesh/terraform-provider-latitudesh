@@ -1,6 +1,4 @@
-# Looks up one cluster by id — the only selector the API offers. Take the id
-# from the cluster list, from a latitudesh_lks_cluster resource in the same
-# configuration, or paste it in.
+# Look up one cluster by id.
 data "latitudesh_lks_clusters" "lookup_source" {
   project = "<project-id-or-slug>"
   status  = "ready"

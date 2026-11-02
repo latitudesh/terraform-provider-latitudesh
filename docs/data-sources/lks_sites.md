@@ -2,36 +2,24 @@
 page_title: "latitudesh_lks_sites Data Source - latitudesh"
 subcategory: ""
 description: |-
-  LKS (Latitude Kubernetes Service) sites data source - the sites a cluster can be deployed to. This is the authoritative source for latitudesh_lks_cluster's site argument: LKS runs in its own subset of locations, so latitudesh_region is not a substitute. The lookup is global and takes no arguments.
+  LKS sites data source - the sites a cluster can be deployed to.
 ---
 
 # latitudesh_lks_sites (Data Source)
 
-Lists the sites an LKS (Latitude Kubernetes Service) cluster can be deployed to. This is the authoritative source for [`latitudesh_lks_cluster`](../resources/lks_cluster.md)'s `site` argument — LKS runs in its own subset of locations, so `latitudesh_region` is not a substitute.
-
-The lookup is global: it takes no arguments and is not scoped to a project.
+List the sites an LKS (Latitude Kubernetes Service) cluster can be deployed to — the valid values for [`latitudesh_lks_cluster`](../resources/lks_cluster.md)'s `site`.
 
 ## Example Usage
 
 ```terraform
-# The sites an LKS cluster can be deployed to, and the authoritative source for
-# latitudesh_lks_cluster's `site`. LKS runs in its own subset of locations, so
-# latitudesh_region is not a substitute and there is no fixed list to hardcode.
+# The sites an LKS cluster can be deployed to.
 data "latitudesh_lks_sites" "all" {}
 
 output "lks_site_slugs" {
   value = [for site in data.latitudesh_lks_sites.all.sites : site.slug]
 }
 
-output "lks_sites_by_country" {
-  value = {
-    for site in data.latitudesh_lks_sites.all.sites :
-    site.slug => "${site.name} (${site.country})"
-  }
-}
-
-# A site is only usable if some plan has capacity there — pair this with
-# latitudesh_lks_plans before committing to one.
+# Pair with latitudesh_lks_plans to keep only sites where a plan has stock.
 data "latitudesh_lks_plans" "per_site" {
   for_each = toset([for site in data.latitudesh_lks_sites.all.sites : site.slug])
 
@@ -62,6 +50,6 @@ Read-Only:
 - `country` (String) Country name.
 - `country_code` (String) Country code.
 - `facility` (String) Datacenter facility backing the site.
-- `id` (String) Site identifier. The API documents this as the slug to pass as `site` when creating a cluster, and it matches `slug` below.
+- `id` (String) Site identifier; matches `slug`.
 - `name` (String) Human-readable site name.
 - `slug` (String) Site slug — this is what `latitudesh_lks_cluster.site` takes.

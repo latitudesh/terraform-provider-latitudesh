@@ -2,27 +2,19 @@
 page_title: "latitudesh_lks_versions Data Source - latitudesh"
 subcategory: ""
 description: |-
-  LKS (Latitude Kubernetes Service) Kubernetes versions data source - the versions a cluster can be created with or upgraded to. This is the authoritative source for latitudesh_lks_cluster's kubernetes_version argument; the platform rejects anything else, and a downgrade with 422 DOWNGRADE_NOT_ALLOWED. The lookup is global and takes no arguments — filter the list in configuration on available_for_creation / available_for_upgrade, which is why both are exposed.
+  LKS versions data source - the Kubernetes versions a cluster can be created with or upgraded to.
 ---
 
 # latitudesh_lks_versions (Data Source)
 
-Lists the Kubernetes versions the platform offers, and which of them a cluster can be created with or upgraded to. This is the authoritative source for [`latitudesh_lks_cluster`](../resources/lks_cluster.md)'s `kubernetes_version` argument.
-
-A version can be listed but unavailable for new clusters, for upgrades, or for both, so filter on `available_for_creation` / `available_for_upgrade` rather than taking the whole list. The platform rejects a downgrade with 422 `DOWNGRADE_NOT_ALLOWED` — [`latitudesh_lks_cluster`](../resources/lks_cluster.md) rejects one at plan time for the same reason.
-
-The lookup is global: it takes no arguments and is not scoped to a project.
+List the Kubernetes versions available for LKS (Latitude Kubernetes Service) clusters — the valid values for [`latitudesh_lks_cluster`](../resources/lks_cluster.md)'s `kubernetes_version`. Filter on `available_for_creation` or `available_for_upgrade`.
 
 ## Example Usage
 
 ```terraform
-# The Kubernetes versions the platform offers, and the authoritative source for
-# latitudesh_lks_cluster's `kubernetes_version`. A version can be listed but usable
-# only for upgrades, or only for new clusters, so read the flags rather than
-# taking the whole list.
+# The Kubernetes versions available for LKS clusters.
 data "latitudesh_lks_versions" "all" {}
 
-# What a new cluster can be created on.
 output "lks_versions_for_creation" {
   value = [
     for version in data.latitudesh_lks_versions.all.versions :
@@ -30,10 +22,6 @@ output "lks_versions_for_creation" {
   ]
 }
 
-# What an existing cluster can be upgraded to. Upgrades are in place; a
-# downgrade is not allowed, and latitudesh_lks_cluster rejects one at plan time. A node
-# pool's version may never be newer than its cluster's — a pool that omits its
-# version tracks the cluster's, which keeps that true by construction.
 output "lks_versions_for_upgrade" {
   value = [
     for version in data.latitudesh_lks_versions.all.versions :
@@ -41,7 +29,6 @@ output "lks_versions_for_upgrade" {
   ]
 }
 
-# The platform's own default — a reasonable choice when you have no opinion.
 output "lks_default_version" {
   value = data.latitudesh_lks_versions.all.default_version
 }
@@ -52,9 +39,9 @@ output "lks_default_version" {
 
 ### Read-Only
 
-- `default_version` (String) The version the platform marks as `default`, ready to hand to `latitudesh_lks_cluster.kubernetes_version`. Null when no entry is flagged as the default.
+- `default_version` (String) The default version. Null when none is flagged as the default.
 - `id` (String) Synthetic identifier. The lookup takes no arguments, so this is always `all`.
-- `versions` (Attributes List) Every Kubernetes version the platform reports, in the order the API returns them. A version can be listed but unavailable for new clusters, for upgrades, or for both — check the flags rather than assuming every entry is usable. (see [below for nested schema](#nestedatt--versions))
+- `versions` (Attributes List) The available Kubernetes versions. Check `available_for_creation` and `available_for_upgrade` before using one. (see [below for nested schema](#nestedatt--versions))
 
 <a id="nestedatt--versions"></a>
 ### Nested Schema for `versions`
@@ -63,6 +50,6 @@ Read-Only:
 
 - `available_for_creation` (Boolean) Whether a new cluster can be created on this version.
 - `available_for_upgrade` (Boolean) Whether an existing cluster can be upgraded to this version.
-- `default` (Boolean) Whether this is the platform's default version.
+- `default` (Boolean) Whether this is the default version.
 - `id` (String) Version identifier.
 - `version` (String) Kubernetes patch version — this is what `latitudesh_lks_cluster.kubernetes_version` takes.

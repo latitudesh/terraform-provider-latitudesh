@@ -2,51 +2,23 @@
 page_title: "latitudesh_lks_plans Data Source - latitudesh"
 subcategory: ""
 description: |-
-  LKS (Latitude Kubernetes Service) plans data source - the machine plans an LKS node pool can be built from, with per-region availability and stock. GET /plans/lks is its own catalog: an ordinary server plan slug from latitudesh_plan is not interchangeable with one of these. Pricing is not exposed, matching latitudesh_plan. Never scoped to a project; site is the only argument — set it to get stock, omit it for the whole catalog.
+  LKS plans data source - the plans an LKS node pool can be built from, with per-site stock. Set site to fill stock; omit it for the whole catalog.
 ---
 
 # latitudesh_lks_plans (Data Source)
 
-Lists the machine plans an LKS (Latitude Kubernetes Service) node pool can be built from, with per-region availability and stock.
-
-`GET /plans/lks` is its own catalog: a server plan slug from [`latitudesh_plan`](plan.md) is not interchangeable with one of these. Pricing is not exposed, matching `latitudesh_plan`.
-
-## Picking a plan for a site
-
-Set `site` and the data source answers directly: `stock` is plan slug → nodes available there, containing only plans that can actually build. No loop, no filtering in configuration.
-
-```terraform
-data "latitudesh_lks_plans" "at_site" {
-  site = "<site-slug>" # from latitudesh_lks_sites
-}
-
-# e.g. { "c2-medium-x86" = 7, "c3-large-x86" = 2 }
-output "buildable" {
-  value = data.latitudesh_lks_plans.at_site.stock
-}
-```
-
-`keys(...stock)` is the shortlist; `...stock["c2-medium-x86"]` is the count. An empty map means nothing can be built at that site right now — the cluster would come up and its node pool would not.
-
-Unfiltered, `plans` is the whole catalog and `stock` is null, since a count only means something for one site. Each plan still carries `in_stock_count` (the same map, per plan) and `regions[]`, which adds stock levels and `available_sites` — where a plan can run *at all*, a larger set than where it can run today.
-
-The lookup is never scoped to a project; `site` is its only argument.
+List the plans an LKS (Latitude Kubernetes Service) node pool can be built from — not interchangeable with `latitudesh_plan` server plans. Set `site` to see only the plans in stock there: `stock` maps plan slug to the nodes available.
 
 ## Example Usage
 
 ```terraform
-# The machine catalog an LKS node pool is built from. `GET /plans/lks` is its
-# own catalog: a server plan slug from latitudesh_plan is not interchangeable
-# with one of these.
 data "latitudesh_lks_sites" "for_plans" {}
 
 locals {
   plans_site = data.latitudesh_lks_sites.for_plans.sites[0].slug
 }
 
-# Filtering by site is what makes this directly usable: `stock` comes back as
-# plan slug -> nodes available there, already narrowed to plans that can be
-# built right now. No loop and no filtering in configuration.
+# Filtered by site, `stock` maps plan slug -> nodes available there.
 data "latitudesh_lks_plans" "at_site" {
   site = local.plans_site
 }
@@ -59,15 +31,7 @@ output "lks_buildable_slugs_at_site" {
   value = keys(data.latitudesh_lks_plans.at_site.stock)
 }
 
-# An empty map means nothing can be built at that site today — the cluster
-# would come up and its node pool would not.
-output "lks_site_has_capacity" {
-  value = length(data.latitudesh_lks_plans.at_site.stock) > 0
-}
-
-# Unfiltered, the catalog carries the full detail: specs, per-region stock
-# levels, and `available_sites` — where a plan can run at all, a larger set
-# than where it can run right now.
+# Unfiltered: the whole catalog, with specs and per-region availability.
 data "latitudesh_lks_plans" "all" {}
 
 output "lks_plan_specs" {
@@ -88,13 +52,13 @@ output "lks_plan_specs" {
 
 ### Optional
 
-- `site` (String) Only return plans that have capacity at this site **right now**, and fill `stock` for it. Use the same slug you pass to `latitudesh_lks_cluster.site`. Omit to return the whole catalog.
+- `site` (String) Only return plans with capacity at this site, and fill `stock` for it. Omit to return the whole catalog.
 
 ### Read-Only
 
 - `id` (String) Synthetic identifier for this query: the `site` filter, or `all` when unfiltered.
 - `plans` (Attributes List) Every LKS plan, in the order the API returns them. (see [below for nested schema](#nestedatt--plans))
-- `stock` (Map of Number) Nodes available at `site` right now, keyed by plan slug — every entry is greater than zero, because a plan with no capacity is not returned. This is the answer to "which plan can I build here, and how many nodes of it" with no loop and no filtering: `keys(...)` is the shortlist and `...["slug"]` is the count. Null when `site` is not set, since a count is only meaningful for one site.
+- `stock` (Map of Number) Nodes available at `site`, keyed by plan slug. Null when `site` is not set.
 
 <a id="nestedatt--plans"></a>
 ### Nested Schema for `plans`
@@ -102,9 +66,9 @@ output "lks_plan_specs" {
 Read-Only:
 
 - `id` (String) Plan ID.
-- `in_stock_count` (Map of Number) Nodes available right now, keyed by site slug — `regions[].locations.in_stock_count` flattened, since a site belongs to exactly one region. Only sites with stock appear, so `lookup(plan.in_stock_count, site, 0) > 0` is the whole buildability test for a site+plan pair.
+- `in_stock_count` (Map of Number) Nodes available right now, keyed by site slug. Only sites with stock appear.
 - `name` (String) Human-readable plan name.
-- `regions` (Attributes List) Where this plan can run, and whether it currently can. `available_sites` is the full list; `in_stock_sites` is the subset with capacity right now — a plan available at a site with no stock will fail to build a node pool there. (see [below for nested schema](#nestedatt--plans--regions))
+- `regions` (Attributes List) Where this plan can run: `available_sites` is the full list, `in_stock_sites` the subset with capacity right now. (see [below for nested schema](#nestedatt--plans--regions))
 - `slug` (String) Plan slug — this is the value a node pool takes as its `plan`.
 - `specs` (Attributes) Hardware behind one node on this plan. (see [below for nested schema](#nestedatt--plans--specs))
 
@@ -113,7 +77,7 @@ Read-Only:
 
 Read-Only:
 
-- `available_sites` (List of String) Site slugs where LKS can deploy this plan. These match `latitudesh_lks_sites`, and `latitudesh_lks_cluster.site`.
+- `available_sites` (List of String) Site slugs where LKS can deploy this plan.
 - `in_stock_count` (Map of Number) Available node count keyed by site slug. Only sites with stock appear.
 - `in_stock_sites` (List of String) Site slugs that have capacity for a node on this plan right now.
 - `name` (String) Region name.
@@ -127,8 +91,8 @@ Read-Only:
 
 - `cpu` (Attributes) CPU specification. (see [below for nested schema](#nestedatt--plans--specs--cpu))
 - `drives` (Attributes List) Disk groups included in the plan. (see [below for nested schema](#nestedatt--plans--specs--drives))
-- `gpu` (Attributes) GPU specification, null on plans without one. The API answers an empty object rather than null for those, which this collapses to null. (see [below for nested schema](#nestedatt--plans--specs--gpu))
-- `memory_total` (String) Total memory, as returned by the API. Typed as a string because the API answers either a number or free-form text here, the same way `latitudesh_plan`'s `drives.size` does.
+- `gpu` (Attributes) GPU specification. Null on plans without one. (see [below for nested schema](#nestedatt--plans--specs--gpu))
+- `memory_total` (String) Total memory, as returned by the API.
 - `nics` (Attributes List) Network interface groups. (see [below for nested schema](#nestedatt--plans--specs--nics))
 
 <a id="nestedatt--plans--specs--cpu"></a>

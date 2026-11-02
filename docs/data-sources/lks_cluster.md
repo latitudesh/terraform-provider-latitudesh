@@ -2,19 +2,17 @@
 page_title: "latitudesh_lks_cluster Data Source - latitudesh"
 subcategory: ""
 description: |-
-  LKS (Latitude Kubernetes Service) cluster data source - lookup a cluster by id. GetLksCluster has no name-based lookup, so id is the only selector.
+  LKS cluster data source - lookup a cluster by id.
 ---
 
 # latitudesh_lks_cluster (Data Source)
 
-Looks up a single LKS (Latitude Kubernetes Service) cluster by id. The underlying API has no name-based lookup, so `id` is the only selector — take it from [`latitudesh_lks_clusters`](lks_clusters.md), from a [`latitudesh_lks_cluster`](../resources/lks_cluster.md) resource in the same configuration, or paste it in.
+Retrieve an LKS (Latitude Kubernetes Service) cluster by `id`. Take the id from [`latitudesh_lks_clusters`](lks_clusters.md) or from a [`latitudesh_lks_cluster`](../resources/lks_cluster.md) resource.
 
 ## Example Usage
 
 ```terraform
-# Looks up one cluster by id — the only selector the API offers. Take the id
-# from the cluster list, from a latitudesh_lks_cluster resource in the same
-# configuration, or paste it in.
+# Look up one cluster by id.
 data "latitudesh_lks_clusters" "lookup_source" {
   project = "<project-id-or-slug>"
   status  = "ready"
@@ -41,16 +39,16 @@ output "lks_cluster_endpoint" {
 - `control_plane_endpoint` (String) Kubernetes API server endpoint.
 - `created_at` (String) Timestamp when the cluster was created.
 - `description` (String) Customer description, if any.
-- `kubeconfig_url` (String) URL to fetch the cluster kubeconfig from once the control plane is ready.
+- `kubeconfig_url` (String) URL to download the cluster's kubeconfig. Null until the cluster is ready.
 - `kubernetes_version` (String) Kubernetes patch version currently running.
 - `message` (String) Human-readable detail behind the current `status`.
 - `name` (String) Display name for the cluster.
 - `network` (Attributes) Cluster CIDR ranges. (see [below for nested schema](#nestedatt--network))
 - `platform_version` (String) Platform (LKS controller) version managing this cluster.
 - `project` (String) The project ID that owns the cluster.
-- `reason` (String) Machine-readable status reason (open enum).
+- `reason` (String) Status reason code reported for the cluster.
 - `site` (String) Site slug the cluster is deployed to.
-- `status` (String) Cluster lifecycle status. Open enum sourced from the platform controller; values in use today are `provisioning`, `ready`, `updating`, `scaling`, `upgrading`, `paused`, `deleting` and `deleted`, and new ones may appear without notice.
+- `status` (String) Cluster status, e.g. `provisioning` or `ready`.
 - `updated_at` (String) Timestamp when the cluster was last updated.
 
 <a id="nestedatt--network"></a>

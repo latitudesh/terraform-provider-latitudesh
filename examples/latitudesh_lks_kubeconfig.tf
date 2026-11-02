@@ -1,4 +1,4 @@
-# Reads a cluster's kubeconfig for the duration of the run — into memory, never
+# Reads a cluster's kubeconfig into memory for the duration of the run — never
 # into state or a plan file. Requires Terraform 1.10 or later.
 data "latitudesh_lks_clusters" "kubeconfig_source" {
   project = "<project-id-or-slug>"
@@ -8,11 +8,3 @@ data "latitudesh_lks_clusters" "kubeconfig_source" {
 ephemeral "latitudesh_lks_kubeconfig" "example" {
   cluster_id = data.latitudesh_lks_clusters.kubeconfig_source.clusters[0].id
 }
-
-# Creating the cluster in the same configuration? Reference it —
-# `cluster_id = latitudesh_lks_cluster.example.id` — and add
-# `depends_on = [latitudesh_lks_node_pool.example]`: the kubeconfig exists only
-# once the cluster is ready, and the cluster is ready only once a pool has nodes.
-#
-# The resource exposes the document and nothing else. Pull fields out with
-# yamldecode(); see "Using it with the kubernetes provider" on this page.

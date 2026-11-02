@@ -1,21 +1,11 @@
-# The sites an LKS cluster can be deployed to, and the authoritative source for
-# latitudesh_lks_cluster's `site`. LKS runs in its own subset of locations, so
-# latitudesh_region is not a substitute and there is no fixed list to hardcode.
+# The sites an LKS cluster can be deployed to.
 data "latitudesh_lks_sites" "all" {}
 
 output "lks_site_slugs" {
   value = [for site in data.latitudesh_lks_sites.all.sites : site.slug]
 }
 
-output "lks_sites_by_country" {
-  value = {
-    for site in data.latitudesh_lks_sites.all.sites :
-    site.slug => "${site.name} (${site.country})"
-  }
-}
-
-# A site is only usable if some plan has capacity there — pair this with
-# latitudesh_lks_plans before committing to one.
+# Pair with latitudesh_lks_plans to keep only sites where a plan has stock.
 data "latitudesh_lks_plans" "per_site" {
   for_each = toset([for site in data.latitudesh_lks_sites.all.sites : site.slug])
 

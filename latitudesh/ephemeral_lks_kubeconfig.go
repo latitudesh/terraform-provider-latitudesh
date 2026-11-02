@@ -68,12 +68,7 @@ func (e *LksKubeconfigEphemeral) Configure(ctx context.Context, req ephemeral.Co
 
 func (e *LksKubeconfigEphemeral) Schema(ctx context.Context, req ephemeral.SchemaRequest, resp *ephemeral.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Reads an LKS (Latitude Kubernetes Service) cluster's kubeconfig for the duration of the Terraform run. " +
-			"The credentials never reach state or plan files, which is why this is an ephemeral resource rather than a data source — " +
-			"a kubeconfig grants cluster-admin. Requires Terraform 1.10 or later.\n\n" +
-			"The cluster must be `ready`: the platform publishes the kubeconfig only then, which takes a node pool with nodes, and until then `GET /lks/clusters/{id}/kubeconfig` answers 409 `NOT_READY`. " +
-			"For an existing cluster take the id from `latitudesh_lks_clusters` filtered on `status = \"ready\"`; for one created in the same configuration, order the read after its node pools with `depends_on` — a pool's create waits for the cluster to be ready.\n\n" +
-			"An LKS kubeconfig does not expire, so this needs no renewal and stays valid across a long apply — and a copy that leaks stays valid too, which is the reason not to persist one.",
+		MarkdownDescription: "Reads an LKS (Latitude Kubernetes Service) cluster's kubeconfig for the duration of the Terraform run, without storing it in state or plan files. Requires Terraform 1.10 or later.\n\nThe cluster must be ready. For a cluster created in the same configuration, order the read after its node pools with `depends_on`.",
 		Attributes: map[string]schema.Attribute{
 			"cluster_id": schema.StringAttribute{
 				MarkdownDescription: "ID of the cluster to read the kubeconfig from.",
@@ -83,7 +78,7 @@ func (e *LksKubeconfigEphemeral) Schema(ctx context.Context, req ephemeral.Schem
 				},
 			},
 			"kubeconfig": schema.StringAttribute{
-				MarkdownDescription: "The kubeconfig document, verbatim as the API returns it. This is the whole of what the endpoint exposes; use `yamldecode()` to pull fields out of it.",
+				MarkdownDescription: "The kubeconfig document, verbatim. Use `yamldecode()` to read fields from it.",
 				Computed:            true,
 				Sensitive:           true,
 			},

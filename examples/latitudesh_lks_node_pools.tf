@@ -1,5 +1,4 @@
-# Every node pool in a cluster — any latitudesh_lks_node_pool you manage, and
-# anything created outside Terraform.
+# Every node pool in a cluster, including pools created outside Terraform.
 data "latitudesh_lks_clusters" "pool_source" {
   project = "<project-id-or-slug>"
   status  = "ready"
@@ -9,9 +8,6 @@ data "latitudesh_lks_node_pools" "by_cluster" {
   cluster_id = data.latitudesh_lks_clusters.pool_source.clusters[0].id
 }
 
-# `status` is what says whether a pool has settled. Do not compare ready_nodes
-# against node_count for this: the platform does not always report the count,
-# and it comes back null — not zero — on pools it does not track it for.
 output "lks_pools_still_working" {
   value = [
     for pool in data.latitudesh_lks_node_pools.by_cluster.node_pools :
@@ -19,8 +15,7 @@ output "lks_pools_still_working" {
   ]
 }
 
-# Labels and taints are what tell one pool from another. A pool with no labels
-# reports `labels` as null, which lookup() rejects, so index inside try().
+# A pool with no labels reports `labels` as null, so index inside try().
 output "lks_pools_by_workload" {
   value = {
     for pool in data.latitudesh_lks_node_pools.by_cluster.node_pools :

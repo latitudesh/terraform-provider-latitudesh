@@ -59,7 +59,7 @@ func (d *LksClusterDataSource) Configure(ctx context.Context, req datasource.Con
 
 func (d *LksClusterDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "LKS (Latitude Kubernetes Service) cluster data source - lookup a cluster by id. `GetLksCluster` has no name-based lookup, so `id` is the only selector.",
+		MarkdownDescription: "LKS cluster data source - lookup a cluster by id.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "LKS cluster identifier to look up.",
@@ -110,7 +110,7 @@ func (d *LksClusterDataSource) Schema(ctx context.Context, req datasource.Schema
 				},
 			},
 			"status": schema.StringAttribute{
-				MarkdownDescription: "Cluster lifecycle status. Open enum sourced from the platform controller; values in use today are `provisioning`, `ready`, `updating`, `scaling`, `upgrading`, `paused`, `deleting` and `deleted`, and new ones may appear without notice.",
+				MarkdownDescription: "Cluster status, e.g. `provisioning` or `ready`.",
 				Computed:            true,
 			},
 			"message": schema.StringAttribute{
@@ -118,7 +118,7 @@ func (d *LksClusterDataSource) Schema(ctx context.Context, req datasource.Schema
 				Computed:            true,
 			},
 			"reason": schema.StringAttribute{
-				MarkdownDescription: "Machine-readable status reason (open enum).",
+				MarkdownDescription: "Status reason code reported for the cluster.",
 				Computed:            true,
 			},
 			"control_plane_endpoint": schema.StringAttribute{
@@ -126,7 +126,7 @@ func (d *LksClusterDataSource) Schema(ctx context.Context, req datasource.Schema
 				Computed:            true,
 			},
 			"kubeconfig_url": schema.StringAttribute{
-				MarkdownDescription: "URL to fetch the cluster kubeconfig from once the control plane is ready.",
+				MarkdownDescription: "URL to download the cluster's kubeconfig. Null until the cluster is ready.",
 				Computed:            true,
 			},
 			"platform_version": schema.StringAttribute{

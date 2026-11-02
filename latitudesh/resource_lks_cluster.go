@@ -246,8 +246,7 @@ func (r *LksClusterResource) Metadata(ctx context.Context, req resource.Metadata
 
 func (r *LksClusterResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "LKS (Latitude Kubernetes Service) cluster resource. Provisions the control plane only; worker capacity is added with `latitudesh_lks_node_pool`.\n\n" +
-			"**A cluster needs at least one node pool to become `ready`.** Without one, the platform's own components (CNI, CoreDNS) have nowhere to run, so `status` stays `provisioning` with `reason` `WaitingForNodePool`. Create therefore waits for the control plane, not for `ready`: it returns once the platform reports `WaitingForNodePool`, which is the point where a node pool can join. The create of that pool then waits for the cluster to reach `ready`.",
+		MarkdownDescription: "LKS cluster resource",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "LKS cluster identifier.",
@@ -272,7 +271,7 @@ func (r *LksClusterResource) Schema(ctx context.Context, req resource.SchemaRequ
 				},
 			},
 			"site": schema.StringAttribute{
-				MarkdownDescription: "Site slug the cluster is deployed to (single site per cluster; one of the slugs returned by `GET /lks/sites`). Changing this forces a new resource; there is no update endpoint.",
+				MarkdownDescription: "Site slug the cluster is deployed to, from `latitudesh_lks_sites`. Changing this forces a new resource.",
 				Required:            true,
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -282,18 +281,18 @@ func (r *LksClusterResource) Schema(ctx context.Context, req resource.SchemaRequ
 				},
 			},
 			"kubernetes_version": schema.StringAttribute{
-				MarkdownDescription: "Kubernetes patch version, exactly as listed by `GET /lks/available_versions`. Setting a newer patch consents to a control-plane upgrade in place. Lowering it is rejected at plan time: the platform allows no in-place downgrade (422 `DOWNGRADE_NOT_ALLOWED`), so this fails before the apply rather than an hour into it.",
+				MarkdownDescription: "Kubernetes version for the control plane, from `latitudesh_lks_versions`. Raising it upgrades the cluster in place; upgrades are one-way, so lowering it fails at plan time.",
 				Required:            true,
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
 				},
 			},
 			"description": schema.StringAttribute{
-				MarkdownDescription: "Optional customer description. It cannot be removed once set — the API rejects an empty value and ignores a null — so removing it from configuration leaves a diff that cannot converge; change it instead.",
+				MarkdownDescription: "Optional description, up to 200 characters. It cannot be removed once set; change it instead.",
 				Optional:            true,
 			},
 			"network": schema.SingleNestedAttribute{
-				MarkdownDescription: "Cluster CIDR overrides. Any field left unset takes the platform default. Changing this forces a new resource; there is no update endpoint.",
+				MarkdownDescription: "Cluster network CIDRs. Unset fields use the defaults. Changing this forces a new resource.",
 				Optional:            true,
 				Computed:            true,
 				Attributes: map[string]schema.Attribute{
@@ -331,16 +330,15 @@ func (r *LksClusterResource) Schema(ctx context.Context, req resource.SchemaRequ
 				},
 			},
 			"status": schema.StringAttribute{
-				MarkdownDescription: "Cluster lifecycle status. Open enum sourced from the platform controller; values in use today are `provisioning`, `ready`, `updating`, `scaling`, `upgrading`, `paused`, `deleting` and `deleted`, and new ones may appear without notice.\n\n" +
-					"Right after a create this reads `provisioning` with `reason` `WaitingForNodePool`: the control plane is up, and the cluster becomes `ready` only once a `latitudesh_lks_node_pool` has nodes and the platform has finished installing its components on them. This resource's create cannot wait for that, because no pool can be created before the cluster exists; the pool's create does, and this attribute catches up on the next refresh.",
-				Computed: true,
+				MarkdownDescription: "Cluster status, e.g. `provisioning` or `ready`.",
+				Computed:            true,
 			},
 			"message": schema.StringAttribute{
 				MarkdownDescription: "Human-readable detail behind the current `status`.",
 				Computed:            true,
 			},
 			"reason": schema.StringAttribute{
-				MarkdownDescription: "Machine-readable status reason (open enum). `WaitingForNodePool` means the control plane is up and the cluster has no ready node yet; `FinishingSetup` means a node has joined and the platform is still installing its components.",
+				MarkdownDescription: "Status reason code reported for the cluster.",
 				Computed:            true,
 			},
 			"control_plane_endpoint": schema.StringAttribute{
@@ -348,7 +346,7 @@ func (r *LksClusterResource) Schema(ctx context.Context, req resource.SchemaRequ
 				Computed:            true,
 			},
 			"kubeconfig_url": schema.StringAttribute{
-				MarkdownDescription: "URL to fetch the cluster kubeconfig from. The platform publishes the kubeconfig only once `status` is `ready`, which takes a node pool, so this is null right after a create; the next refresh after the first pool is up fills it. Until then `GET /lks/clusters/{id}/kubeconfig` answers 409 `NOT_READY`.",
+				MarkdownDescription: "URL to download the cluster's kubeconfig. Null until the cluster is ready.",
 				Computed:            true,
 			},
 			"platform_version": schema.StringAttribute{

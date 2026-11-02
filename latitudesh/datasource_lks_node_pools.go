@@ -126,7 +126,7 @@ func (d *LksNodePoolsDataSource) Configure(ctx context.Context, req datasource.C
 
 func (d *LksNodePoolsDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "LKS (Latitude Kubernetes Service) node pools data source - every node pool in a cluster, including any created outside Terraform. Node pools are always scoped to a cluster, so `cluster_id` is required.",
+		MarkdownDescription: "LKS node pools data source - list the node pools in a cluster.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Synthetic identifier for this query: the `cluster_id` it lists pools for.",
@@ -161,7 +161,7 @@ func (d *LksNodePoolsDataSource) Schema(ctx context.Context, req datasource.Sche
 							Computed:            true,
 						},
 						"ready_nodes": schema.Int64Attribute{
-							MarkdownDescription: "Nodes currently ready. Below `node_count` while the pool is still building or scaling, and `null` on a pool the platform does not report it for — which is not the same as zero.",
+							MarkdownDescription: "Nodes currently ready. Null when the platform does not report it.",
 							Computed:            true,
 						},
 						"type": schema.StringAttribute{
@@ -181,7 +181,7 @@ func (d *LksNodePoolsDataSource) Schema(ctx context.Context, req datasource.Sche
 							Computed:            true,
 						},
 						"max_pods_per_node": schema.Int64Attribute{
-							MarkdownDescription: "kubelet `--max-pods` for the pool's nodes. `null` when the pool runs the platform default.",
+							MarkdownDescription: "Maximum Pods per node. Null when the pool uses the default.",
 							Computed:            true,
 						},
 						"labels": schema.MapAttribute{
@@ -218,7 +218,7 @@ func (d *LksNodePoolsDataSource) Schema(ctx context.Context, req datasource.Sche
 							Computed:            true,
 						},
 						"reason": schema.StringAttribute{
-							MarkdownDescription: "Machine-readable status reason for the pool (open enum).",
+							MarkdownDescription: "Status reason code reported for the pool.",
 							Computed:            true,
 						},
 						"platform_version": schema.StringAttribute{

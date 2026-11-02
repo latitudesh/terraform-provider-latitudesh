@@ -7,13 +7,12 @@ description: |-
 
 # latitudesh_lks_clusters (Data Source)
 
-Lists every LKS (Latitude Kubernetes Service) cluster in a project, optionally filtered by status.
+List the LKS (Latitude Kubernetes Service) clusters in a project, optionally filtered by `status`.
 
 ## Example Usage
 
 ```terraform
-# Every LKS cluster in a project. `status` is optional: drop it to see clusters
-# still provisioning, or being deleted, alongside the ready ones.
+# The LKS clusters in a project. `status` is optional.
 data "latitudesh_lks_clusters" "in_project" {
   project = "<project-id-or-slug>"
   status  = "ready"
@@ -36,7 +35,7 @@ output "lks_cluster_endpoints" {
 
 ### Optional
 
-- `status` (String) Only return clusters with this status (case-insensitive), e.g. `ready` or `provisioning`. This is an open enum controlled by the platform, so no fixed set of values is enforced here.
+- `status` (String) Only return clusters with this status, e.g. `ready`.
 
 ### Read-Only
 
@@ -52,14 +51,14 @@ Read-Only:
 - `created_at` (String) Timestamp when the cluster was created.
 - `description` (String) Customer description, if any.
 - `id` (String) Cluster ID.
-- `kubeconfig_url` (String) URL to fetch the cluster kubeconfig from. It only resolves once `status` is `ready`.
+- `kubeconfig_url` (String) URL to download the cluster's kubeconfig. Null until the cluster is ready.
 - `kubernetes_version` (String) Kubernetes patch version currently running.
 - `message` (String) Human-readable detail behind the current `status`.
 - `name` (String) Display name for the cluster.
 - `network` (Attributes) Cluster CIDR ranges. (see [below for nested schema](#nestedatt--clusters--network))
 - `platform_version` (String) Platform (LKS controller) version managing this cluster.
 - `project` (String) The project ID that owns the cluster.
-- `reason` (String) Machine-readable status reason (open enum).
+- `reason` (String) Status reason code reported for the cluster.
 - `site` (String) Site slug the cluster is deployed to.
 - `status` (String) Cluster lifecycle status.
 - `updated_at` (String) Timestamp when the cluster was last updated.

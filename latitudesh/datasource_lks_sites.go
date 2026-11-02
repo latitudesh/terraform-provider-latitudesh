@@ -98,7 +98,7 @@ func (d *LksSitesDataSource) Configure(ctx context.Context, req datasource.Confi
 
 func (d *LksSitesDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "LKS (Latitude Kubernetes Service) sites data source - the sites a cluster can be deployed to. This is the authoritative source for `latitudesh_lks_cluster`'s `site` argument: LKS runs in its own subset of locations, so `latitudesh_region` is not a substitute. The lookup is global and takes no arguments.",
+		MarkdownDescription: "LKS sites data source - the sites a cluster can be deployed to.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Synthetic identifier. The lookup takes no arguments, so this is always `all`.",
@@ -110,7 +110,7 @@ func (d *LksSitesDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							MarkdownDescription: "Site identifier. The API documents this as the slug to pass as `site` when creating a cluster, and it matches `slug` below.",
+							MarkdownDescription: "Site identifier; matches `slug`.",
 							Computed:            true,
 						},
 						"name": schema.StringAttribute{
