@@ -61,7 +61,7 @@ func (r *FilesystemStorageResource) Metadata(ctx context.Context, req resource.M
 
 func (r *FilesystemStorageResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Creates and manages an NFS filesystem on [Latitude.sh](https://latitude.sh/) that several servers can mount at the same time. `size_in_gb` grows in place; any other change, including a smaller size, replaces the filesystem.",
+		MarkdownDescription: "Filesystem Storage resource",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Filesystem storage identifier.",

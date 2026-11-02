@@ -2,12 +2,12 @@
 page_title: "latitudesh_filesystem_storage Resource - latitudesh"
 subcategory: ""
 description: |-
-  Creates and manages an NFS filesystem on Latitude.sh https://latitude.sh/ that several servers can mount at the same time. size_in_gb grows in place; any other change, including a smaller size, replaces the filesystem.
+  Filesystem Storage resource
 ---
 
 # latitudesh_filesystem_storage (Resource)
 
-Creates and manages an NFS filesystem on [Latitude.sh](https://latitude.sh/) that several servers can mount at the same time.
+The filesystem storage resource allows you to create and manage filesystems within your [Latitude.sh](https://latitude.sh/) account.
 
 ## Mounting on a server
 

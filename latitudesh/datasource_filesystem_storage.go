@@ -61,7 +61,7 @@ func (d *FilesystemStorageDataSource) Configure(ctx context.Context, req datasou
 
 func (d *FilesystemStorageDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Looks up a filesystem by `id`, or by `name` (optionally scoped to a `project`).",
+		MarkdownDescription: "Filesystem Storage data source - lookup a filesystem by id, or by name (optionally scoped to a project).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Filesystem identifier to look up.",

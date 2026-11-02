@@ -2,12 +2,12 @@
 page_title: "latitudesh_filesystem_storage Data Source - latitudesh"
 subcategory: ""
 description: |-
-  Looks up a filesystem by id, or by name (optionally scoped to a project).
+  Filesystem Storage data source - lookup a filesystem by id, or by name (optionally scoped to a project).
 ---
 
 # latitudesh_filesystem_storage (Data Source)
 
-Looks up an existing filesystem by `id`, or by `name` (optionally narrowed with `project`).
+Retrieve a [filesystem](https://www.latitude.sh/docs/storage/filesystem) by `id`, or by `name` (optionally narrowed with `project`).
 
 ## Example Usage
 
