@@ -7,13 +7,13 @@ description: |-
 
 # {{.Name}} ({{.Type}})
 
-Creates and manages an NFS filesystem on [Latitude.sh](https://latitude.sh/) that several servers can mount at the same time. See [File storage](https://www.latitude.sh/docs/storage/filesystem) for limits, supported operating systems and mount options.
+Creates and manages an NFS filesystem on [Latitude.sh](https://latitude.sh/) that several servers can mount at the same time.
 
 ## Mounting on a server
 
-Servers mount the filesystem over your project's private storage network, and any server on that network gets read and write access, with no credentials to manage. A server joins the network when it is deployed or reinstalled on a public network in the same project and site, after the filesystem exists. With a supported operating system, the deploy also configures the storage VLAN, routes and NFS client. A server deployed before the filesystem needs a reinstall to join.
+Servers deployed on a public network in the same project and location as the filesystem can mount it. See [File storage](https://www.latitude.sh/docs/storage/filesystem) for the requirements and mount options.
 
-The server does not reference the filesystem from the example below, so add `depends_on`, or Terraform may deploy the server first:
+Add `depends_on` so Terraform creates the filesystem before the server:
 
 ```hcl
 resource "latitudesh_public_network" "nfs" {
@@ -34,7 +34,7 @@ resource "latitudesh_server" "nfs_client" {
 }
 ```
 
-Then mount it on the server, with `vers=3` if you only enabled `nfs3`:
+Then mount it on the server:
 
 ```sh
 sudo mkdir -p /mnt/shared-data
