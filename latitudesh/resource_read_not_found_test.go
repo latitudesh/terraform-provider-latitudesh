@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,10 +24,16 @@ import (
 
 func notFoundAPI(t *testing.T) *latitudeshgosdk.Latitudesh {
 	t.Helper()
+	return statusAPI(t, http.StatusNotFound)
+}
+
+// statusAPI answers every request with the given error status.
+func statusAPI(t *testing.T, status int) *latitudeshgosdk.Latitudesh {
+	t.Helper()
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.api+json")
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"errors":[{"status":"404","title":"Not Found"}]}`))
+		w.WriteHeader(status)
+		_, _ = fmt.Fprintf(w, `{"errors":[{"status":"%d"}]}`, status)
 	}))
 	t.Cleanup(s.Close)
 	return latitudeshgosdk.New(
@@ -62,19 +69,19 @@ func readWithOnlyID(t *testing.T, r resource.Resource, id string) *resource.Read
 	return resp
 }
 
-func TestRead_DeletedOutOfBand_RemovesFromState(t *testing.T) {
-	cases := []struct {
-		name string
-		new  func(*latitudeshgosdk.Latitudesh) resource.Resource
-		id   string
-	}{
-		{"server", func(c *latitudeshgosdk.Latitudesh) resource.Resource { return &ServerResource{client: c} }, "sv_gone"},
-		{"ssh_key", func(c *latitudeshgosdk.Latitudesh) resource.Resource { return &SSHKeyResource{client: c} }, "ssh_gone"},
-		{"user_data", func(c *latitudeshgosdk.Latitudesh) resource.Resource { return &UserDataResource{client: c} }, "ud_gone"},
-		{"firewall", func(c *latitudeshgosdk.Latitudesh) resource.Resource { return &FirewallResource{client: c} }, "fw_gone"},
-	}
+var readNotFoundCases = []struct {
+	name string
+	new  func(*latitudeshgosdk.Latitudesh) resource.Resource
+	id   string
+}{
+	{"server", func(c *latitudeshgosdk.Latitudesh) resource.Resource { return &ServerResource{client: c} }, "sv_gone"},
+	{"ssh_key", func(c *latitudeshgosdk.Latitudesh) resource.Resource { return &SSHKeyResource{client: c} }, "ssh_gone"},
+	{"user_data", func(c *latitudeshgosdk.Latitudesh) resource.Resource { return &UserDataResource{client: c} }, "ud_gone"},
+	{"firewall", func(c *latitudeshgosdk.Latitudesh) resource.Resource { return &FirewallResource{client: c} }, "fw_gone"},
+}
 
-	for _, tc := range cases {
+func TestRead_DeletedOutOfBand_RemovesFromState(t *testing.T) {
+	for _, tc := range readNotFoundCases {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := readWithOnlyID(t, tc.new(notFoundAPI(t)), tc.id)
 
@@ -85,6 +92,25 @@ func TestRead_DeletedOutOfBand_RemovesFromState(t *testing.T) {
 				t.Fatalf("expected the resource to be removed from state, got %s", resp.State.Raw)
 			}
 		})
+	}
+}
+
+// Any other failed GET must stay an error and keep the prior state, so a
+// transient API failure never makes Terraform plan to recreate a live object.
+func TestRead_OtherErrors_KeepState(t *testing.T) {
+	for _, status := range []int{http.StatusForbidden, http.StatusInternalServerError} {
+		for _, tc := range readNotFoundCases {
+			t.Run(fmt.Sprintf("%s/%d", tc.name, status), func(t *testing.T) {
+				resp := readWithOnlyID(t, tc.new(statusAPI(t, status)), tc.id)
+
+				if !resp.Diagnostics.HasError() {
+					t.Fatalf("expected an error for HTTP %d", status)
+				}
+				if resp.State.Raw.IsNull() {
+					t.Fatalf("HTTP %d removed the resource from state", status)
+				}
+			})
+		}
 	}
 }
 
