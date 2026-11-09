@@ -193,50 +193,44 @@ func (r *FirewallAssignmentResource) findAssignmentByTargetAndFirewall(ctx conte
 	serverID := data.ServerID.ValueString()
 	virtualMachineID := data.VirtualMachineID.ValueString()
 
-	// Get assignments for this firewall
-	response, err := r.client.Firewalls.ListAssignments(ctx, firewallID, nil, nil)
+	var found bool
+	err := r.eachFirewallAssignment(ctx, firewallID, func(assignment *components.FirewallAssignmentData) bool {
+		if assignment.Attributes == nil || assignment.ID == nil {
+			return true
+		}
+		var assignmentServerID string
+		var assignmentVirtualMachineID string
+		var assignmentFirewallID string
+
+		// The API returns the target as server XOR virtual_machine
+		if assignment.Attributes.Server != nil && assignment.Attributes.Server.ID != nil {
+			assignmentServerID = *assignment.Attributes.Server.ID
+		}
+		if assignment.Attributes.VirtualMachine != nil && assignment.Attributes.VirtualMachine.ID != nil {
+			assignmentVirtualMachineID = *assignment.Attributes.VirtualMachine.ID
+		}
+		if assignment.Attributes.FirewallID != nil {
+			assignmentFirewallID = *assignment.Attributes.FirewallID
+		}
+		if assignmentFirewallID != firewallID {
+			return true
+		}
+
+		matchesServer := serverID != "" && assignmentServerID == serverID
+		matchesVirtualMachine := virtualMachineID != "" && assignmentVirtualMachineID == virtualMachineID
+		if matchesServer || matchesVirtualMachine {
+			data.ID = types.StringValue(*assignment.ID)
+			found = true
+			return false
+		}
+		return true
+	})
 	if err != nil {
 		diags.AddError("Client Error", "Unable to list firewall assignments to find assignment ID, got error: "+err.Error())
 		return
 	}
-
-	// Check if we have assignments data
-	if response.FirewallAssignments == nil || response.FirewallAssignments.Data == nil {
-		diags.AddError("API Error", "No assignments found for firewall after creation")
+	if found {
 		return
-	}
-
-	// Look for the assignment matching the firewall ID and the configured target
-	for _, assignment := range response.FirewallAssignments.Data {
-		if assignment.Attributes != nil && assignment.ID != nil {
-			var assignmentServerID string
-			var assignmentVirtualMachineID string
-			var assignmentFirewallID string
-
-			// The API returns the target as server XOR virtual_machine
-			if assignment.Attributes.Server != nil && assignment.Attributes.Server.ID != nil {
-				assignmentServerID = *assignment.Attributes.Server.ID
-			}
-			if assignment.Attributes.VirtualMachine != nil && assignment.Attributes.VirtualMachine.ID != nil {
-				assignmentVirtualMachineID = *assignment.Attributes.VirtualMachine.ID
-			}
-
-			// Get firewall ID from assignment
-			if assignment.Attributes.FirewallID != nil {
-				assignmentFirewallID = *assignment.Attributes.FirewallID
-			}
-
-			if assignmentFirewallID != firewallID {
-				continue
-			}
-
-			matchesServer := serverID != "" && assignmentServerID == serverID
-			matchesVirtualMachine := virtualMachineID != "" && assignmentVirtualMachineID == virtualMachineID
-			if matchesServer || matchesVirtualMachine {
-				data.ID = types.StringValue(*assignment.ID)
-				return
-			}
-		}
 	}
 
 	// If we get here, we couldn't find the matching assignment
@@ -255,6 +249,13 @@ func (r *FirewallAssignmentResource) Read(ctx context.Context, req resource.Read
 
 	r.readFirewallAssignment(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// The assignment is gone: drop it so Terraform plans a new one instead of
+	// keeping an entry whose id is null.
+	if data.ID.IsNull() {
+		resp.State.RemoveResource(ctx)
 		return
 	}
 
@@ -372,32 +373,24 @@ func (r *FirewallAssignmentResource) readFirewallAssignment(ctx context.Context,
 		return
 	}
 
-	// Get the first page of assignments for this firewall
-	// Based on the API response, there's typically only one assignment per firewall
-	response, err := r.client.Firewalls.ListAssignments(ctx, firewallID, nil, nil)
+	var found bool
+	err := r.eachFirewallAssignment(ctx, firewallID, func(assignment *components.FirewallAssignmentData) bool {
+		if assignment.ID != nil && *assignment.ID == assignmentID {
+			r.populateAssignmentData(data, assignment)
+			found = true
+			return false
+		}
+		return true
+	})
 	if err != nil {
 		diags.AddError("Client Error", "Unable to read firewall assignments, got error: "+err.Error())
 		return
 	}
 
-	// Check if we have assignments data
-	if response.FirewallAssignments == nil || response.FirewallAssignments.Data == nil {
-		// No assignments found, the assignment was likely deleted
+	// Not on any page: the assignment was deleted
+	if !found {
 		data.ID = types.StringNull()
-		return
 	}
-
-	// Look for our specific assignment in the data array
-	for _, assignment := range response.FirewallAssignments.Data {
-		if assignment.ID != nil && *assignment.ID == assignmentID {
-			// Found it! Populate the data model
-			r.populateAssignmentData(data, &assignment)
-			return
-		}
-	}
-
-	// If not found, the assignment was likely deleted
-	data.ID = types.StringNull()
 }
 
 // Helper function to populate assignment data
@@ -427,40 +420,72 @@ func (r *FirewallAssignmentResource) populateAssignmentData(data *FirewallAssign
 func (r *FirewallAssignmentResource) findFirewallForAssignment(ctx context.Context, data *FirewallAssignmentResourceModel, diags *diag.Diagnostics) {
 	assignmentID := data.ID.ValueString()
 
-	response, err := r.client.Firewalls.List(ctx, nil, nil, nil, nil)
-	if err != nil {
-		diags.AddError("Client Error", "Unable to list firewalls to find assignment, got error: "+err.Error())
-		return
-	}
-
-	if response.Firewalls == nil || response.Firewalls.Data == nil {
-		diags.AddError("API Error", "No firewalls found")
-		return
-	}
-
-	for _, firewall := range response.Firewalls.Data {
-		if firewall.ID == nil {
-			continue
-		}
-
-		firewallID := *firewall.ID
-
-		assignmentsResp, err := r.client.Firewalls.ListAssignments(ctx, firewallID, nil, nil)
+	var found bool
+	for pageNumber := int64(1); !found; pageNumber++ {
+		page, size := pageNumber, firewallListPageSize
+		response, err := r.client.Firewalls.List(ctx, nil, nil, &size, &page)
 		if err != nil {
-			continue
+			diags.AddError("Client Error", "Unable to list firewalls to find assignment, got error: "+err.Error())
+			return
+		}
+		if response.Firewalls == nil || len(response.Firewalls.Data) == 0 {
+			break
 		}
 
-		if assignmentsResp.FirewallAssignments == nil || assignmentsResp.FirewallAssignments.Data == nil {
-			continue
-		}
+		for _, firewall := range response.Firewalls.Data {
+			if firewall.ID == nil {
+				continue
+			}
+			firewallID := *firewall.ID
 
-		for _, assignment := range assignmentsResp.FirewallAssignments.Data {
-			if assignment.ID != nil && *assignment.ID == assignmentID {
+			err := r.eachFirewallAssignment(ctx, firewallID, func(assignment *components.FirewallAssignmentData) bool {
+				if assignment.ID != nil && *assignment.ID == assignmentID {
+					found = true
+					return false
+				}
+				return true
+			})
+			if err != nil {
+				continue
+			}
+			if found {
 				data.FirewallID = types.StringValue(firewallID)
 				return
 			}
 		}
+
+		if int64(len(response.Firewalls.Data)) < size {
+			break
+		}
 	}
 
 	diags.AddError("Assignment Not Found", fmt.Sprintf("Assignment %s not found in any firewall", assignmentID))
+}
+
+// firewallListPageSize is the page size used to walk the firewall and firewall
+// assignment lists. The API serves 20 items per page by default and returns no
+// pagination metadata, so a walk stops on the first short page.
+const firewallListPageSize = int64(100)
+
+// eachFirewallAssignment calls fn for every assignment of the firewall, across
+// all pages of GET /firewalls/{id}/assignments, until fn returns false.
+func (r *FirewallAssignmentResource) eachFirewallAssignment(ctx context.Context, firewallID string, fn func(*components.FirewallAssignmentData) bool) error {
+	for pageNumber := int64(1); ; pageNumber++ {
+		page, size := pageNumber, firewallListPageSize
+		response, err := r.client.Firewalls.ListAssignments(ctx, firewallID, &size, &page)
+		if err != nil {
+			return err
+		}
+		if response.FirewallAssignments == nil || len(response.FirewallAssignments.Data) == 0 {
+			return nil
+		}
+		for i := range response.FirewallAssignments.Data {
+			if !fn(&response.FirewallAssignments.Data[i]) {
+				return nil
+			}
+		}
+		if int64(len(response.FirewallAssignments.Data)) < size {
+			return nil
+		}
+	}
 }
