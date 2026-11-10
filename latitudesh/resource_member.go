@@ -222,6 +222,13 @@ func (r *MemberResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
+	// The member is not on any page: drop it so Terraform plans a new invite
+	// instead of keeping an entry whose id is null.
+	if data.ID.IsNull() {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -280,39 +287,31 @@ func (r *MemberResource) readMember(ctx context.Context, data *MemberResourceMod
 		return
 	}
 
-	// Get all team members and find ours
-	response, err := r.client.Teams.Members.GetTeamMembers(ctx, nil, nil, nil)
+	// Find our member by ID first (priority), then fall back to email. Both
+	// are looked up across every page of the team.
+	var byID, byEmail *components.TeamMembersData
+	err := r.eachTeamMember(ctx, func(m *components.TeamMembersData) bool {
+		if memberID != "" && m.ID != nil && *m.ID == memberID {
+			found := *m
+			byID = &found
+			return false
+		}
+		if byEmail == nil && memberEmail != "" && m.Attributes != nil && m.Attributes.Email != nil && *m.Attributes.Email == memberEmail {
+			found := *m
+			byEmail = &found
+			// Without an ID there is nothing better to look for.
+			return memberID != ""
+		}
+		return true
+	})
 	if err != nil {
 		diags.AddError("Client Error", "Unable to read team members, got error: "+err.Error())
 		return
 	}
 
-	if response.TeamMembers == nil || response.TeamMembers.Data == nil {
-		data.ID = types.StringNull()
-		return
-	}
-
-	// Find our member by ID first (priority), then fall back to email
-	var member *components.TeamMembersData
-
-	// First pass: look for ID match only
-	if memberID != "" {
-		for _, m := range response.TeamMembers.Data {
-			if m.ID != nil && *m.ID == memberID {
-				member = &m
-				break
-			}
-		}
-	}
-
-	// Second pass: if no ID match found, look for email match
-	if member == nil && memberEmail != "" {
-		for _, m := range response.TeamMembers.Data {
-			if m.Attributes != nil && m.Attributes.Email != nil && *m.Attributes.Email == memberEmail {
-				member = &m
-				break
-			}
-		}
+	member := byID
+	if member == nil {
+		member = byEmail
 	}
 
 	if member == nil {
@@ -446,5 +445,33 @@ func (r *MemberResource) UpgradeState(ctx context.Context) map[int64]resource.St
 				resp.Diagnostics.Append(resp.State.Set(ctx, upgradedState)...)
 			},
 		},
+	}
+}
+
+// memberListPageSize is the page size used to walk GET /team/members. The API
+// serves 20 members per page by default and returns no pagination metadata, so
+// the walk stops on the first short page.
+const memberListPageSize = int64(100)
+
+// eachTeamMember calls fn for every member of the team, across all pages of
+// GET /team/members, until fn returns false.
+func (r *MemberResource) eachTeamMember(ctx context.Context, fn func(*components.TeamMembersData) bool) error {
+	for pageNumber := int64(1); ; pageNumber++ {
+		page, size := pageNumber, memberListPageSize
+		response, err := r.client.Teams.Members.GetTeamMembers(ctx, &size, &page, nil)
+		if err != nil {
+			return err
+		}
+		if response.TeamMembers == nil || len(response.TeamMembers.Data) == 0 {
+			return nil
+		}
+		for i := range response.TeamMembers.Data {
+			if !fn(&response.TeamMembers.Data[i]) {
+				return nil
+			}
+		}
+		if int64(len(response.TeamMembers.Data)) < size {
+			return nil
+		}
 	}
 }
