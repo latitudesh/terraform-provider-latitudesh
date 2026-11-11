@@ -2,8 +2,6 @@ package latitudesh
 
 import (
 	"context"
-	"errors"
-	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -278,7 +276,7 @@ func (r *BlockStorageResource) Delete(ctx context.Context, req resource.DeleteRe
 
 	_, err := r.client.BlockStorage.DeleteVolume(ctx, id)
 	if err != nil {
-		if blockStorageNotFound(err) {
+		if apiNotFound(err) {
 			return
 		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete block storage volume, got error: "+err.Error())
@@ -301,18 +299,6 @@ func blockStorageShrinkRequiresReplace(ctx context.Context, req planmodifier.Int
 	resp.RequiresReplace = req.PlanValue.ValueInt64() < req.StateValue.ValueInt64()
 }
 
-// blockStorageNotFound reports whether err is a 404 from the BlockStorage
-// group. RetrieveVolume and DeleteVolume only ever return the
-// generic *components.APIError (no typed *components.ErrorObject branch is
-// generated for either), unlike groups such as ElasticIps.
-func blockStorageNotFound(err error) bool {
-	var apiErr *components.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.StatusCode == http.StatusNotFound
-	}
-	return false
-}
-
 // readBlockStorageInto maps a fresh read of the volume into data, reporting
 // whether the volume was found. A miss (404 or an empty body) nulls the id so
 // callers that write data straight to state cannot keep a dangling resource,
@@ -322,7 +308,7 @@ func (r *BlockStorageResource) readBlockStorageInto(ctx context.Context, data *B
 
 	result, err := r.client.BlockStorage.RetrieveVolume(ctx, id)
 	if err != nil {
-		if blockStorageNotFound(err) {
+		if apiNotFound(err) {
 			data.ID = types.StringNull()
 			return false
 		}

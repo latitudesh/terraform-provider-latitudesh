@@ -317,7 +317,7 @@ func (r *BlockStorageAttachmentResource) Delete(ctx context.Context, req resourc
 	if _, err := r.client.BlockStorage.UnmapVolume(ctx, volumeID); err != nil {
 		// The volume itself may already be gone (it is destroyed right after
 		// this resource in a normal `terraform destroy`), which unmaps it.
-		if blockStorageNotFound(err) {
+		if apiNotFound(err) {
 			return
 		}
 		// The API answers 409 when there is no active mapping to remove. If the
@@ -347,7 +347,7 @@ func (r *BlockStorageAttachmentResource) ImportState(ctx context.Context, req re
 func (r *BlockStorageAttachmentResource) readBlock(ctx context.Context, volumeID string) (block *components.Block, found bool, err error) {
 	result, err := r.client.BlockStorage.RetrieveVolume(ctx, volumeID)
 	if err != nil {
-		if blockStorageNotFound(err) {
+		if apiNotFound(err) {
 			return nil, false, nil
 		}
 		return nil, false, err

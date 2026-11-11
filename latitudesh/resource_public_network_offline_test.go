@@ -2,8 +2,6 @@ package latitudesh
 
 import (
 	"encoding/json"
-	"fmt"
-	"net/http"
 	"testing"
 
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
@@ -99,55 +97,5 @@ func TestMapPublicNetworkAttributesProjectFallsBackToID(t *testing.T) {
 
 	if got.Project.ValueString() != "proj_123" {
 		t.Errorf("Project = %q, want proj_123 when slug is absent", got.Project.ValueString())
-	}
-}
-
-func TestPublicNetworkNotFound(t *testing.T) {
-	status403 := "403"
-	status404 := "404"
-
-	cases := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{
-			name: "ErrorObject with 404 status (typed 404 the GET/DELETE endpoints return)",
-			err:  &components.ErrorObject{Errors: []components.Errors{{Status: &status404}}},
-			want: true,
-		},
-		{
-			name: "ErrorObject with 403 status is not a miss",
-			err:  &components.ErrorObject{Errors: []components.Errors{{Status: &status403}}},
-			want: false,
-		},
-		{
-			name: "APIError with 404 status code",
-			err:  components.NewAPIError("not found", http.StatusNotFound, "", nil),
-			want: true,
-		},
-		{
-			name: "APIError with a non-404 status code",
-			err:  components.NewAPIError("boom", http.StatusInternalServerError, "", nil),
-			want: false,
-		},
-		{
-			name: "wrapped ErrorObject 404 is still detected",
-			err:  fmt.Errorf("get failed: %w", &components.ErrorObject{Errors: []components.Errors{{Status: &status404}}}),
-			want: true,
-		},
-		{
-			name: "unrelated error mentioning 404 in its text",
-			err:  fmt.Errorf("dial tcp: lookup pn_404abc failed"),
-			want: false,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := publicNetworkNotFound(tc.err); got != tc.want {
-				t.Errorf("publicNetworkNotFound() = %v, want %v", got, tc.want)
-			}
-		})
 	}
 }

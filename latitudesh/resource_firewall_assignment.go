@@ -290,7 +290,7 @@ func (r *FirewallAssignmentResource) Delete(ctx context.Context, req resource.De
 
 	_, err := r.client.Firewalls.DeleteAssignment(ctx, firewallID, assignmentID)
 	if err != nil {
-		if strings.Contains(err.Error(), "404") {
+		if apiNotFound(err) {
 			return
 		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete firewall assignment, got error: "+err.Error())

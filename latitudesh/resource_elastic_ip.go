@@ -347,7 +347,7 @@ func (r *ElasticIPResource) Delete(ctx context.Context, req resource.DeleteReque
 
 	_, err := r.client.ElasticIps.DeleteElasticIP(ctx, id)
 	if err != nil {
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not_found") {
+		if apiNotFound(err) {
 			resp.Diagnostics.AddWarning("Elastic IP Already Released", "Elastic IP was already released")
 			return
 		}
@@ -474,7 +474,7 @@ func (r *ElasticIPResource) waitForElasticIPGone(ctx context.Context, id string,
 	for time.Now().Before(deadline) {
 		_, err := r.client.ElasticIps.GetElasticIP(ctx, id)
 		if err != nil {
-			if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not_found") {
+			if apiNotFound(err) {
 				return
 			}
 		}
@@ -586,7 +586,7 @@ func (r *ElasticIPResource) readElasticIPInto(ctx context.Context, data *Elastic
 	}
 	resp, err := r.client.ElasticIps.GetElasticIP(ctx, id)
 	if err != nil {
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not_found") {
+		if apiNotFound(err) {
 			data.ID = types.StringNull()
 			return
 		}

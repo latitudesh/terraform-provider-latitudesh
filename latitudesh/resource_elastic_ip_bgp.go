@@ -205,19 +205,6 @@ func addElasticIPBgpError(diags *diag.Diagnostics, op string, err error) {
 	diags.AddError("Client Error", "Unable to "+op+": "+msg)
 }
 
-// isElasticIPBgpNotFound reports whether an SDK error is a 404. The API answers
-// with a JSON:API error document, so the status code is the reliable signal.
-func isElasticIPBgpNotFound(err error) bool {
-	if err == nil {
-		return false
-	}
-	var apiErr *components.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.StatusCode == http.StatusNotFound
-	}
-	return strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not_found")
-}
-
 func (r *ElasticIPBgpResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_elastic_ip_bgp"
 }
@@ -673,7 +660,7 @@ func (r *ElasticIPBgpResource) Delete(ctx context.Context, req resource.DeleteRe
 	// opened outside Terraform, which is why this works off the live list rather
 	// than off state.
 	sessions, err := r.listSessions(ctx, id)
-	if err != nil && !isElasticIPBgpNotFound(err) {
+	if err != nil && !apiNotFound(err) {
 		addElasticIPBgpError(&resp.Diagnostics, "list BGP sessions", err)
 		return
 	}
@@ -688,7 +675,7 @@ func (r *ElasticIPBgpResource) Delete(ctx context.Context, req resource.DeleteRe
 	}
 
 	if _, err := r.client.ElasticIps.DeleteElasticIP(ctx, id); err != nil {
-		if isElasticIPBgpNotFound(err) {
+		if apiNotFound(err) {
 			resp.Diagnostics.AddWarning("Elastic IP Already Released", "Elastic IP was already released")
 			return
 		}
@@ -778,7 +765,7 @@ func (r *ElasticIPBgpResource) readInto(ctx context.Context, data *ElasticIPBgpR
 
 	resp, err := r.client.ElasticIps.GetElasticIP(ctx, id, operations.WithRetries(bgpReadRetryConfig))
 	if err != nil {
-		if isElasticIPBgpNotFound(err) {
+		if apiNotFound(err) {
 			data.ID = types.StringNull()
 			return
 		}
@@ -825,7 +812,7 @@ func (r *ElasticIPBgpResource) readInto(ctx context.Context, data *ElasticIPBgpR
 
 	sessions, err := r.listSessions(ctx, id)
 	if err != nil {
-		if isElasticIPBgpNotFound(err) {
+		if apiNotFound(err) {
 			data.ID = types.StringNull()
 			return
 		}
@@ -1010,7 +997,7 @@ func (r *ElasticIPBgpResource) openSession(ctx context.Context, elasticIPID, ser
 // session to disappear.
 func (r *ElasticIPBgpResource) closeSession(ctx context.Context, elasticIPID, sessionID string, deadline time.Time, diags *diag.Diagnostics) {
 	if _, err := r.client.ElasticIps.DeleteElasticIPBgpSession(ctx, elasticIPID, sessionID, nil); err != nil {
-		if isElasticIPBgpNotFound(err) {
+		if apiNotFound(err) {
 			return
 		}
 		addElasticIPBgpError(diags, "close BGP session "+sessionID, err)
@@ -1020,7 +1007,7 @@ func (r *ElasticIPBgpResource) closeSession(ctx context.Context, elasticIPID, se
 	pollInterval := bgpPollInterval
 	for time.Now().Before(deadline) {
 		_, err := r.client.ElasticIps.GetElasticIPBgpSession(ctx, elasticIPID, sessionID)
-		if isElasticIPBgpNotFound(err) {
+		if apiNotFound(err) {
 			return
 		}
 		if err != nil && !isTransientElasticIPBgpError(err) {
@@ -1200,7 +1187,7 @@ func (r *ElasticIPBgpResource) waitForGone(ctx context.Context, id string, deadl
 
 	for time.Now().Before(deadline) {
 		_, err := r.client.ElasticIps.GetElasticIP(ctx, id)
-		if isElasticIPBgpNotFound(err) {
+		if apiNotFound(err) {
 			return
 		}
 		// Only a 404 means released, and only a transient error is worth another

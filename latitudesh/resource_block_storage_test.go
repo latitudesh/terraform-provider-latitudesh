@@ -676,7 +676,7 @@ func TestBlockStorage_CreateSurvivesUnreadableVolume(t *testing.T) {
 	})
 }
 
-// blockStorageNotFound must accept only a 404 APIError, never a 403 or a
+// apiNotFound must accept only a 404 APIError, never a 403 or a
 // transient 5xx (which would otherwise read as "gone" and drop a live volume
 // from state, or make destroy report false success).
 // A read-back that fails with anything but a 404 must not cost the volume its
@@ -708,26 +708,6 @@ func TestBlockStorage_CreateSurvivesReadBackError(t *testing.T) {
 			},
 		},
 	})
-}
-
-func TestBlockStorageNotFound(t *testing.T) {
-	cases := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{"404 APIError", &components.APIError{StatusCode: http.StatusNotFound, Message: "not found"}, true},
-		{"403 APIError", &components.APIError{StatusCode: http.StatusForbidden, Message: "forbidden"}, false},
-		{"500 APIError", &components.APIError{StatusCode: http.StatusInternalServerError, Message: "boom"}, false},
-		{"plain error", fmt.Errorf("boom"), false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := blockStorageNotFound(tc.err); got != tc.want {
-				t.Errorf("blockStorageNotFound(%v) = %v, want %v", tc.err, got, tc.want)
-			}
-		})
-	}
 }
 
 // mapBlockStorageVolume must null purely-computed fields on absence, and only
@@ -886,7 +866,7 @@ func testAccCheckBlockStorageDestroy(s *terraform.State) error {
 			resp.Object.Data.ID != nil && *resp.Object.Data.ID == id {
 			return fmt.Errorf("block storage volume still exists: %s", id)
 		}
-		if err != nil && !blockStorageNotFound(err) {
+		if err != nil && !apiNotFound(err) {
 			return fmt.Errorf("checking block storage volume %s destroyed: %w", id, err)
 		}
 	}

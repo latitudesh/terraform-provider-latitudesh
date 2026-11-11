@@ -1484,7 +1484,7 @@ func (r *ServerResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 	_, err := r.client.Servers.Delete(ctx, serverID, nil)
 	if err != nil {
-		if strings.Contains(err.Error(), "404") {
+		if apiNotFound(err) {
 			resp.Diagnostics.AddWarning("Server Already Deleted", "Server appears to have been deleted outside of Terraform")
 			return
 		}

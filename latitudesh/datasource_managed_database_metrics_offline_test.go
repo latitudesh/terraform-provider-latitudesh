@@ -2,11 +2,9 @@ package latitudesh
 
 import (
 	"context"
-	"net/http"
 	"testing"
 	"time"
 
-	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
@@ -95,42 +93,5 @@ func TestManagedDatabaseMetricsValueEmptyNeverNull(t *testing.T) {
 	}
 	if n := len(got.Elements()); n != 0 {
 		t.Fatalf("managedDatabaseMetricsValue(nil) length = %d, want 0", n)
-	}
-}
-
-func TestManagedDatabaseMetricsNotFound(t *testing.T) {
-	cases := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{
-			name: "APIError 404",
-			err:  components.NewAPIError("not found", http.StatusNotFound, "", nil),
-			want: true,
-		},
-		{
-			name: "APIError 500",
-			err:  components.NewAPIError("boom", http.StatusInternalServerError, "", nil),
-			want: false,
-		},
-		{
-			name: "ErrorObject 404",
-			err:  &components.ErrorObject{Errors: []components.Errors{{Status: strPtr("404")}}},
-			want: true,
-		},
-		{
-			name: "ErrorObject 422",
-			err:  &components.ErrorObject{Errors: []components.Errors{{Status: strPtr("422")}}},
-			want: false,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := managedDatabaseMetricsNotFound(tc.err); got != tc.want {
-				t.Errorf("managedDatabaseMetricsNotFound(%v) = %v, want %v", tc.err, got, tc.want)
-			}
-		})
 	}
 }

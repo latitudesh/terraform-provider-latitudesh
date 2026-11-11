@@ -2,9 +2,7 @@ package latitudesh
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
@@ -16,7 +14,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
-	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 	"github.com/latitudesh/latitudesh-go-sdk/retry"
 
@@ -199,7 +196,7 @@ func (d *ManagedDatabaseMetricsDataSource) Read(ctx context.Context, req datasou
 
 	res, err := d.client.ManagedDatabases.ShowManagedDatabaseMetrics(ctx, managedDatabaseID, period, queries, operations.WithRetries(metricsRetryConfig))
 	if err != nil {
-		if managedDatabaseMetricsNotFound(err) {
+		if apiNotFound(err) {
 			resp.Diagnostics.AddError("Not Found", fmt.Sprintf("No managed database exists with ID %q", managedDatabaseID))
 			return
 		}
@@ -223,26 +220,6 @@ func (d *ManagedDatabaseMetricsDataSource) Read(ctx context.Context, req datasou
 	data.Metrics = metrics
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-}
-
-// managedDatabaseMetricsNotFound reports whether err is a 404 from the metrics
-// endpoint (e.g. an unknown managed_database_id).
-func managedDatabaseMetricsNotFound(err error) bool {
-	var apiErr *components.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.StatusCode == http.StatusNotFound
-	}
-
-	var errObj *components.ErrorObject
-	if errors.As(err, &errObj) {
-		for _, e := range errObj.Errors {
-			if e.Status != nil && *e.Status == "404" {
-				return true
-			}
-		}
-	}
-
-	return false
 }
 
 // managedDatabaseMetricsValue maps the metrics map keyed by metric name. Map

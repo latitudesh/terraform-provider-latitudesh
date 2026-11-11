@@ -103,7 +103,7 @@ func (e *LksKubeconfigEphemeral) Open(ctx context.Context, req ephemeral.OpenReq
 
 	result, err := e.client.Lks.GetLksClusterKubeconfig(ctx, clusterID)
 	if err != nil {
-		if lksClusterNotFound(err) {
+		if apiNotFound(err) {
 			resp.Diagnostics.AddError("Not Found", "No LKS cluster exists with ID \""+clusterID+"\"")
 			return
 		}

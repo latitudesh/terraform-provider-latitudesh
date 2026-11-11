@@ -564,26 +564,6 @@ func TestFilesystemStorage_RejectsUppercaseProtocols(t *testing.T) {
 	})
 }
 
-func TestFilesystemStorageNotFound(t *testing.T) {
-	cases := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{"404 APIError", &components.APIError{StatusCode: http.StatusNotFound, Message: "not found"}, true},
-		{"403 APIError", &components.APIError{StatusCode: http.StatusForbidden, Message: "forbidden"}, false},
-		{"500 APIError", &components.APIError{StatusCode: http.StatusInternalServerError, Message: "boom"}, false},
-		{"plain error", fmt.Errorf("boom"), false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := filesystemStorageNotFound(tc.err); got != tc.want {
-				t.Errorf("filesystemStorageNotFound(%v) = %v, want %v", tc.err, got, tc.want)
-			}
-		})
-	}
-}
-
 // mapFilesystemStorage must null purely-computed fields on absence, only
 // backfill project when state has nothing (import), never clobbering a
 // configured slug with the API's canonical form, and only overwrite Required
@@ -768,7 +748,7 @@ func testAccCheckFilesystemStorageDestroy(s *terraform.State) error {
 
 		resp, err := client.FilesystemStorage.ListFilesystems(ctx, nil)
 		if err != nil {
-			if filesystemStorageNotFound(err) {
+			if apiNotFound(err) {
 				continue
 			}
 			return fmt.Errorf("checking filesystem storage %s destroyed: %w", id, err)

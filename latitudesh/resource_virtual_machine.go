@@ -467,11 +467,7 @@ func (r *VirtualMachineResource) Delete(ctx context.Context, req resource.Delete
 
 	_, err := r.client.VirtualMachines.Delete(ctx, id)
 	if err != nil {
-		var apiErr *components.APIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
-			return
-		}
-		if strings.Contains(err.Error(), "404") {
+		if apiNotFound(err) {
 			return
 		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete virtual machine, got error: "+err.Error())

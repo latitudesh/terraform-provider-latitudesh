@@ -1,0 +1,88 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+The managed database resource allows you to create and manage managed PostgreSQL databases within your [Latitude.sh](https://latitude.sh/) account. See [Managed Databases](https://www.latitude.sh/docs/managed-databases) for how they work.
+
+Creating a database waits until it is ready, then applies `trusted_sources`. `trusted_sources` and `parameters` update in place.
+
+## Changes that destroy the database
+
+Changing any of these replaces the database, which destroys its data:
+
+- `name`
+- `plan`
+- `region`
+- `engine`
+- `project`, when it is set on the resource
+
+Set `lifecycle { prevent_destroy = true }` on databases that hold data, as the example does. `prevent_destroy` doesn't protect against deleting the resource block itself.
+
+These changes fail at plan time instead of replacing the database:
+
+- **`billing`** is set at create time, and the API can't change it. To stop managing it, remove it from the configuration. To change it, recreate the database: run `terraform taint <address>`, then apply.
+- **The provider's default `project`**, when the resource inherits it. The error names the project to set on the resource to keep the database where it is.
+
+## Allowlist and parameters
+
+- **`trusted_sources`:**
+  - Each entry must be a canonical CIDR block, such as `203.0.113.10/32`.
+  - The list can't be emptied through the API.
+  - If `trusted_sources` is not set, Terraform doesn't manage the allowlist. What an unset allowlist allows is unconfirmed, so always set it.
+  - The API accepts `trusted_sources` only after the database exists, so it is applied once the database is ready. Until then, the database runs under latitude.sh's default allowlist, which is unconfirmed. If applying it fails, the error says so; check the database in the dashboard.
+- **`parameters`:**
+  - Changing parameters triggers a rolling restart of the database.
+  - Removing a key doesn't reset it: the database keeps its current value.
+  - Terraform tracks only the keys you set.
+  - Write values in the form the server stores them, or the plan shows a change on every apply.
+
+`credentials`, including `password` and `url`, are stored in Terraform state. Protect your state accordingly.
+
+## Example Usage
+
+{{ tffile (printf "examples/%s.tf" .Name) }}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+You can import a managed database resource using either the CLI method or the [experimental import block](https://developer.hashicorp.com/terraform/language/import).
+
+**CLI Import**
+
+The `latitudesh_managed_database` resource can be imported by specifying the database ID:
+
+```sh
+terraform import latitudesh_managed_database.example <MANAGED_DATABASE_ID>
+```
+
+After importing, check the first plan:
+
+- **Replace-forcing inputs.** A spelling difference between the API and your configuration in `name`, `engine`, `plan`, `region` or `project` plans a replacement.
+- **`project`.** Set it to the imported project ID, not a slug, or use `lifecycle { ignore_changes }`.
+- **`parameters`.** Parameters are not imported. If your configuration sets them, the first apply re-sends them, which triggers a rolling restart.
+- **Credentials.** If the API doesn't return the password, `credentials.password` and `credentials.url` stay null.
+
+**Import Block (Experimental)**
+
+Terraform v1.5.0 and later supports the experimental import block, which allows you to define imports in your configuration.
+
+```hcl
+import {
+  to = latitudesh_managed_database.example
+  id = "<MANAGED_DATABASE_ID>"
+}
+```
+
+Then run:
+
+```sh
+terraform plan -generate-config-out=generated_managed_database.tf
+```
+
+> **Note:** The import block feature is experimental and its syntax or behavior may change in future Terraform versions.

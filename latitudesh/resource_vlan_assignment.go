@@ -262,7 +262,7 @@ func (r *VlanAssignmentResource) Delete(ctx context.Context, req resource.Delete
 
 	result, err := r.client.PrivateNetworks.DeleteAssignment(ctx, id)
 	if err != nil && err.Error() != "{}" {
-		if strings.Contains(err.Error(), "404") {
+		if apiNotFound(err) {
 			return
 		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete virtual network assignment, got error: "+err.Error())
@@ -444,7 +444,7 @@ func (r *VlanAssignmentResource) rollbackAssignment(id string) bool {
 		cancel()
 
 		// A 404 means the assignment is already gone — treat as success.
-		if err != nil && strings.Contains(err.Error(), "404") {
+		if err != nil && apiNotFound(err) {
 			return true
 		}
 		// A real transport/API error (the SDK reports an empty success body as
