@@ -504,7 +504,7 @@ func mdbAddCreateWaitError(id string, result mdbWaitResult, diags *diag.Diagnost
 	case mdbWaitGone:
 		diags.AddError(
 			fmt.Sprintf("Managed database %s is being deleted or is gone", id),
-			fmt.Sprintf("%s, so it can't become ready. %s", mdbGoneReason(result), mdbCreateTaintedDetail),
+			fmt.Sprintf("%s, so it can't become ready. %s", mdbGoneReason(result.reportedStatus()), mdbCreateTaintedDetail),
 		)
 	case mdbWaitError:
 		diags.AddError(
@@ -750,6 +750,14 @@ type mdbWaitResult struct {
 	// seen before the 404.
 	NotFound bool
 	Err      error
+}
+
+// reportedStatus is the status to report: empty after a 404.
+func (r mdbWaitResult) reportedStatus() string {
+	if r.NotFound {
+		return ""
+	}
+	return r.LastStatus
 }
 
 type mdbWaitOpts struct {
@@ -1279,11 +1287,7 @@ func mdbAddUpdateError(diags *diag.Diagnostics, id string, stage mdbUpdateStage,
 // mdbAddUpdateWaitError reports a failed Update wait. A 404 is reported as
 // "no longer found", whatever status the wait saw before it.
 func mdbAddUpdateWaitError(diags *diag.Diagnostics, id string, stage mdbUpdateStage, result mdbWaitResult) {
-	status := result.LastStatus
-	if result.NotFound {
-		status = ""
-	}
-	mdbAddUpdateError(diags, id, stage, result.Kind, status, result.Err)
+	mdbAddUpdateError(diags, id, stage, result.Kind, result.reportedStatus(), result.Err)
 }
 
 func mdbUpdateErrorText(id string, stage mdbUpdateStage, kind mdbWaitKind, status string, err error) (string, string) {
@@ -1296,7 +1300,7 @@ func mdbUpdateErrorText(id string, stage mdbUpdateStage, kind mdbWaitKind, statu
 		switch kind {
 		case mdbWaitGone:
 			return fmt.Sprintf("Managed database %s is being deleted or is gone", id),
-				fmt.Sprintf("%s, so no change was sent. Run `terraform plan` to refresh. If it's gone, the plan recreates it.", mdbGoneReason(mdbWaitResult{LastStatus: status}))
+				fmt.Sprintf("%s, so no change was sent. Run `terraform plan` to refresh. If it's gone, the plan recreates it.", mdbGoneReason(status))
 		case mdbWaitTimeout:
 			return fmt.Sprintf("Timeout waiting for managed database %s to be ready", id),
 				fmt.Sprintf("The database didn't report ready in time (last status %q), so no change was sent. Terraform still tracks it as before. Re-apply once the latitude.sh dashboard shows it ready.", status)
@@ -1706,12 +1710,13 @@ func mdbTransportError(err error) bool {
 	return errors.As(err, &urlErr) && !errors.Is(err, context.Canceled)
 }
 
-// mdbGoneReason says why a wait ended as gone: a 404, or a deleting status.
-func mdbGoneReason(result mdbWaitResult) string {
-	if result.NotFound || result.LastStatus == "" {
+// mdbGoneReason says why a wait ended as gone: a 404 (no status), or a
+// deleting status.
+func mdbGoneReason(status string) string {
+	if status == "" {
 		return "latitude.sh no longer finds the database"
 	}
-	return fmt.Sprintf("The database reports status %q", result.LastStatus)
+	return fmt.Sprintf("The database reports status %q", status)
 }
 
 // mdbRateLimited reports whether err is a 429. Pollers retry it without
