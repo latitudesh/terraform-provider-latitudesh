@@ -79,6 +79,22 @@ func mdbCheckReplaced(m *mdbMock) resource.TestCheckFunc {
 	}
 }
 
+// mdbCheckPostPatchDelay asserts that the first status check after the PATCH
+// waited at least one poll interval (the mock's PATCH answers "running", which
+// isn't in progress, so the delay applies).
+func mdbCheckPostPatchDelay(m *mdbMock) resource.TestCheckFunc {
+	return func(*terraform.State) error {
+		gap, ok := m.patchToNextGet()
+		if !ok {
+			return fmt.Errorf("no GET after the PATCH: %q", m.methods())
+		}
+		if gap < mdbReadyPollInterval {
+			return fmt.Errorf("first GET %v after the PATCH, want at least the %v delay", gap, mdbReadyPollInterval)
+		}
+		return nil
+	}
+}
+
 func TestManagedDatabase_MockLifecycle(t *testing.T) {
 	mock, server := newMdbMock(t)
 
@@ -105,6 +121,7 @@ func TestManagedDatabase_MockLifecycle(t *testing.T) {
 					resource.TestCheckResourceAttr(mdbResourceName, "trusted_sources.#", "1"),
 					resource.TestCheckTypeSetElemAttr(mdbResourceName, "trusted_sources.*", "203.0.113.10/32"),
 					resource.TestCheckResourceAttr(mdbResourceName, "parameters.work_mem", "64MB"),
+					mdbCheckPostPatchDelay(mock),
 					mdbCheckLog(mock, func(methods string) error {
 						// POST, the readiness GETs, the PATCH, more GETs.
 						i := strings.Index(methods, "PATCH")
@@ -131,6 +148,7 @@ func TestManagedDatabase_MockLifecycle(t *testing.T) {
 					resource.TestCheckResourceAttr(mdbResourceName, "id", "mdb_mock_1"),
 					resource.TestCheckResourceAttr(mdbResourceName, "trusted_sources.#", "2"),
 					resource.TestCheckResourceAttr(mdbResourceName, "parameters.work_mem", "128MB"),
+					mdbCheckPostPatchDelay(mock),
 					mdbCheckLog(mock, func(methods string) error {
 						if strings.Contains(methods, "POST") || strings.Contains(methods, "DELETE") || strings.Count(methods, "PATCH") != 1 {
 							return fmt.Errorf("want one PATCH and no POST or DELETE, got %q", methods)

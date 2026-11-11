@@ -59,7 +59,9 @@ func apiNotFound(err error) bool {
 
 // resolveProjectID turns a `project` selector (an ID or a slug) into the
 // project ID that create payloads' project_id takes. Some create endpoints
-// accept only an ID, so every create resolves conservatively. A selector that
+// accept only an ID: POST /public_networks answers a slug with 404 "Specified
+// Record Not Found" (verified live 2026-09-11). So every create resolves
+// conservatively. A selector that
 // already carries the `proj_` prefix is returned unchanged; anything else is
 // looked up with GetProject, which accepts either. Callers keep the configured
 // selector in state.

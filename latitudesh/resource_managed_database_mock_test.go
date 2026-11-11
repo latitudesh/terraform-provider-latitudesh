@@ -34,6 +34,7 @@ type mdbRequest struct {
 	Method string
 	Path   string
 	Body   string
+	At     time.Time
 }
 
 // mdbMock is the in-memory managed database API shared by every
@@ -130,6 +131,23 @@ func (m *mdbMock) methods() string {
 	return strings.Join(out, " ")
 }
 
+// patchToNextGet returns how long after the last PATCH the next GET arrived.
+func (m *mdbMock) patchToNextGet() (time.Duration, bool) {
+	reqs := m.requests()
+	for i := len(reqs) - 1; i >= 0; i-- {
+		if reqs[i].Method != http.MethodPatch {
+			continue
+		}
+		for _, next := range reqs[i+1:] {
+			if next.Method == http.MethodGet {
+				return next.At.Sub(reqs[i].At), true
+			}
+		}
+		return 0, false
+	}
+	return 0, false
+}
+
 func (m *mdbMock) count(method string) int {
 	n := 0
 	for _, r := range m.requests() {
@@ -213,7 +231,7 @@ func (m *mdbMock) handler(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.log = append(m.log, mdbRequest{Method: r.Method, Path: r.URL.Path, Body: string(body)})
+	m.log = append(m.log, mdbRequest{Method: r.Method, Path: r.URL.Path, Body: string(body), At: time.Now()})
 	w.Header().Set("Content-Type", "application/vnd.api+json")
 
 	writeJSON := func(status int, v any) {

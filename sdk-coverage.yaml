@@ -318,7 +318,7 @@ groups:
       API error shape, observed live 2026-09-18: JSON:API prescribes `status`
       as the HTTP code as a string, and the SDK's examples use "404", but the
       live LKS endpoints render it snake_case ("not_found") with a matching
-      `code` ("NOT_FOUND"). lksClusterNotFound accepts both spellings on
+      `code` ("NOT_FOUND"). apiNotFound accepts both spellings on
       either field — it backs every Read, Delete and poller for clusters and
       node pools, and matching only "404" made destroy fail on a cluster it
       had just successfully deleted. Whether 5xx is spelled the same way has

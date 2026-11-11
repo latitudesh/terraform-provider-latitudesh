@@ -360,6 +360,12 @@ func newMdbSequence(t *testing.T, responses ...mdbResponse) (*mdbSequence, *Mana
 	return seq, r
 }
 
+func (s *mdbSequence) first() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.firstAt
+}
+
 func (s *mdbSequence) count() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -491,16 +497,20 @@ func TestWaitForManagedDatabaseReady_InitialDelay(t *testing.T) {
 	if got.Kind != mdbWaitReady {
 		t.Fatalf("kind = %v, want ready", got.Kind)
 	}
-	if first := seq.firstAt.Sub(start); first < 80*time.Millisecond {
+	if first := seq.first().Sub(start); first < 80*time.Millisecond {
 		t.Errorf("first Show after %v, want at least the 80ms initial delay", first)
 	}
 
-	// The delay never runs past the deadline.
-	_, r = newMdbScript(t, mdbScriptStep{status: "provisioning"})
+	// The delay never runs past the deadline, and leaves room for at least
+	// one status check: a database that is already ready is still seen.
+	seq, r = newMdbScript(t, mdbScriptStep{status: "running"})
 	start = time.Now()
 	got = ready(r, 50*time.Millisecond, mdbWaitOpts{InitialDelay: 10 * time.Second})
-	if got.Kind != mdbWaitTimeout || time.Since(start) > 2*time.Second {
-		t.Errorf("kind = %v after %v, want a timeout at the deadline", got.Kind, time.Since(start))
+	if time.Since(start) > 2*time.Second {
+		t.Errorf("waited %v, past the deadline", time.Since(start))
+	}
+	if got.Kind != mdbWaitReady || seq.count() == 0 {
+		t.Errorf("kind = %v after %d checks, want ready from a final check before the deadline", got.Kind, seq.count())
 	}
 }
 

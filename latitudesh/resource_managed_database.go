@@ -744,8 +744,8 @@ type mdbWaitOpts struct {
 	// not-yet-readable 404 right after a create. Every wait except Create's
 	// first one sets it.
 	NotFoundIsGone bool
-	// InitialDelay postpones the first status check (bounded by the
-	// deadline). After a PATCH it gives an asynchronous change time to show
+	// InitialDelay postpones the first status check (to at most half the
+	// time left before the deadline). After a PATCH it gives an asynchronous change time to show
 	// as in progress, so the wait can't end on the status from before it.
 	InitialDelay time.Duration
 }
@@ -856,9 +856,11 @@ func (r *ManagedDatabaseResource) waitForManagedDatabaseReady(ctx context.Contex
 	}
 
 	if opts.InitialDelay > 0 {
+		// Leave room for at least one status check before the deadline, so a
+		// change that already took effect isn't reported as a timeout.
 		delay := opts.InitialDelay
-		if remaining := time.Until(deadline); delay > remaining {
-			delay = remaining
+		if room := time.Until(deadline) / 2; delay > room {
+			delay = room
 		}
 		select {
 		case <-ctx.Done():
