@@ -1254,16 +1254,19 @@ func mdbForbidden(err error) bool {
 // whether the value was rejected.
 func mdbAddCreatePatchError(id string, err error, diags *diag.Diagnostics) {
 	detail := managedDatabaseErrorDetail(err)
+	// The create payload has no trusted_sources, so until this PATCH lands the
+	// database runs under whatever allowlist the API applies by default.
+	const exposure = " Until trusted_sources is applied, the database runs under latitude.sh's default allowlist, which is unconfirmed: check it in the dashboard."
 	if mdbPatchRejected(err) {
 		diags.AddError(
 			"trusted_sources rejected by the API",
 			fmt.Sprintf("latitude.sh rejected the allowlist for managed database %s: %s. The database exists and is tracked in state but is tainted. "+
 				"Fix trusted_sources, then run `terraform untaint <address>` and apply. Applying without untainting destroys and recreates the database "+
-				"(or fails, if `prevent_destroy` is set), and the same value will be rejected again.", id, detail),
+				"(or fails, if `prevent_destroy` is set), and the same value will be rejected again."+exposure, id, detail),
 		)
 		return
 	}
-	msg := fmt.Sprintf("The allowlist for managed database %s couldn't be applied: %s. %s", id, detail, mdbCreateTaintedDetail)
+	msg := fmt.Sprintf("The allowlist for managed database %s couldn't be applied: %s. %s", id, detail, mdbCreateTaintedDetail) + exposure
 	if mdbForbidden(err) {
 		msg += " Fix the token's permissions before re-applying; recreating the database won't help."
 	}

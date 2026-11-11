@@ -34,6 +34,7 @@ These changes fail at plan time instead of replacing the database:
   - Each entry must be a canonical CIDR block, such as `203.0.113.10/32`.
   - The list can't be emptied through the API.
   - If `trusted_sources` is not set, Terraform doesn't manage the allowlist. What an unset allowlist allows is unconfirmed, so always set it.
+  - The API accepts `trusted_sources` only after the database exists, so it is applied once the database is ready. Until then, the database runs under latitude.sh's default allowlist, which is unconfirmed. If applying it fails, the error says so; check the database in the dashboard.
 - **`parameters`:**
   - Changing parameters triggers a rolling restart of the database.
   - Removing a key doesn't reset it: the database keeps its current value.

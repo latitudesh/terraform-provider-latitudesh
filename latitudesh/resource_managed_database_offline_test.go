@@ -470,6 +470,9 @@ func TestMdbCreatePatchErrorClassification(t *testing.T) {
 		if tc.status == 403 && !strings.Contains(diags.Errors()[0].Detail(), "permissions") {
 			t.Errorf("403 detail should mention permissions")
 		}
+		if !strings.Contains(diags.Errors()[0].Detail(), "default allowlist") {
+			t.Errorf("%d: detail should say the database runs under the default allowlist", tc.status)
+		}
 	}
 }
 
