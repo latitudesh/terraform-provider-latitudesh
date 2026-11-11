@@ -622,3 +622,21 @@ func TestMdbUpdatePatch(t *testing.T) {
 		})
 	}
 }
+
+// A 404 reaches the "gone" texts with no status; they must not print one.
+func TestMdbGoneTextsWithoutStatus(t *testing.T) {
+	_, detail := mdbUpdateErrorText("mdb_1", mdbUpdatePreWait, mdbWaitGone, "", nil)
+	if strings.Contains(detail, `status ""`) {
+		t.Errorf("update pre-wait text prints an empty status: %q", detail)
+	}
+	var diags diag.Diagnostics
+	mdbAddCreateWaitError("mdb_1", mdbWaitResult{Kind: mdbWaitGone}, &diags)
+	if d := diags.Errors()[0].Detail(); strings.Contains(d, `status ""`) {
+		t.Errorf("create text prints an empty status: %q", d)
+	}
+	var withStatus diag.Diagnostics
+	mdbAddCreateWaitError("mdb_1", mdbWaitResult{Kind: mdbWaitGone, LastStatus: "deleting"}, &withStatus)
+	if d := withStatus.Errors()[0].Detail(); !strings.Contains(d, `"deleting"`) {
+		t.Errorf("create text should name a known status: %q", d)
+	}
+}

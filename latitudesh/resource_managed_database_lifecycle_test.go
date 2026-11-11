@@ -350,6 +350,7 @@ type mdbResponse struct {
 	code       int
 	body       string
 	retryAfter string
+	drop       bool // close the connection without a response
 }
 
 func newMdbSequence(t *testing.T, responses ...mdbResponse) (*mdbSequence, *ManagedDatabaseResource) {
@@ -364,6 +365,14 @@ func newMdbSequence(t *testing.T, responses ...mdbResponse) (*mdbSequence, *Mana
 		}
 		seq.calls++
 		resp := seq.responses[i]
+		if resp.drop {
+			if hj, ok := w.(http.Hijacker); ok {
+				if conn, _, err := hj.Hijack(); err == nil {
+					_ = conn.Close()
+				}
+			}
+			return
+		}
 		w.Header().Set("Content-Type", "application/vnd.api+json")
 		if resp.retryAfter != "" {
 			w.Header().Set("Retry-After", resp.retryAfter)
@@ -446,6 +455,19 @@ func TestPatchManagedDatabase(t *testing.T) {
 		}
 	})
 
+	t.Run("a dropped connection is retried", func(t *testing.T) {
+		seq, r := newMdbSequence(t,
+			mdbResponse{drop: true},
+			mdbResponse{code: 200, body: `{"data":{"id":"mdb_1","type":"managed_databases","attributes":{"status":"running"}}}`},
+		)
+		if err := r.patchManagedDatabase(context.Background(), "mdb_1", attrs, time.Now().Add(5*time.Second)); err != nil {
+			t.Fatalf("err = %v", err)
+		}
+		if seq.count() != 2 {
+			t.Errorf("PATCH sent %d times, want 2", seq.count())
+		}
+	})
+
 	t.Run("a 422 is not retried", func(t *testing.T) {
 		seq, r := newMdbSequence(t, mdbResponse{code: 422, body: `{"errors":[{"detail":"bad"}]}`})
 		err := r.patchManagedDatabase(context.Background(), "mdb_1", attrs, time.Now().Add(5*time.Second))
@@ -456,4 +478,17 @@ func TestPatchManagedDatabase(t *testing.T) {
 			t.Errorf("PATCH sent %d times, want 1", seq.count())
 		}
 	})
+}
+
+// A body the SDK can't decode fails the same way on every poll, so it must
+// not be retried as if the connection had dropped.
+func TestWaitForManagedDatabaseReady_DecodeErrorIsNotRetried(t *testing.T) {
+	seq, r := newMdbSequence(t, mdbResponse{code: 200, body: `{"data":{"id":"mdb_1","attributes":"not an object"}}`})
+	got := ready(r, 5*time.Second, mdbWaitOpts{})
+	if got.Kind != mdbWaitError {
+		t.Fatalf("kind = %v, want an error", got.Kind)
+	}
+	if seq.count() != 1 {
+		t.Errorf("Show called %d times, want 1 (no retries)", seq.count())
+	}
 }

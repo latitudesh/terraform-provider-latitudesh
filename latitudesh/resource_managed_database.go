@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -46,7 +47,7 @@ var (
 	mdbReadyPollInterval  = 15 * time.Second
 	mdbDeletePollInterval = 10 * time.Second
 	// mdbErrorBudget is how long a poller tolerates consecutive retryable
-	// errors (not-found, 5xx). Pollers turn SDK retries off, so this replaces
+	// errors (not-found, 5xx, dropped connections). Pollers turn SDK retries off, so this replaces
 	// the provider-wide 300s per-call retry that LKS relies on.
 	mdbErrorBudget = 5 * time.Minute
 	// mdbMaxRetryAfter caps how long one Retry-After header can make a poller
@@ -401,9 +402,8 @@ func (r *ManagedDatabaseResource) Create(ctx context.Context, req resource.Creat
 		}
 	}
 
-	// readManagedDatabaseInto leaves data untouched when it fails, so state
-	// is saved on every path: on failure it still holds the last polled
-	// status.
+	// State is saved on every path, so a failed read still keeps the last
+	// polled status.
 	gone := r.readManagedDatabaseInto(ctx, &data, &planned, postAttrs, &resp.Diagnostics)
 	readFailed := resp.Diagnostics.HasError()
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -502,8 +502,8 @@ func mdbAddCreateWaitError(id string, result mdbWaitResult, diags *diag.Diagnost
 		)
 	case mdbWaitGone:
 		diags.AddError(
-			fmt.Sprintf("Managed database %s is being deleted", id),
-			fmt.Sprintf("The database reports status %q, so it can't become ready. %s", result.LastStatus, mdbCreateTaintedDetail),
+			fmt.Sprintf("Managed database %s is being deleted or is gone", id),
+			fmt.Sprintf("%s, so it can't become ready. %s", mdbGoneReason(result.LastStatus), mdbCreateTaintedDetail),
 		)
 	case mdbWaitError:
 		diags.AddError(
@@ -760,7 +760,7 @@ type mdbWaitOpts struct {
 	PriorStatus string
 	// NotFoundIsGone treats a 404 as "gone" rather than as the transient
 	// not-yet-readable 404 right after a create. Every wait except Create's
-	// sets it.
+	// first one sets it.
 	NotFoundIsGone bool
 }
 
@@ -1179,9 +1179,10 @@ func mdbParametersChanged(state, plan types.Map) bool {
 	return false
 }
 
-// patchManagedDatabase sends a PATCH. It is idempotent, so a 429 or 5xx is
-// retried within the deadline with the poller's backoff (honouring
-// Retry-After); every call runs with SDK retries off and under the deadline.
+// patchManagedDatabase sends a PATCH. It is idempotent, so a 429, 5xx or
+// dropped connection is retried within the deadline with the poller's backoff
+// (honouring Retry-After); every call runs with SDK retries off and under the
+// deadline.
 // A 2xx the SDK didn't expect (it accepts only 200, e.g. a 202 for a rolling
 // restart) counts as accepted.
 func (r *ManagedDatabaseResource) patchManagedDatabase(ctx context.Context, id string, attrs components.ManagedDatabaseUpdatePayloadAttributes, deadline time.Time) error {
@@ -1203,7 +1204,7 @@ func (r *ManagedDatabaseResource) patchManagedDatabase(ctx context.Context, id s
 		if mdbUnexpectedSuccess(err) {
 			return nil
 		}
-		retryable := mdbRateLimited(err) || mdbServerError(err)
+		retryable := mdbRateLimited(err) || mdbServerError(err) || mdbTransportError(err)
 		if !retryable || ctx.Err() != nil {
 			return err
 		}
@@ -1279,8 +1280,8 @@ func mdbUpdateErrorText(id string, stage mdbUpdateStage, kind mdbWaitKind, statu
 	case mdbUpdatePreWait:
 		switch kind {
 		case mdbWaitGone:
-			return fmt.Sprintf("Managed database %s is being deleted", id),
-				fmt.Sprintf("The database reports status %q, so no change was sent. Run `terraform plan` to refresh. If it's gone, the plan recreates it.", status)
+			return fmt.Sprintf("Managed database %s is being deleted or is gone", id),
+				fmt.Sprintf("%s, so no change was sent. Run `terraform plan` to refresh. If it's gone, the plan recreates it.", mdbGoneReason(status))
 		case mdbWaitTimeout:
 			return fmt.Sprintf("Timeout waiting for managed database %s to be ready", id),
 				fmt.Sprintf("The database didn't report ready in time (last status %q), so no change was sent. Terraform still tracks it as before. Re-apply once the latitude.sh dashboard shows it ready.", status)
@@ -1681,11 +1682,21 @@ func mdbServerError(err error) bool {
 }
 
 // mdbTransportError reports whether err is a failure to reach the API at all
-// (a dropped connection, a DNS error), as opposed to an API answer.
+// (a dropped connection, a DNS error). http.Client.Do returns those as
+// *url.Error, which the SDK wraps. A response the SDK can't decode is not one:
+// it would fail the same way on every retry.
 func mdbTransportError(err error) bool {
-	var apiErr *components.APIError
-	var errObj *components.ErrorObject
-	return err != nil && !errors.As(err, &apiErr) && !errors.As(err, &errObj) && !errors.Is(err, context.Canceled)
+	var urlErr *url.Error
+	return errors.As(err, &urlErr) && !errors.Is(err, context.Canceled)
+}
+
+// mdbGoneReason says why a wait ended as gone: a deleting status, or a 404
+// (which carries no status).
+func mdbGoneReason(status string) string {
+	if status == "" {
+		return "latitude.sh no longer finds the database"
+	}
+	return fmt.Sprintf("The database reports status %q", status)
 }
 
 // mdbRateLimited reports whether err is a 429. Pollers retry it without
