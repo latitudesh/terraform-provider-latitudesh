@@ -333,14 +333,31 @@ groups:
       thing under a new SDK group name.
 
   ManagedDatabases:
-    implemented_by: [latitudesh_managed_database_metrics]
-    notes: >-
-      Data source. ShowManagedDatabaseMetrics is the only method on this
-      group (crud shape -R--) and it is the one mapped: managed_database_id,
-      period and queries drive the request, and from/to/metrics (a map keyed
-      by metric name, each entry carrying unit/current/points) back the
-      response. No methods are left unmapped.
-
+    implemented_by: [latitudesh_managed_database_metrics, latitudesh_managed_database]
+    notes: |-
+      latitudesh_managed_database maps CreateManagedDatabase, ShowManagedDatabase,
+      UpdateManagedDatabase and DestroyManagedDatabase (name, project_id,
+      region, plan, engine, billing and parameters at create; trusted_sources
+      and parameters on update). latitudesh_managed_database_metrics maps
+      ShowManagedDatabaseMetrics. Not mapped, each with its recommended home:
+      - ListManagedDatabases: a plural latitudesh_managed_databases data source.
+      - ListManagedDatabaseBackups: a latitudesh_managed_database_backups data source.
+      - GetManagedDatabasePlans: lives in the Plans group; a latitudesh_managed_database_plans data source.
+      - pooler: schemaless in the SDK and documented only by example; typed nested block once the shape is confirmed.
+      - backup: schemaless, bring-your-own S3; typed nested block once the shape is confirmed.
+      - access_credentials: the S3 keys for backup; ships with backup.
+      - recovery: restore from a backup at create; a recovery block with RequiresReplace on this resource.
+      - supabase: semantics undocumented beyond "Enable the Supabase service layer".
+      - replica_regions: the API accepts it but replica provisioning is not active yet.
+      - namespace: internal metadata, not exposed by team decision.
+      - play_url: presentation metadata, not exposed by team decision.
+      - created_at: catalog timestamp, not exposed by team decision.
+      - specs: capacity derived from the plan, not exposed by team decision.
+      - team: not a provisioning input, not exposed by team decision.
+      - http_port: ClickHouse-only credential field, not exposed.
+      - tcp_port: ClickHouse-only credential field, not exposed.
+      region.city, region.country, region.site.* and plan.id/name are read
+      only to fill region and plan on import.
   MarketplaceApps:
     implemented_by: [latitudesh_marketplace_app, latitudesh_marketplace_apps]
     notes: >-

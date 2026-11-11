@@ -1,0 +1,166 @@
+package latitudesh
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
+)
+
+const mdbResourceName = "latitudesh_managed_database.test"
+
+// mdbConfig builds a config for one managed database. providerProject, when
+// non-empty, sets the provider-level default project. body is the resource's
+// attributes.
+func mdbConfig(providerProject, body string) string {
+	providerLine := ""
+	if providerProject != "" {
+		providerLine = fmt.Sprintf("  project    = %q\n", providerProject)
+	}
+	return fmt.Sprintf(`
+provider "latitudesh" {
+  auth_token = "mock-token"
+%s}
+
+resource "latitudesh_managed_database" "test" {
+%s
+}
+`, providerLine, body)
+}
+
+func mdbBody(project, plan, region, extra string) string {
+	projectLine := ""
+	if project != "" {
+		projectLine = fmt.Sprintf("  project = %q\n", project)
+	}
+	return fmt.Sprintf(`%s  name    = "api"
+  region  = %q
+  plan    = %q
+  engine  = "postgres"
+%s`, projectLine, region, plan, extra)
+}
+
+// mdbCheckLog asserts the managed-database requests logged since the last
+// reset, e.g. "POST GET GET".
+func mdbCheckLog(m *mdbMock, check func(methods string) error) resource.TestCheckFunc {
+	return func(*terraform.State) error {
+		return check(m.methods())
+	}
+}
+
+func mdbCheckReplaced(m *mdbMock) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		methods := m.methods()
+		del, post := strings.Index(methods, "DELETE"), strings.Index(methods, "POST")
+		if del < 0 || post < 0 || del > post {
+			return fmt.Errorf("want DELETE then POST, got %q", methods)
+		}
+		_, last := m.ids()
+		rs := s.RootModule().Resources[mdbResourceName]
+		if rs == nil || rs.Primary.ID != last {
+			return fmt.Errorf("state ID is not the new database %s", last)
+		}
+		return nil
+	}
+}
+
+func TestManagedDatabase_MockLifecycle(t *testing.T) {
+	mock, server := newMdbMock(t)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMdbMockDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				// Create. The POST carries no credentials and says
+				// "provisioning"; status and credentials must come from the
+				// final GET.
+				PreConfig: mock.resetLog,
+				Config:    mdbConfig("", mdbBody("proj_mock_1", "db.psql.small", "ASH", "")),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(mdbResourceName, "id", "mdb_mock_1"),
+					resource.TestCheckResourceAttr(mdbResourceName, "status", "running"),
+					resource.TestCheckResourceAttr(mdbResourceName, "credentials.host", "db.mock.internal"),
+					resource.TestCheckResourceAttr(mdbResourceName, "credentials.port", "5432"),
+					resource.TestCheckResourceAttr(mdbResourceName, "credentials.password", "mock-secret"),
+					resource.TestCheckResourceAttr(mdbResourceName, "project", "proj_mock_1"),
+					resource.TestCheckResourceAttr(mdbResourceName, "billing", "monthly"),
+					resource.TestCheckNoResourceAttr(mdbResourceName, "trusted_sources.#"),
+					mdbCheckLog(mock, func(methods string) error {
+						if !strings.HasPrefix(methods, "POST GET") || strings.Count(methods, "GET") < 2 {
+							return fmt.Errorf("want POST then at least two GETs, got %q", methods)
+						}
+						return nil
+					}),
+				),
+			},
+			{
+				ResourceName:            mdbResourceName,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"timeouts", "parameters"},
+			},
+			{
+				PreConfig: mock.resetLog,
+				Config:    mdbConfig("", mdbBody("proj_mock_1", "db.psql.medium", "ASH", "")),
+				Check: resource.ComposeTestCheckFunc(
+					mdbCheckReplaced(mock),
+					resource.TestCheckResourceAttr(mdbResourceName, "plan", "db.psql.medium"),
+				),
+			},
+			{
+				PreConfig: mock.resetLog,
+				Config:    mdbConfig("", mdbBody("proj_mock_1", "db.psql.medium", "MIA", "")),
+				Check: resource.ComposeTestCheckFunc(
+					mdbCheckReplaced(mock),
+					resource.TestCheckResourceAttr(mdbResourceName, "region", "MIA"),
+				),
+			},
+			{
+				// The database is deleted outside Terraform: refresh removes it.
+				PreConfig: func() {
+					_, last := mock.ids()
+					mock.deleteOutOfBand(last)
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+				Check: func(s *terraform.State) error {
+					if _, ok := s.RootModule().Resources[mdbResourceName]; ok {
+						return fmt.Errorf("%s is still in state after a 404", mdbResourceName)
+					}
+					return nil
+				},
+			},
+		},
+	})
+}
+
+func TestManagedDatabase_MockProjectSlugCreate(t *testing.T) {
+	mock, server := newMdbMock(t)
+	mock.projects["my-slug"] = "proj_mock_1"
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMdbMockDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: mdbConfig("", mdbBody("my-slug", "db.psql.small", "ASH", "")),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(mdbResourceName, "project", "my-slug"),
+					func(*terraform.State) error {
+						for _, r := range mock.requests() {
+							if r.Method == "POST" && strings.Contains(r.Body, `"project_id":"proj_mock_1"`) {
+								return nil
+							}
+						}
+						return fmt.Errorf("no POST carried project_id proj_mock_1: %+v", mock.requests())
+					},
+				),
+			},
+		},
+	})
+}

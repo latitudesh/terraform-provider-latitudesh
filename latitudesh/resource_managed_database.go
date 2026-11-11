@@ -2,11 +2,15 @@ package latitudesh
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
@@ -14,6 +18,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
@@ -22,11 +27,60 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
+	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
+	"github.com/latitudesh/latitudesh-go-sdk/retry"
+	providerpkg "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
 
 var _ resource.Resource = &ManagedDatabaseResource{}
+var _ resource.ResourceWithConfigure = &ManagedDatabaseResource{}
+var _ resource.ResourceWithImportState = &ManagedDatabaseResource{}
+
+// Poll intervals and the polling error budget. Declared as vars so tests can
+// shorten them; production keeps the defaults.
+var (
+	mdbReadyPollInterval  = 15 * time.Second
+	mdbDeletePollInterval = 10 * time.Second
+	// mdbErrorBudget is how long a poller tolerates consecutive retryable
+	// errors (not-found, 5xx). Pollers turn SDK retries off, so this replaces
+	// the provider-wide 300s per-call retry that LKS relies on.
+	mdbErrorBudget = 5 * time.Minute
+	// mdbMaxRetryAfter caps how long one Retry-After header can make a poller
+	// wait.
+	mdbMaxRetryAfter = 60 * time.Second
+)
+
+// mdbNoRetries turns SDK retries off. Pollers handle retries themselves, and
+// the create POST must never be retried: a 5xx after the server already
+// created the database would create a second one.
+var mdbNoRetries = retry.Config{Strategy: "none"}
+
+// The API documents no status values; these sets are unverified guesses.
+// Statuses are compared lower-cased and trimmed (mdbStatusIn).
+var (
+	mdbInProgressStates = map[string]bool{
+		"provisioning": true,
+		"creating":     true,
+		"pending":      true,
+		"updating":     true,
+		"restarting":   true,
+	}
+	mdbFailedStates = map[string]bool{
+		"failed": true,
+		"error":  true,
+	}
+	// mdbUnreachableStates are statuses no readiness wait can succeed from.
+	mdbUnreachableStates = map[string]bool{
+		"deleting": true,
+		"deleted":  true,
+	}
+	mdbDeleteTerminalStates = map[string]bool{
+		"deleted": true,
+	}
+)
 
 func NewManagedDatabaseResource() resource.Resource {
 	return &ManagedDatabaseResource{}
@@ -214,20 +268,626 @@ func (r *ManagedDatabaseResource) Schema(ctx context.Context, req resource.Schem
 	}
 }
 
+func (r *ManagedDatabaseResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
+	}
+	deps := providerpkg.ConfigureFromProviderData(req.ProviderData, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	r.client = deps.Client
+	r.defaultProject = deps.DefaultProject
+}
+
+// mdbCreateTaintedDetail is the next step after a Create that fails once the
+// database exists. Terraform taints a resource whose Create returns an error,
+// so this text is for Create only; Update has its own (see Update).
+const mdbCreateTaintedDetail = "The database exists and is tracked in state but is marked tainted. " +
+	"The next `terraform apply` will destroy and recreate it (or fail, if `prevent_destroy` is set). " +
+	"If the latitude.sh dashboard shows it still provisioning, wait until it shows ready, then run " +
+	"`terraform untaint <address>` and re-apply."
+
+const mdbCreateFailedStatusDetail = "The database is tainted. The next apply destroys and recreates it. " +
+	"If `prevent_destroy` is set, remove it for that apply, or delete the database in the latitude.sh " +
+	"dashboard and run `terraform state rm <address>`."
+
 func (r *ManagedDatabaseResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	resp.Diagnostics.AddError("Not implemented", "latitudesh_managed_database create is not implemented yet.")
+	var data ManagedDatabaseResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	planned := data
+
+	// Applying trusted_sources needs a PATCH after the database is ready; until
+	// that exists, refuse before anything is sent, so no database is ever
+	// created with an allowlist that was never applied.
+	if !data.TrustedSources.IsNull() && !data.TrustedSources.IsUnknown() && len(data.TrustedSources.Elements()) > 0 {
+		resp.Diagnostics.AddAttributeError(path.Root("trusted_sources"), "Not implemented", "trusted_sources isn't implemented yet.")
+		return
+	}
+
+	effectiveProject := ""
+	if !data.Project.IsNull() && !data.Project.IsUnknown() && data.Project.ValueString() != "" {
+		effectiveProject = data.Project.ValueString()
+	} else if r.defaultProject != "" {
+		effectiveProject = r.defaultProject
+	}
+	if effectiveProject == "" {
+		resp.Diagnostics.AddError(
+			"Missing project",
+			"Set `project` on this resource or define a default in the provider block (provider \"latitudesh\" { project = \"...\" }).",
+		)
+		return
+	}
+	data.Project = types.StringValue(effectiveProject)
+	planned.Project = data.Project
+
+	projectID, err := r.resolveProjectID(ctx, effectiveProject)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Unable to resolve project "+effectiveProject+", got error: "+managedDatabaseErrorDetail(err))
+		return
+	}
+
+	attrs := &components.ManagedDatabasePayloadAttributes{
+		Name:       data.Name.ValueString(),
+		ProjectID:  projectID,
+		Region:     data.Region.ValueString(),
+		Plan:       data.Plan.ValueString(),
+		Engine:     data.Engine.ValueString(),
+		Parameters: mdbParametersPayload(data.Parameters),
+	}
+	if !data.Billing.IsNull() && !data.Billing.IsUnknown() {
+		billing := components.ManagedDatabasePayloadBilling(data.Billing.ValueString())
+		attrs.Billing = &billing
+	}
+	payload := components.ManagedDatabasePayload{
+		Data: &components.ManagedDatabasePayloadData{
+			Type:       components.ManagedDatabasePayloadTypeManagedDatabases.ToPointer(),
+			Attributes: attrs,
+		},
+	}
+
+	createTimeout, diags := data.Timeouts.Create(ctx, 60*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	deadline := time.Now().Add(createTimeout)
+
+	id, postAttrs, ok := r.createManagedDatabase(ctx, payload, data.Name.ValueString(), effectiveProject, &resp.Diagnostics)
+	if !ok {
+		return
+	}
+
+	// Persist what the POST told us before the long wait, so the database is
+	// tracked even if the wait fails. Every value still unknown is set from
+	// the response or to a typed null: an apply that fails afterwards would
+	// otherwise save unknowns. trusted_sources takes the response's value,
+	// never the planned set, so state can't claim an allowlist that was never
+	// applied.
+	data.ID = types.StringValue(id)
+	mdbApplyCreateResponse(ctx, &data, postAttrs, &resp.Diagnostics)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	credentialsSeen := postAttrs != nil && mdbCredentialsHost(postAttrs.Credentials) != ""
+	result := r.waitForManagedDatabaseReady(ctx, id, deadline, mdbWaitOpts{RequireCredentials: true, CredentialsSeen: credentialsSeen})
+	if result.LastStatus != "" {
+		data.Status = types.StringValue(result.LastStatus)
+	}
+	if result.Kind != mdbWaitReady {
+		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+		mdbAddCreateWaitError(id, result, &resp.Diagnostics)
+		return
+	}
+
+	gone := r.readManagedDatabaseInto(ctx, &data, &planned, postAttrs, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if gone {
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Managed database %q disappeared right after it became ready.", id))
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// createManagedDatabase sends the POST with SDK retries off and returns the
+// new ID and the response attributes. ok is false when a diagnostic was added.
+func (r *ManagedDatabaseResource) createManagedDatabase(ctx context.Context, payload components.ManagedDatabasePayload, name, project string, diags *diag.Diagnostics) (string, *components.ManagedDatabaseAttributesAttributes, bool) {
+	mayExist := func(detail string) {
+		diags.AddError(
+			"Managed database may have been created",
+			fmt.Sprintf("The request failed after it may have reached latitude.sh (%s). Before re-applying, check the dashboard for a database named %q in project %q. "+
+				"If it exists, run `terraform import <address> <id>`. Re-applying without checking can create a second, billed database.", detail, name, project),
+		)
+	}
+
+	result, err := r.client.ManagedDatabases.CreateManagedDatabase(ctx, payload, operations.WithRetries(mdbNoRetries))
+	if err != nil {
+		var apiErr *components.APIError
+		if errors.As(err, &apiErr) {
+			switch {
+			case apiErr.StatusCode >= 200 && apiErr.StatusCode < 300:
+				// The SDK accepts only 201; any other success carries the full
+				// record in the body. Recover the ID rather than leak a
+				// database. The body is never put in a diagnostic.
+				if id := mdbIDFromBody(apiErr.Body); id != "" {
+					diags.AddWarning("Unexpected create response", fmt.Sprintf("latitude.sh answered HTTP %d instead of 201; the database ID was recovered from the response.", apiErr.StatusCode))
+					return id, nil, true
+				}
+				mayExist(managedDatabaseErrorDetail(err))
+				return "", nil, false
+			case apiErr.StatusCode >= 400 && apiErr.StatusCode < 500:
+				diags.AddError("Unable to create managed database", managedDatabaseErrorDetail(err))
+				return "", nil, false
+			}
+		}
+		mayExist(managedDatabaseErrorDetail(err))
+		return "", nil, false
+	}
+
+	if result == nil || result.ManagedDatabase == nil || result.ManagedDatabase.Data == nil || result.ManagedDatabase.Data.ID == nil || *result.ManagedDatabase.Data.ID == "" {
+		mayExist("the response had no database ID")
+		return "", nil, false
+	}
+	return *result.ManagedDatabase.Data.ID, result.ManagedDatabase.Data.Attributes, true
+}
+
+// mdbIDFromBody extracts data.id from a JSON:API body. It decodes into a local
+// struct rather than components.ManagedDatabase, whose enum UnmarshalJSON
+// would reject an unexpected `type` and lose the ID.
+func mdbIDFromBody(body string) string {
+	var envelope struct {
+		Data struct {
+			ID *string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(body), &envelope); err != nil || envelope.Data.ID == nil {
+		return ""
+	}
+	return *envelope.Data.ID
+}
+
+// mdbApplyCreateResponse fills every value still unknown after the POST from
+// the response, or with a typed null.
+func mdbApplyCreateResponse(ctx context.Context, data *ManagedDatabaseResourceModel, attrs *components.ManagedDatabaseAttributesAttributes, diags *diag.Diagnostics) {
+	if attrs == nil {
+		attrs = &components.ManagedDatabaseAttributesAttributes{}
+	}
+	data.Status = mdbStatusValue(attrs.Status)
+	data.Credentials = mdbCredentials(types.ObjectNull(mdbCredentialsAttrTypes), nil, attrs.Credentials, nil, diags)
+	if data.Billing.IsUnknown() {
+		var billing *string
+		if attrs.Plan != nil {
+			billing = attrs.Plan.Billing
+		}
+		data.Billing = mdbStringValue(billing)
+	}
+	if attrs.TrustedSources != nil {
+		set, d := types.SetValueFrom(ctx, types.StringType, attrs.TrustedSources)
+		diags.Append(d...)
+		data.TrustedSources = set
+	} else {
+		data.TrustedSources = types.SetNull(types.StringType)
+	}
+}
+
+func mdbAddCreateWaitError(id string, result mdbWaitResult, diags *diag.Diagnostics) {
+	switch result.Kind {
+	case mdbWaitFailedStatus:
+		diags.AddError(
+			fmt.Sprintf("Managed database %s failed", id),
+			fmt.Sprintf("The database reports status %q. %s", result.LastStatus, mdbCreateFailedStatusDetail),
+		)
+	case mdbWaitGone:
+		diags.AddError(
+			fmt.Sprintf("Managed database %s is being deleted", id),
+			fmt.Sprintf("The database reports status %q, so it can't become ready. %s", result.LastStatus, mdbCreateTaintedDetail),
+		)
+	case mdbWaitError:
+		diags.AddError(
+			fmt.Sprintf("Unable to check managed database %s", id),
+			fmt.Sprintf("%s. %s", managedDatabaseErrorDetail(result.Err), mdbCreateTaintedDetail),
+		)
+	default:
+		diags.AddError(
+			fmt.Sprintf("Timeout waiting for managed database %s to become ready", id),
+			fmt.Sprintf("Last status: %q. %s", result.LastStatus, mdbCreateTaintedDetail),
+		)
+	}
 }
 
 func (r *ManagedDatabaseResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	resp.Diagnostics.AddError("Not implemented", "latitudesh_managed_database read is not implemented yet.")
+	var data ManagedDatabaseResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	gone := r.readManagedDatabaseInto(ctx, &data, nil, nil, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if gone {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *ManagedDatabaseResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var data ManagedDatabaseResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	id := data.ID.ValueString()
+	if id == "" {
+		return
+	}
+	priorStatus := data.Status.ValueString()
+
+	_, err := r.client.ManagedDatabases.DestroyManagedDatabase(ctx, id)
+	if err != nil {
+		if managedDatabaseNotFound(err) {
+			return
+		}
+		var apiErr *components.APIError
+		// The SDK accepts only 204; any other success means the delete was
+		// accepted (e.g. an async 202).
+		if !errors.As(err, &apiErr) || apiErr.StatusCode < 200 || apiErr.StatusCode >= 300 {
+			resp.Diagnostics.AddError("Unable to delete managed database", managedDatabaseErrorDetail(err))
+			return
+		}
+	}
+
+	deleteTimeout, diags := data.Timeouts.Delete(ctx, 30*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	result := r.waitForManagedDatabaseDeleted(ctx, id, time.Now().Add(deleteTimeout), priorStatus)
+	const stateRm = "Confirm in the latitude.sh dashboard that the database is gone, then run `terraform state rm <address>`."
+	switch result.Kind {
+	case mdbWaitReady:
+		return
+	case mdbWaitFailedStatus:
+		resp.Diagnostics.AddError(
+			fmt.Sprintf("Managed database %s failed while being deleted", id),
+			fmt.Sprintf("The database reports status %q. %s", result.LastStatus, stateRm),
+		)
+	case mdbWaitError:
+		resp.Diagnostics.AddError(
+			fmt.Sprintf("Unable to check deletion of managed database %s", id),
+			fmt.Sprintf("%s. %s", managedDatabaseErrorDetail(result.Err), stateRm),
+		)
+	default:
+		resp.Diagnostics.AddError(
+			fmt.Sprintf("Timeout waiting for managed database %s to be deleted", id),
+			fmt.Sprintf("Last status: %q. %s", result.LastStatus, stateRm),
+		)
+	}
+}
+
+func (r *ManagedDatabaseResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	data := ManagedDatabaseResourceModel{
+		ID:             types.StringValue(req.ID),
+		Project:        types.StringNull(),
+		Name:           types.StringNull(),
+		Region:         types.StringNull(),
+		Plan:           types.StringNull(),
+		Engine:         types.StringNull(),
+		Billing:        types.StringNull(),
+		TrustedSources: types.SetNull(types.StringType),
+		Parameters:     types.MapNull(types.StringType),
+		Status:         types.StringNull(),
+		Credentials:    types.ObjectNull(mdbCredentialsAttrTypes),
+		// No timeouts block is set on import, so give the field an explicitly
+		// typed null; the zero value fails state conversion.
+		Timeouts: timeouts.Value{
+			Object: types.ObjectNull(map[string]attr.Type{
+				"create": types.StringType,
+				"update": types.StringType,
+				"delete": types.StringType,
+			}),
+		},
+	}
+
+	gone := r.readManagedDatabaseInto(ctx, &data, nil, nil, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if gone {
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Managed database %q not found", req.ID))
+		return
+	}
+
+	resp.Diagnostics.AddWarning("Review the first plan after importing a managed database", mdbImportWarning(&data))
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// mdbImportWarning lists what import can't fill reliably, so the first plan
+// doesn't surprise anyone.
+func mdbImportWarning(data *ManagedDatabaseResourceModel) string {
+	var b strings.Builder
+	b.WriteString("Check the first plan for a replacement of any of name, engine, plan, region or project: a spelling difference between the API and the configuration plans one. " +
+		"Configure project with the ID imported here, not a slug, or use lifecycle { ignore_changes }. " +
+		"A provider-level default project written as a slug also gives a \"Default project changed\" error after import, so set project on the resource. " +
+		"parameters are not imported: if the configuration sets them, the first apply re-sends them, which triggers a rolling restart.")
+
+	var missing []string
+	for name, v := range map[string]types.String{"name": data.Name, "engine": data.Engine, "plan": data.Plan, "region": data.Region, "project": data.Project, "billing": data.Billing} {
+		if v.IsNull() {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		b.WriteString(" The API didn't return: " + strings.Join(missing, ", ") + "; set them in the configuration.")
+	}
+	if v := data.Billing.ValueString(); v != "" && v != "monthly" && v != "yearly" {
+		b.WriteString(fmt.Sprintf(" The API reports billing %q, which the configuration can't express; leave billing out of the configuration.", v))
+	}
+	if data.Credentials.IsNull() {
+		b.WriteString(" The API returned no credentials, so credentials stay null.")
+	} else if pw, ok := data.Credentials.Attributes()["password"]; ok && pw.IsNull() {
+		b.WriteString(" The API returned no password, so credentials.password and credentials.url stay null.")
+	}
+	return b.String()
+}
+
+// readManagedDatabaseInto calls Show and maps the result onto data with
+// mdbApplyAttributes. gone is true when the database no longer exists (a 404,
+// or status "deleted"); the caller decides what that means.
+func (r *ManagedDatabaseResource) readManagedDatabaseInto(ctx context.Context, data, planned *ManagedDatabaseResourceModel, postResp *components.ManagedDatabaseAttributesAttributes, diags *diag.Diagnostics) (gone bool) {
+	id := data.ID.ValueString()
+	if id == "" {
+		diags.AddError("Invalid ID", "Managed database ID is empty")
+		return false
+	}
+
+	result, err := r.client.ManagedDatabases.ShowManagedDatabase(ctx, id)
+	if err != nil {
+		if managedDatabaseNotFound(err) {
+			return true
+		}
+		diags.AddError("Unable to read managed database", managedDatabaseErrorDetail(err))
+		return false
+	}
+	if result == nil || result.ManagedDatabase == nil || result.ManagedDatabase.Data == nil {
+		return true
+	}
+
+	obj := result.ManagedDatabase.Data
+	if obj.Attributes != nil && obj.Attributes.Status != nil && mdbStatusIn(*obj.Attributes.Status, mdbDeleteTerminalStates) {
+		return true
+	}
+	if obj.ID != nil && *obj.ID != "" {
+		data.ID = types.StringValue(*obj.ID)
+	}
+	mdbApplyAttributes(ctx, data, planned, obj.Attributes, postResp, diags)
+	return false
+}
+
+// resolveProjectID turns the `project` selector into the ID the create
+// payload's project_id takes. The SDK's doc comment calls it a "Project slug"
+// while its example uses an ID, so this resolves conservatively, as
+// resource_lks_cluster.go does. The configured selector is never rewritten in
+// state.
+func (r *ManagedDatabaseResource) resolveProjectID(ctx context.Context, selector string) (string, error) {
+	if strings.HasPrefix(selector, "proj_") {
+		return selector, nil
+	}
+
+	res, err := r.client.Projects.GetProject(ctx, selector)
+	if err != nil {
+		return "", err
+	}
+	if res == nil || res.Object == nil || res.Object.Data == nil || res.Object.Data.ID == nil || *res.Object.Data.ID == "" {
+		return "", fmt.Errorf("project %q not found", selector)
+	}
+	return *res.Object.Data.ID, nil
+}
+
+// --- pollers ----------------------------------------------------------------
+
+type mdbWaitKind int
+
+const (
+	// mdbWaitReady means the wait succeeded (ready, or deleted for the delete
+	// poller).
+	mdbWaitReady mdbWaitKind = iota
+	mdbWaitTimeout
+	mdbWaitFailedStatus
+	// mdbWaitGone means the database is being deleted or is gone.
+	mdbWaitGone
+	// mdbWaitError means a non-retryable error, a cancelled context, or the
+	// error budget ran out.
+	mdbWaitError
+)
+
+// mdbWaitResult is what a poller observed. Pollers never format user-facing
+// text; Create, Update and Delete do, so Update can never show Create's taint
+// wording.
+type mdbWaitResult struct {
+	Kind       mdbWaitKind
+	LastStatus string
+	Err        error
+}
+
+type mdbWaitOpts struct {
+	// RequireCredentials makes the wait end only once credentials.host is
+	// known, from the create response (CredentialsSeen) or a polled Show.
+	RequireCredentials bool
+	CredentialsSeen    bool
+	// FailedIsSettled counts a failed status as settled, so a corrective PATCH
+	// can still be sent to a failed database.
+	FailedIsSettled bool
+	// PriorStatus is the status before the operation. A failed status that was
+	// already there keeps the wait polling instead of failing fast.
+	PriorStatus string
+}
+
+// mdbPoll calls Show until observe returns done, the deadline passes, or an
+// error ends the wait. Each call runs with SDK retries off and under the
+// deadline, so the SDK's own retry can't push a wait past it. Not-found and
+// 5xx are retried within mdbErrorBudget of consecutive errors; a 429 is
+// retried without counting against it, honouring Retry-After.
+func (r *ManagedDatabaseResource) mdbPoll(ctx context.Context, id string, deadline time.Time, interval time.Duration, onNotFound func() (mdbWaitResult, bool), observe func(*components.ManagedDatabaseAttributesAttributes) (mdbWaitResult, bool)) mdbWaitResult {
+	var last mdbWaitResult
+	var errorsSince time.Time
+
+	for time.Now().Before(deadline) {
+		wait := interval
+
+		callCtx, cancel := context.WithDeadline(ctx, deadline)
+		result, err := r.client.ManagedDatabases.ShowManagedDatabase(callCtx, id, operations.WithRetries(mdbNoRetries))
+		cancel()
+
+		switch {
+		case err != nil && ctx.Err() != nil:
+			last.Kind, last.Err = mdbWaitError, ctx.Err()
+			return last
+		case err != nil && !time.Now().Before(deadline):
+			last.Kind = mdbWaitTimeout
+			return last
+		case err != nil && onNotFound != nil && managedDatabaseNotFound(err):
+			if res, done := onNotFound(); done {
+				res.LastStatus = last.LastStatus
+				return res
+			}
+		case err != nil && mdbRateLimited(err):
+			wait = mdbRetryAfter(err, interval)
+		case err != nil && managedDatabaseRetryableDuringPoll(err):
+			if errorsSince.IsZero() {
+				errorsSince = time.Now()
+			} else if time.Since(errorsSince) > mdbErrorBudget {
+				last.Kind, last.Err = mdbWaitError, err
+				return last
+			}
+		case err != nil:
+			last.Kind, last.Err = mdbWaitError, err
+			return last
+		default:
+			errorsSince = time.Time{}
+			var attrs *components.ManagedDatabaseAttributesAttributes
+			if result != nil && result.ManagedDatabase != nil && result.ManagedDatabase.Data != nil {
+				attrs = result.ManagedDatabase.Data.Attributes
+			}
+			if attrs != nil && attrs.Status != nil {
+				last.LastStatus = *attrs.Status
+				tflog.Debug(ctx, "managed database status", map[string]any{"id": id, "status": *attrs.Status})
+			}
+			if res, done := observe(attrs); done {
+				res.LastStatus = last.LastStatus
+				return res
+			}
+		}
+
+		if remaining := time.Until(deadline); wait > remaining {
+			wait = remaining
+		}
+		select {
+		case <-ctx.Done():
+			last.Kind, last.Err = mdbWaitError, ctx.Err()
+			return last
+		case <-time.After(wait):
+		}
+	}
+
+	last.Kind = mdbWaitTimeout
+	return last
+}
+
+// mdbRetryAfter reads a Retry-After header in seconds from a 429, capped at
+// mdbMaxRetryAfter; it falls back to the poll interval.
+func mdbRetryAfter(err error, fallback time.Duration) time.Duration {
+	var apiErr *components.APIError
+	if !errors.As(err, &apiErr) || apiErr.RawResponse == nil {
+		return fallback
+	}
+	secs, convErr := strconv.Atoi(strings.TrimSpace(apiErr.RawResponse.Header.Get("Retry-After")))
+	if convErr != nil || secs <= 0 {
+		return fallback
+	}
+	d := time.Duration(secs) * time.Second
+	if d > mdbMaxRetryAfter {
+		d = mdbMaxRetryAfter
+	}
+	return d
+}
+
+// waitForManagedDatabaseReady polls until the database is settled: a
+// non-empty status outside the in-progress, failed and unreachable sets, as
+// reported by a polled Show (never the create response). With
+// RequireCredentials, it also needs credentials.host from the create response
+// or any polled Show.
+func (r *ManagedDatabaseResource) waitForManagedDatabaseReady(ctx context.Context, id string, deadline time.Time, opts mdbWaitOpts) mdbWaitResult {
+	credentialsSeen := opts.CredentialsSeen
+	priorFailed := mdbStatusIn(opts.PriorStatus, mdbFailedStates)
+
+	return r.mdbPoll(ctx, id, deadline, mdbReadyPollInterval, nil, func(attrs *components.ManagedDatabaseAttributesAttributes) (mdbWaitResult, bool) {
+		if attrs == nil || attrs.Status == nil || strings.TrimSpace(*attrs.Status) == "" {
+			return mdbWaitResult{}, false
+		}
+		if mdbCredentialsHost(attrs.Credentials) != "" {
+			credentialsSeen = true
+		}
+		status := *attrs.Status
+		switch {
+		case mdbStatusIn(status, mdbUnreachableStates):
+			return mdbWaitResult{Kind: mdbWaitGone}, true
+		case mdbStatusIn(status, mdbFailedStates):
+			if !opts.FailedIsSettled {
+				if priorFailed {
+					return mdbWaitResult{}, false
+				}
+				return mdbWaitResult{Kind: mdbWaitFailedStatus}, true
+			}
+		case mdbStatusIn(status, mdbInProgressStates):
+			return mdbWaitResult{}, false
+		}
+		if opts.RequireCredentials && !credentialsSeen {
+			return mdbWaitResult{}, false
+		}
+		return mdbWaitResult{Kind: mdbWaitReady}, true
+	})
+}
+
+// waitForManagedDatabaseDeleted polls until Show returns not-found or status
+// "deleted". A failed status during the delete is an error, unless the
+// database had already failed before the DELETE (priorStatus): then it keeps
+// polling, or a database that failed at create could never be destroyed.
+func (r *ManagedDatabaseResource) waitForManagedDatabaseDeleted(ctx context.Context, id string, deadline time.Time, priorStatus string) mdbWaitResult {
+	priorFailed := mdbStatusIn(priorStatus, mdbFailedStates)
+	onNotFound := func() (mdbWaitResult, bool) { return mdbWaitResult{Kind: mdbWaitReady}, true }
+
+	return r.mdbPoll(ctx, id, deadline, mdbDeletePollInterval, onNotFound, func(attrs *components.ManagedDatabaseAttributesAttributes) (mdbWaitResult, bool) {
+		if attrs == nil || attrs.Status == nil {
+			return mdbWaitResult{}, false
+		}
+		status := *attrs.Status
+		switch {
+		case mdbStatusIn(status, mdbDeleteTerminalStates):
+			return mdbWaitResult{Kind: mdbWaitReady}, true
+		case mdbStatusIn(status, mdbFailedStates) && !priorFailed:
+			return mdbWaitResult{Kind: mdbWaitFailedStatus}, true
+		}
+		return mdbWaitResult{}, false
+	})
 }
 
 func (r *ManagedDatabaseResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	resp.Diagnostics.AddError("Not implemented", "latitudesh_managed_database update is not implemented yet.")
-}
-
-func (r *ManagedDatabaseResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	resp.Diagnostics.AddError("Not implemented", "latitudesh_managed_database delete is not implemented yet.")
 }
 
 // --- validators -------------------------------------------------------------

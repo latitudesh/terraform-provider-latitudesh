@@ -200,6 +200,7 @@ func (p *latitudeshProvider) Resources(ctx context.Context) []func() resource.Re
 		NewFilesystemStorageResource,
 		NewLksClusterResource,
 		NewLksNodePoolResource,
+		NewManagedDatabaseResource,
 	}
 }
 
