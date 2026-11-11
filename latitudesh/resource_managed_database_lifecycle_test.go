@@ -26,62 +26,35 @@ type mdbScriptStep struct {
 	noData     bool   // answer 200 with {"data": null}
 }
 
-// mdbScript answers GETs from a fixed script; the last step repeats.
-type mdbScript struct {
-	mu    sync.Mutex
-	steps []mdbScriptStep
-	gets  int
+// newMdbScript serves GET /managed_databases/mdb_1 from steps; the last step
+// repeats.
+func newMdbScript(t *testing.T, steps ...mdbScriptStep) (*mdbSequence, *ManagedDatabaseResource) {
+	t.Helper()
+	responses := make([]mdbResponse, len(steps))
+	for i, step := range steps {
+		responses[i] = step.response(t)
+	}
+	return newMdbSequence(t, responses...)
 }
 
-func (s *mdbScript) handler(w http.ResponseWriter, r *http.Request) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	i := s.gets
-	if i >= len(s.steps) {
-		i = len(s.steps) - 1
+func (s mdbScriptStep) response(t *testing.T) mdbResponse {
+	switch {
+	case s.drop:
+		return mdbResponse{drop: true}
+	case s.noData:
+		return mdbResponse{code: http.StatusOK, body: `{"data":null}`}
+	case s.code != 0 && s.code != http.StatusOK:
+		return mdbResponse{code: s.code, body: `{"errors":[{"status":"error"}]}`, retryAfter: s.retryAfter}
 	}
-	s.gets++
-	step := s.steps[i]
-	if step.drop {
-		if hj, ok := w.(http.Hijacker); ok {
-			if conn, _, err := hj.Hijack(); err == nil {
-				_ = conn.Close()
-			}
-		}
-		return
-	}
-	w.Header().Set("Content-Type", "application/vnd.api+json")
-	if step.noData {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"data":null}`))
-		return
-	}
-	if step.retryAfter != "" {
-		w.Header().Set("Retry-After", step.retryAfter)
-	}
-	if step.code != 0 && step.code != http.StatusOK {
-		w.WriteHeader(step.code)
-		_, _ = w.Write([]byte(`{"errors":[{"status":"error"}]}`))
-		return
-	}
-	attrs := map[string]any{"status": step.status}
-	if step.creds {
+	attrs := map[string]any{"status": s.status}
+	if s.creds {
 		attrs["credentials"] = map[string]any{"host": "db.mock.internal"}
 	}
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"id": "mdb_1", "type": "managed_databases", "attributes": attrs}})
-}
-
-func (s *mdbScript) count() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.gets
-}
-
-func newMdbScript(t *testing.T, steps ...mdbScriptStep) (*mdbScript, *ManagedDatabaseResource) {
-	t.Helper()
-	script := &mdbScript{steps: steps}
-	return script, newMdbTestResource(t, script.handler)
+	body, err := json.Marshal(map[string]any{"data": map[string]any{"id": "mdb_1", "type": "managed_databases", "attributes": attrs}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return mdbResponse{code: http.StatusOK, body: string(body), retryAfter: s.retryAfter}
 }
 
 // newMdbTestResource starts a test server with h, shortens the poll intervals,

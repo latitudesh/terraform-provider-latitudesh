@@ -47,8 +47,9 @@ var (
 	mdbReadyPollInterval  = 15 * time.Second
 	mdbDeletePollInterval = 10 * time.Second
 	// mdbErrorBudget is how long a poller tolerates consecutive retryable
-	// errors (not-found, 5xx, dropped connections). Pollers turn SDK retries off, so this replaces
-	// the provider-wide 300s per-call retry that LKS relies on.
+	// errors (not-found, 5xx, dropped connections). Pollers turn SDK retries
+	// off, so this replaces the provider-wide 300s per-call retry that LKS
+	// relies on.
 	mdbErrorBudget = 5 * time.Minute
 	// mdbMaxRetryAfter caps how long one Retry-After header can make a poller
 	// wait.
@@ -1676,6 +1677,7 @@ func mdbUnexpectedSuccess(err error) bool {
 	return errors.As(err, &apiErr) && apiErr.StatusCode >= 200 && apiErr.StatusCode < 300
 }
 
+// mdbServerError reports whether err is a 5xx.
 func mdbServerError(err error) bool {
 	var apiErr *components.APIError
 	return errors.As(err, &apiErr) && apiErr.StatusCode >= 500 && apiErr.StatusCode < 600
