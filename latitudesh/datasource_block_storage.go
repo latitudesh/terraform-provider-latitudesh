@@ -196,7 +196,7 @@ func selectorDescription(data BlockStorageDataSourceModel) string {
 func (d *BlockStorageDataSource) getByID(ctx context.Context, id string) (*components.VolumeData, error) {
 	res, err := d.client.BlockStorage.RetrieveVolume(ctx, id)
 	if err != nil {
-		if blockStorageNotFound(err) {
+		if apiNotFound(err) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("unable to retrieve block storage volume %q: %w", id, err)

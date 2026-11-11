@@ -2,9 +2,7 @@ package latitudesh
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -276,32 +274,10 @@ func (d *MarketplaceAppDataSource) Read(ctx context.Context, req datasource.Read
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-// marketplaceAppNotFound reports whether err is a 404 from the marketplace app
-// endpoint. GetMarketplaceApp declares a typed 404 response, so the SDK returns
-// a *components.ErrorObject (JSON:API errors, status "404") rather than the
-// generic *components.APIError other endpoints yield — both must be recognized.
-func marketplaceAppNotFound(err error) bool {
-	var apiErr *components.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.StatusCode == http.StatusNotFound
-	}
-
-	var errObj *components.ErrorObject
-	if errors.As(err, &errObj) {
-		for _, e := range errObj.Errors {
-			if e.Status != nil && *e.Status == "404" {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
 func (d *MarketplaceAppDataSource) getByIDOrSlug(ctx context.Context, idOrSlug string) (*components.MarketplaceAppData, error) {
 	res, err := d.client.MarketplaceApps.GetMarketplaceApp(ctx, idOrSlug)
 	if err != nil {
-		if marketplaceAppNotFound(err) {
+		if apiNotFound(err) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("unable to retrieve marketplace app %q: %w", idOrSlug, err)

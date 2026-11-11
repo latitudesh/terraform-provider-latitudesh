@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/latitudesh/latitudesh-go-sdk/models/components"
@@ -49,6 +50,10 @@ func TestAPINotFound(t *testing.T) {
 		// Never classified by message text: a plain error that merely
 		// mentions 404 is not a not-found.
 		{"plain error", errors.New("404 not_found"), false},
+
+		// Wrapped errors are unwrapped.
+		{"wrapped jsonapi 404", fmt.Errorf("get failed: %w", &components.ErrorObject{Errors: []components.Errors{{Status: str("404")}}}), true},
+		{"wrapped generic 404", fmt.Errorf("get failed: %w", &components.APIError{StatusCode: 404}), true},
 	}
 
 	for _, tc := range cases {

@@ -1,5 +1,5 @@
 ---
-prompt-version: 7
+prompt-version: 8
 ---
 
 # Scaffold Terraform support for a latitudesh-go-sdk service group
@@ -127,23 +127,12 @@ with only the `>= 400 && < 500` branch returns the generic `*components.APIError
 with a `StatusCode`. Shapes differ within a group, but only the operations your
 code branches on need inspecting: the single-item Get (pollers read it too) and
 the Delete — look both up in one call and list the rest as uninspected under
-**API error codes**. Write one `<short>NotFound(err error) bool` that `errors.As`
-both shapes and accepts **only** 404:
-
-```go
-var apiErr *components.APIError
-if errors.As(err, &apiErr) { return apiErr.StatusCode == http.StatusNotFound }
-var errObj *components.ErrorObject
-if errors.As(err, &errObj) {
-	for _, e := range errObj.Errors { if e.Status != nil && *e.Status == "404" { return true } }
-}
-return false
-```
-
-The same helper already exists as `publicNetworkNotFound` in
-`latitudesh/resource_public_network.go` and `marketplaceAppNotFound` in
-`latitudesh/datasource_marketplace_app.go`. Never match `err.Error()` against
-`"404"` or `"not_found"`: a 403 or a transient 5xx then reads as "gone".
+**API error codes**. Use the shared `apiNotFound(err)` in
+`latitudesh/helpers_api.go` — do not write a per-resource copy. It `errors.As`
+both shapes and accepts **only** not-found: an `APIError` with status 404, or an
+`ErrorObject` whose `status`/`code` is `"404"` or the snake_case `"not_found"`
+the live API sends. Never match `err.Error()` against `"404"` or
+`"not_found"`: a 403 or a transient 5xx then reads as "gone".
 
 ## House conventions — one exemplar per obligation
 
@@ -157,8 +146,7 @@ exemplar predates it) and `datasourcevalidator` from
 Two legacy patterns in these files are bugs, not conventions: (a) matching
 `err.Error()` against `"404"`/`"not_found"` in the `Delete` of most older
 resources (`resource_virtual_machine.go`, `resource_server.go`,
-`resource_user_data.go`, …) — write yours like `publicNetworkNotFound` /
-`marketplaceAppNotFound`;
+`resource_user_data.go`, …) — use `apiNotFound` instead;
 (b) `ImportStateVerifyIgnore: … "project"` / `"plan"` in
 `resource_virtual_machine_site_test.go` — it papers over the slug/ID selector
 mismatch; keep the configured selector instead.
@@ -166,7 +154,7 @@ mismatch; keep the configured selector instead.
 | What you need | Read |
 |---|---|
 | Resource skeleton, CRUD, waiters | `latitudesh/resource_virtual_machine.go` |
-| Not-found helper across both SDK error shapes | `publicNetworkNotFound` in `latitudesh/resource_public_network.go`; same shape as `marketplaceAppNotFound` in `latitudesh/datasource_marketplace_app.go` |
+| Not-found check across both SDK error shapes; slug→ID project resolution; typed-null import timeouts | `apiNotFound`, `resolveProjectID` and `nullCRUDTimeouts` in `latitudesh/helpers_api.go` — call them, never copy them |
 | Create → persist ID → reconciling GET; slug→ID before POST; `project` defaulting (`effectiveProject`) | `Create` and `ModifyPlan` in `latitudesh/resource_public_network.go`; ID-before-read also in `Create` of `latitudesh/resource_virtual_machine_backup.go`, `effectiveProject` + reconciling read also in `latitudesh/resource_elastic_ip.go` |
 | Preserving configured inputs on read and import | `readPublicNetworkInto` / `ImportState` in `latitudesh/resource_public_network.go`; the `IsNull() \|\| IsUnknown()` guards on `project`/`site` in `latitudesh/resource_elastic_ip_bgp.go` and `ImportState` of `latitudesh/resource_virtual_network.go` |
 | Unordered collections as `Set` | `sessionsToState` in `latitudesh/resource_elastic_ip_bgp.go` |
@@ -204,10 +192,9 @@ Structure taken from those files, non-negotiable:
   `if data.X.IsNull() || data.X.IsUnknown()` — i.e. on import. Some create
   endpoints take an ID only (json tag `project_id`; a slug 404s — verified for
   public networks) while others accept either: when the tag says ID and the
-  config may carry a slug, resolve first — return the selector unchanged when it
-  already carries the ID prefix (`proj_`), otherwise
-  `client.Projects.GetProject(ctx, selector)` — it accepts id-or-slug — and use
-  `Object.Data.ID`. Never hide the mismatch with `ImportStateVerifyIgnore`.
+  config may carry a slug, resolve first with the shared
+  `resolveProjectID(ctx, r.client, selector)` in `latitudesh/helpers_api.go`.
+  Never hide the mismatch with `ImportStateVerifyIgnore`.
 - **Create ends with the read.** After the POST,
   `resp.State.SetAttribute(ctx, path.Root("id"), id)`, then run `read<Name>Into`
   and keep its result (`Create` in `resource_virtual_machine_backup.go`): a

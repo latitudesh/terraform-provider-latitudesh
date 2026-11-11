@@ -2,8 +2,6 @@ package latitudesh
 
 import (
 	"context"
-	"errors"
-	"net/http"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
@@ -413,7 +411,7 @@ func (r *PublicNetworkResource) Delete(ctx context.Context, req resource.DeleteR
 
 	_, err := r.client.PublicNetworks.DestroyPublicNetwork(ctx, id)
 	if err != nil {
-		if publicNetworkNotFound(err) {
+		if apiNotFound(err) {
 			return
 		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete public network, got error: "+err.Error())
@@ -463,7 +461,7 @@ func (r *PublicNetworkResource) readPublicNetworkInto(ctx context.Context, data 
 
 	result, err := r.client.PublicNetworks.GetPublicNetwork(ctx, id)
 	if err != nil {
-		if publicNetworkNotFound(err) {
+		if apiNotFound(err) {
 			data.ID = types.StringNull()
 			return
 		}
@@ -501,27 +499,4 @@ func (r *PublicNetworkResource) readPublicNetworkInto(ctx context.Context, data 
 	if data.Size.IsNull() || data.Size.IsUnknown() {
 		data.Size = computed.Size
 	}
-}
-
-// publicNetworkNotFound reports whether err is a 404 from the public network
-// endpoints. GetPublicNetwork and DestroyPublicNetwork declare typed 403/404
-// responses, so the SDK returns a *components.ErrorObject (JSON:API errors,
-// status "404") rather than the generic *components.APIError; both shapes
-// must be recognized, and only a 404 counts — a 403 is a real error.
-func publicNetworkNotFound(err error) bool {
-	var apiErr *components.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.StatusCode == http.StatusNotFound
-	}
-
-	var errObj *components.ErrorObject
-	if errors.As(err, &errObj) {
-		for _, e := range errObj.Errors {
-			if e.Status != nil && *e.Status == "404" {
-				return true
-			}
-		}
-	}
-
-	return false
 }

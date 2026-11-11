@@ -72,7 +72,7 @@ func testAccCheckPublicNetworkDestroy(s *terraform.State) error {
 			// Only a 404 proves the network is gone. Auth, permission or
 			// transient API failures must surface rather than pass the check
 			// while billed infrastructure may still exist.
-			if publicNetworkNotFound(err) {
+			if apiNotFound(err) {
 				continue
 			}
 			return fmt.Errorf("error checking public network %s destroy: %w", id, err)

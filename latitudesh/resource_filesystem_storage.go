@@ -2,8 +2,6 @@ package latitudesh
 
 import (
 	"context"
-	"errors"
-	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
@@ -313,7 +311,7 @@ func (r *FilesystemStorageResource) Delete(ctx context.Context, req resource.Del
 
 	_, err := r.client.FilesystemStorage.DeleteFilesystem(ctx, id)
 	if err != nil {
-		if filesystemStorageNotFound(err) {
+		if apiNotFound(err) {
 			return
 		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete filesystem storage, got error: "+err.Error())
@@ -360,7 +358,7 @@ func (r *FilesystemStorageResource) readFilesystemStorageInto(ctx context.Contex
 
 	result, err := r.client.FilesystemStorage.ListFilesystems(ctx, filterProject)
 	if err != nil {
-		if filesystemStorageNotFound(err) {
+		if apiNotFound(err) {
 			data.ID = types.StringNull()
 			return false
 		}
@@ -425,18 +423,6 @@ func filesystemStorageShrinkRequiresReplace(ctx context.Context, req planmodifie
 		return
 	}
 	resp.RequiresReplace = req.PlanValue.ValueInt64() < req.StateValue.ValueInt64()
-}
-
-// filesystemStorageNotFound reports whether err is a 404 from the
-// FilesystemStorage group. Both ListFilesystems and DeleteFilesystem only ever
-// return the generic *components.APIError (no typed *components.ErrorObject
-// branch is generated for either, confirmed against both -src listings).
-func filesystemStorageNotFound(err error) bool {
-	var apiErr *components.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.StatusCode == http.StatusNotFound
-	}
-	return false
 }
 
 // mapFilesystemStorage maps one components.FilesystemData into the resource
