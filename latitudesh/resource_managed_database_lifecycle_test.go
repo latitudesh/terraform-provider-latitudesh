@@ -465,3 +465,11 @@ func TestWaitForManagedDatabaseReady_DecodeErrorIsNotRetried(t *testing.T) {
 		t.Errorf("Show called %d times, want 1 (no retries)", seq.count())
 	}
 }
+
+func TestWaitForManagedDatabaseReady_NotFoundAfterAStatus(t *testing.T) {
+	_, r := newMdbScript(t, mdbScriptStep{status: "updating"}, mdbScriptStep{code: 404})
+	got := ready(r, 5*time.Second, mdbWaitOpts{NotFoundIsGone: true})
+	if got.Kind != mdbWaitGone || !got.NotFound || got.LastStatus != "updating" {
+		t.Fatalf("got %+v, want gone, NotFound, last status updating", got)
+	}
+}

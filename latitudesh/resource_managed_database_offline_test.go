@@ -640,3 +640,18 @@ func TestMdbGoneTextsWithoutStatus(t *testing.T) {
 		t.Errorf("create text should name a known status: %q", d)
 	}
 }
+
+// A 404 after a polled status must still read as "not found", not as that
+// status.
+func TestMdbGoneTextsAfterAStatus(t *testing.T) {
+	var diags diag.Diagnostics
+	mdbAddCreateWaitError("mdb_1", mdbWaitResult{Kind: mdbWaitGone, LastStatus: "updating", NotFound: true}, &diags)
+	if d := diags.Errors()[0].Detail(); strings.Contains(d, "updating") || !strings.Contains(d, "no longer finds") {
+		t.Errorf("create text blames the earlier status: %q", d)
+	}
+	var upd diag.Diagnostics
+	mdbAddUpdateWaitError(&upd, "mdb_1", mdbUpdatePreWait, mdbWaitResult{Kind: mdbWaitGone, LastStatus: "updating", NotFound: true})
+	if d := upd.Errors()[0].Detail(); strings.Contains(d, "updating") || !strings.Contains(d, "no longer finds") {
+		t.Errorf("update text blames the earlier status: %q", d)
+	}
+}
