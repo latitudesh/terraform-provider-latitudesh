@@ -150,8 +150,10 @@ func TestManagedDatabase_MockLifecycle(t *testing.T) {
 					resource.TestCheckResourceAttr(mdbResourceName, "parameters.work_mem", "128MB"),
 					mdbCheckPostPatchDelay(mock),
 					mdbCheckLog(mock, func(methods string) error {
-						if strings.Contains(methods, "POST") || strings.Contains(methods, "DELETE") || strings.Count(methods, "PATCH") != 1 {
-							return fmt.Errorf("want one PATCH and no POST or DELETE, got %q", methods)
+						// One PATCH per attribute: the API drops trusted_sources
+						// from a PATCH that also carries parameters.
+						if strings.Contains(methods, "POST") || strings.Contains(methods, "DELETE") || strings.Count(methods, "PATCH") != 2 {
+							return fmt.Errorf("want two PATCHes and no POST or DELETE, got %q", methods)
 						}
 						return nil
 					}),

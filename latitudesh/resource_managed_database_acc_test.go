@@ -3,13 +3,18 @@ package latitudesh
 // TestAccManagedDatabase_Basic exercises latitudesh_managed_database against
 // the live API. It is skipped unless TF_ACC and LATITUDESH_AUTH_TOKEN are set
 // (via testAccTokenCheck), so `go test ./latitudesh` never reaches the
-// network. It has not been run: the region (ASH) and plan (db.psql.small) come
-// from the SDK's own doc examples, and the behaviour it confirms (status
-// values, credentials on Show, delete semantics) is unverified until it is.
+// network.
+//
+// The region and plan default to DAL and db.psql.small and can be overridden
+// with LATITUDESH_TEST_MDB_REGION and LATITUDESH_TEST_MDB_PLAN: managed
+// databases are offered only in some regions (ASH answers 422 "is not
+// available for managed databases"), and GET /plans/managed_databases can
+// return an empty list for an account, so they can't be discovered.
 
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
@@ -49,17 +54,26 @@ func TestAccManagedDatabase_Basic(t *testing.T) {
 	})
 }
 
+func testAccEnvOr(name, fallback string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
+	}
+	return fallback
+}
+
 func testAccManagedDatabaseConfig(projectID, sources string) string {
+	region := testAccEnvOr("LATITUDESH_TEST_MDB_REGION", "DAL")
+	plan := testAccEnvOr("LATITUDESH_TEST_MDB_PLAN", "db.psql.small")
 	return fmt.Sprintf(`
 resource "latitudesh_managed_database" "test_item" {
   project         = %q
   name            = "tf-acc-managed-database"
-  region          = "ASH"
-  plan            = "db.psql.small"
+  region          = %q
+  plan            = %q
   engine          = "postgres"
   trusted_sources = %s
 }
-`, projectID, sources)
+`, projectID, region, plan, sources)
 }
 
 // testAccCheckManagedDatabaseDestroy accepts only not-found as proof of

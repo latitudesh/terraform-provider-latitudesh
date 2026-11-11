@@ -119,6 +119,13 @@ func TestWaitForManagedDatabaseReady(t *testing.T) {
 			wantKind: mdbWaitFailedStatus, minGets: 1, wantLast: "Failed",
 		},
 		{
+			// Observed live (2026-11-11): a new database goes provisioning ->
+			// error -> running within a minute, so "error" is not a failure.
+			name:     "error is transient, as the live API reports it",
+			steps:    []mdbScriptStep{{status: "provisioning"}, {status: "error"}, {status: "running"}},
+			wantKind: mdbWaitReady, minGets: 3,
+		},
+		{
 			name:     "failed is settled for the pre-PATCH wait",
 			steps:    []mdbScriptStep{{status: "failed"}},
 			opts:     mdbWaitOpts{FailedIsSettled: true},

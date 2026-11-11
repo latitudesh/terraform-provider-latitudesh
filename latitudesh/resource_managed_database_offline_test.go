@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sort"
 	"strings"
 	"testing"
 
@@ -72,9 +73,11 @@ func mdbTestAttrs() *components.ManagedDatabaseAttributesAttributes {
 		Status:         strPtr("running"),
 		TrustedSources: []string{"10.0.0.0/24", "10.1.0.0/24"},
 		Parameters:     map[string]string{"work_mem": "65536kB", "max_connections": "100"},
-		Plan:           &components.ManagedDatabaseAttributesPlan{Slug: strPtr("db.psql.small"), Billing: strPtr("yearly")},
-		Region:         &components.ManagedDatabaseAttributesRegion{Site: &components.ManagedDatabaseAttributesSite{Slug: strPtr("ASH")}},
-		Project:        &components.ProjectInclude{ID: strPtr("proj_1")},
+		// As the live API answers: the slug is normalised, the name is what
+		// was sent.
+		Plan:    &components.ManagedDatabaseAttributesPlan{Slug: strPtr("db-psql-small"), Name: strPtr("db.psql.small"), Billing: strPtr("yearly")},
+		Region:  &components.ManagedDatabaseAttributesRegion{Site: &components.ManagedDatabaseAttributesSite{Slug: strPtr("ASH")}},
+		Project: &components.ProjectInclude{ID: strPtr("proj_1")},
 		Credentials: &components.ManagedDatabaseAttributesCredentials{
 			Host:     strPtr("db.api"),
 			Port:     int64Ptr(5433),
@@ -184,6 +187,9 @@ func TestMdbApplyAttributes_Refresh(t *testing.T) {
 		}
 		if got := data.Project.ValueString(); got != "proj_1" {
 			t.Errorf("project = %q, want the API's ID", got)
+		}
+		if got := data.Plan.ValueString(); got != "db.psql.small" {
+			t.Errorf("plan = %q, want plan.name, the form the configuration uses", got)
 		}
 		if !data.Parameters.IsNull() {
 			t.Errorf("parameters = %v, want null on import", data.Parameters)
@@ -584,7 +590,7 @@ func TestMdbModifyPlan(t *testing.T) {
 	}
 }
 
-func TestMdbUpdatePatch(t *testing.T) {
+func TestMdbUpdatePatches(t *testing.T) {
 	ctx := context.Background()
 	params := func(kv ...string) types.Map {
 		m := map[string]attr.Value{}
@@ -593,34 +599,50 @@ func TestMdbUpdatePatch(t *testing.T) {
 		}
 		return types.MapValueMust(types.StringType, m)
 	}
+	sources := func(cidrs ...string) types.Set {
+		vals := make([]attr.Value, len(cidrs))
+		for i, c := range cidrs {
+			vals[i] = types.StringValue(c)
+		}
+		return types.SetValueMust(types.StringType, vals)
+	}
 	cases := []struct {
-		name       string
-		state      types.Map
-		plan       types.Map
-		wantSend   bool
-		wantParams map[string]any
+		name        string
+		stateParams types.Map
+		planParams  types.Map
+		planSources types.Set
+		want        []string // per PATCH: "sources" or "params:<keys>"
 	}{
-		{"removing a key sends nothing", params("a", "1", "b", "2"), params("a", "1"), false, nil},
-		{"changing a value sends the full map", params("a", "1", "b", "2"), params("a", "1", "b", "3"), true, map[string]any{"a": "1", "b": "3"}},
-		{"adding a key sends the full map", params("a", "1"), params("a", "1", "c", "4"), true, map[string]any{"a": "1", "c": "4"}},
-		{"unchanged sends nothing", params("a", "1"), params("a", "1"), false, nil},
+		{"removing a key sends nothing", params("a", "1", "b", "2"), params("a", "1"), sources("10.0.0.0/24"), nil},
+		{"changing a value sends the full map", params("a", "1", "b", "2"), params("a", "1", "b", "3"), sources("10.0.0.0/24"), []string{"params:a,b"}},
+		{"adding a key sends the full map", params("a", "1"), params("a", "1", "c", "4"), sources("10.0.0.0/24"), []string{"params:a,c"}},
+		{"unchanged sends nothing", params("a", "1"), params("a", "1"), sources("10.0.0.0/24"), nil},
+		{"both change: two PATCHes, allowlist first", params("a", "1"), params("a", "2"), sources("10.0.0.0/24", "10.1.0.0/24"), []string{"sources", "params:a"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var diags diag.Diagnostics
 			state, plan := mdbTestModel(), mdbTestModel()
-			state.Parameters, plan.Parameters = tc.state, tc.plan
-			patch, send := mdbUpdatePatch(ctx, &plan, &state, &diags)
-			if send != tc.wantSend {
-				t.Fatalf("send = %v, want %v", send, tc.wantSend)
-			}
-			if tc.wantParams != nil && len(patch.Parameters) != len(tc.wantParams) {
-				t.Errorf("parameters = %v, want %v", patch.Parameters, tc.wantParams)
-			}
-			for k, v := range tc.wantParams {
-				if patch.Parameters[k] != v {
-					t.Errorf("parameters[%s] = %v, want %v", k, patch.Parameters[k], v)
+			state.TrustedSources = sources("10.0.0.0/24")
+			state.Parameters, plan.Parameters, plan.TrustedSources = tc.stateParams, tc.planParams, tc.planSources
+			var got []string
+			for _, p := range mdbUpdatePatches(ctx, &plan, &state, &diags) {
+				switch {
+				case p.TrustedSources != nil && p.Parameters != nil:
+					t.Fatalf("a PATCH carries both trusted_sources and parameters; the API drops trusted_sources")
+				case p.TrustedSources != nil:
+					got = append(got, "sources")
+				default:
+					keys := make([]string, 0, len(p.Parameters))
+					for k := range p.Parameters {
+						keys = append(keys, k)
+					}
+					sort.Strings(keys)
+					got = append(got, "params:"+strings.Join(keys, ","))
 				}
+			}
+			if strings.Join(got, " ") != strings.Join(tc.want, " ") {
+				t.Errorf("patches = %v, want %v", got, tc.want)
 			}
 		})
 	}

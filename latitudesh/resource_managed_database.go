@@ -61,7 +61,10 @@ var (
 // created the database would create a second one.
 var mdbNoRetries = retry.Config{Strategy: "none"}
 
-// The API documents no status values; these sets are unverified guesses.
+// The API documents no status values. Observed live (2026-11-11): a new
+// database reports "provisioning", then "error" for about ten seconds, then
+// "running", which is the ready status. So "error" is transient and counts as
+// in progress, never as a failure. The other values are unverified guesses.
 // Statuses are compared lower-cased and trimmed (mdbStatusIn).
 var (
 	mdbInProgressStates = map[string]bool{
@@ -70,10 +73,10 @@ var (
 		"pending":      true,
 		"updating":     true,
 		"restarting":   true,
+		"error":        true,
 	}
 	mdbFailedStates = map[string]bool{
 		"failed": true,
-		"error":  true,
 	}
 	// mdbUnreachableStates are statuses no readiness wait can succeed from.
 	mdbUnreachableStates = map[string]bool{
@@ -159,7 +162,7 @@ func (r *ManagedDatabaseResource) Schema(ctx context.Context, req resource.Schem
 				},
 			},
 			"region": schema.StringAttribute{
-				MarkdownDescription: "Region to create the database in, e.g. `ASH`. Changing it forces a new resource.",
+				MarkdownDescription: "Region to create the database in, e.g. `DAL`. Managed databases are offered only in some regions. Changing it forces a new resource.",
 				Required:            true,
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -1086,16 +1089,17 @@ func (r *ManagedDatabaseResource) Update(ctx context.Context, req resource.Updat
 	}
 	deadline := time.Now().Add(updateTimeout)
 
-	patch, send := mdbUpdatePatch(ctx, &data, &state, &resp.Diagnostics)
+	patches := mdbUpdatePatches(ctx, &data, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if send {
+	for _, patch := range patches {
 		// Wait for a settled status first, so a PATCH never hits a database
-		// that isn't ready (e.g. after an untaint, or mid-restart). A failed
-		// status counts as settled here: a corrective PATCH must still be
-		// able to reach a database a bad parameter broke.
+		// that isn't ready (e.g. after an untaint, mid-restart, or right
+		// after the previous PATCH). A failed status counts as settled here:
+		// a corrective PATCH must still be able to reach a database a bad
+		// parameter broke.
 		pre := r.waitForManagedDatabaseReady(ctx, id, deadline, mdbWaitOpts{FailedIsSettled: true, NotFoundIsGone: true})
 		if pre.Kind != mdbWaitReady {
 			mdbAddUpdateWaitError(&resp.Diagnostics, id, mdbUpdatePreWait, pre)
@@ -1134,30 +1138,31 @@ func (r *ManagedDatabaseResource) Update(ctx context.Context, req resource.Updat
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-// mdbUpdatePatch builds the PATCH from what changed between state and plan.
+// mdbUpdatePatches builds the PATCHes for what changed between state and
+// plan, one attribute per request: the live API silently drops
+// trusted_sources from a PATCH that also carries parameters (observed
+// 2026-11-11). The allowlist goes first.
+//
 // trusted_sources is sent when it is configured and differs. parameters is
 // sent, as the full configured map, when mdbParametersChanged and the map
 // isn't empty (it is omitempty, and the API requires at least one
 // attribute). A plan that only removes keys sends nothing, since that PATCH
-// would restart the database for no change. send is false when nothing
+// would restart the database for no change. No PATCH is needed when nothing
 // remains to send (e.g. only timeouts changed, or billing was adopted).
-func mdbUpdatePatch(ctx context.Context, plan, state *ManagedDatabaseResourceModel, diags *diag.Diagnostics) (components.ManagedDatabaseUpdatePayloadAttributes, bool) {
-	var patch components.ManagedDatabaseUpdatePayloadAttributes
-	send := false
+func mdbUpdatePatches(ctx context.Context, plan, state *ManagedDatabaseResourceModel, diags *diag.Diagnostics) []components.ManagedDatabaseUpdatePayloadAttributes {
+	var patches []components.ManagedDatabaseUpdatePayloadAttributes
 
 	if !plan.TrustedSources.IsNull() && !plan.TrustedSources.IsUnknown() && !plan.TrustedSources.Equal(state.TrustedSources) {
 		if sources := mdbTrustedSourcesPayload(ctx, plan.TrustedSources, diags); len(sources) > 0 {
-			patch.TrustedSources = sources
-			send = true
+			patches = append(patches, components.ManagedDatabaseUpdatePayloadAttributes{TrustedSources: sources})
 		}
 	}
 	if mdbParametersChanged(state.Parameters, plan.Parameters) {
 		if params := mdbParametersPayload(plan.Parameters); len(params) > 0 {
-			patch.Parameters = params
-			send = true
+			patches = append(patches, components.ManagedDatabaseUpdatePayloadAttributes{Parameters: params})
 		}
 	}
-	return patch, send
+	return patches
 }
 
 // mdbParametersChanged reports whether the plan sets a key that state doesn't
@@ -1454,7 +1459,12 @@ func mdbApplyAttributes(ctx context.Context, data, planned *ManagedDatabaseResou
 	// Selectors.
 	var planSlug, regionSlug, projectID, billing *string
 	if attrs.Plan != nil {
-		planSlug = attrs.Plan.Slug
+		// plan.name is what the create took; the API normalises plan.slug
+		// ("db.psql.small" comes back as "db-psql-small", observed live).
+		planSlug = attrs.Plan.Name
+		if planSlug == nil {
+			planSlug = attrs.Plan.Slug
+		}
 		billing = attrs.Plan.Billing
 	}
 	if attrs.Region != nil && attrs.Region.Site != nil {

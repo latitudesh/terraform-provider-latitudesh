@@ -38,9 +38,9 @@ type mdbRequest struct {
 }
 
 // mdbMock is the in-memory managed database API shared by every
-// TestManagedDatabase_Mock* test. Its zero value answers a POST with
-// "provisioning" and no credentials, then "provisioning" for readyAfterGETs
-// GETs, then "running" with credentials. "running" is deliberately in none of
+// TestManagedDatabase_Mock* test. Like the live API, it answers a POST with
+// "provisioning" and no credentials, then "provisioning", a brief "error" on
+// GET number readyAfterGETs, then "running" with credentials. "running" is deliberately in none of
 // the status sets, which exercises the credentials-based readiness rule.
 type mdbMock struct {
 	mu      sync.Mutex
@@ -182,10 +182,15 @@ func (m *mdbMock) status(rec *mdbRecord) string {
 	if rec.Status != "" {
 		return rec.Status
 	}
-	if rec.Gets > m.readyAfterGETs {
+	switch {
+	case rec.Gets > m.readyAfterGETs:
 		return "running"
+	case rec.Gets == m.readyAfterGETs:
+		// The live API reports "error" briefly before "running".
+		return "error"
+	default:
+		return "provisioning"
 	}
-	return "provisioning"
 }
 
 func (m *mdbMock) envelope(rec *mdbRecord, status string, withCreds bool) map[string]any {
@@ -198,7 +203,9 @@ func (m *mdbMock) envelope(rec *mdbRecord, status string, withCreds bool) map[st
 			params[k] = v
 		}
 	}
-	plan := map[string]any{"slug": rec.Plan}
+	// Like the live API: plan.name is what the create took, plan.slug is
+	// normalised ("db.psql.small" -> "db-psql-small").
+	plan := map[string]any{"name": rec.Plan, "slug": strings.ReplaceAll(rec.Plan, ".", "-")}
 	if !m.omitBilling {
 		plan["billing"] = rec.Billing
 	}
@@ -322,7 +329,9 @@ func (m *mdbMock) handler(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			if ts := payload.Data.Attributes.TrustedSources; ts != nil {
+			// Like the live API (observed 2026-11-11): a PATCH that also
+			// carries parameters silently drops trusted_sources.
+			if ts := payload.Data.Attributes.TrustedSources; ts != nil && len(payload.Data.Attributes.Parameters) == 0 {
 				rec.TrustedSources = ts
 			}
 			for k, v := range payload.Data.Attributes.Parameters {

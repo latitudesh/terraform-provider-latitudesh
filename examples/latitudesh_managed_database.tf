@@ -7,14 +7,14 @@ resource "latitudesh_server" "app" {
   hostname         = "app-01"
   project          = latitudesh_project.managed_database.id
   plan             = "c3-small-x86"
-  site             = "ASH"
+  site             = "DAL"
   operating_system = "ubuntu_22_04_x64_lts"
 }
 
 resource "latitudesh_managed_database" "example" {
   project = latitudesh_project.managed_database.id
   name    = "app-db"
-  region  = "ASH"
+  region  = "DAL"
   plan    = "db.psql.small" # Changing the plan replaces the database and destroys its data.
   engine  = "postgres"
   billing = "monthly" # Set at create time; it can't be changed later.
