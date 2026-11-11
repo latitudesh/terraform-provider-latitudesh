@@ -99,6 +99,13 @@ func (m *mdbMock) seed(rec mdbRecord) {
 	m.lastID = rec.ID
 }
 
+// set changes the mock's switches under its lock.
+func (m *mdbMock) set(f func(*mdbMock)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	f(m)
+}
+
 func (m *mdbMock) resetLog() {
 	m.mu.Lock()
 	defer m.mu.Unlock()

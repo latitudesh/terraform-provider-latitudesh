@@ -18,7 +18,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
@@ -300,14 +299,6 @@ func (r *ManagedDatabaseResource) Create(ctx context.Context, req resource.Creat
 	}
 	planned := data
 
-	// Applying trusted_sources needs a PATCH after the database is ready; until
-	// that exists, refuse before anything is sent, so no database is ever
-	// created with an allowlist that was never applied.
-	if !data.TrustedSources.IsNull() && !data.TrustedSources.IsUnknown() && len(data.TrustedSources.Elements()) > 0 {
-		resp.Diagnostics.AddAttributeError(path.Root("trusted_sources"), "Not implemented", "trusted_sources isn't implemented yet.")
-		return
-	}
-
 	effectiveProject := ""
 	if !data.Project.IsNull() && !data.Project.IsUnknown() && data.Project.ValueString() != "" {
 		effectiveProject = data.Project.ValueString()
@@ -383,6 +374,27 @@ func (r *ManagedDatabaseResource) Create(ctx context.Context, req resource.Creat
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 		mdbAddCreateWaitError(id, result, &resp.Diagnostics)
 		return
+	}
+
+	// trusted_sources exists only on the update endpoint, so it is applied with
+	// a PATCH once the database is ready. State keeps the API's value until the
+	// PATCH succeeds, so a failure can never read as an applied allowlist.
+	if sources := mdbTrustedSourcesPayload(ctx, planned.TrustedSources, &resp.Diagnostics); len(sources) > 0 {
+		patch := components.ManagedDatabaseUpdatePayloadAttributes{TrustedSources: sources}
+		if err := r.patchManagedDatabase(ctx, id, patch, deadline); err != nil {
+			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+			mdbAddCreatePatchError(id, err, &resp.Diagnostics)
+			return
+		}
+		result = r.waitForManagedDatabaseReady(ctx, id, deadline, mdbWaitOpts{PriorStatus: result.LastStatus})
+		if result.LastStatus != "" {
+			data.Status = types.StringValue(result.LastStatus)
+		}
+		if result.Kind != mdbWaitReady {
+			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+			mdbAddCreateWaitError(id, result, &resp.Diagnostics)
+			return
+		}
 	}
 
 	gone := r.readManagedDatabaseInto(ctx, &data, &planned, postAttrs, &resp.Diagnostics)
@@ -886,8 +898,238 @@ func (r *ManagedDatabaseResource) waitForManagedDatabaseDeleted(ctx context.Cont
 	})
 }
 
+// Update sends trusted_sources and parameters, the only attributes the API can
+// change; every other input forces replacement or is a create-time selector.
+//
+// Update never taints: the framework seeds the response state with the prior
+// state, so on any error the database is tracked as before and the planned
+// values are never saved. Its error texts say so, and never suggest untaint.
 func (r *ManagedDatabaseResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Not implemented", "latitudesh_managed_database update is not implemented yet.")
+	var data, state ManagedDatabaseResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	planned := data
+	id := state.ID.ValueString()
+
+	updateTimeout, diags := data.Timeouts.Update(ctx, 30*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	deadline := time.Now().Add(updateTimeout)
+
+	patch, send := mdbUpdatePatch(ctx, &data, &state, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if send {
+		// Wait for a settled status first, so a PATCH never hits a database
+		// that isn't ready (e.g. after an untaint, or mid-restart). A failed
+		// status counts as settled here: a corrective PATCH must still be
+		// able to reach a database a bad parameter broke.
+		pre := r.waitForManagedDatabaseReady(ctx, id, deadline, mdbWaitOpts{FailedIsSettled: true})
+		if pre.Kind != mdbWaitReady {
+			mdbAddUpdateError(&resp.Diagnostics, id, mdbUpdatePreWait, pre.Kind, pre.LastStatus, pre.Err)
+			return
+		}
+
+		if err := r.patchManagedDatabase(ctx, id, patch, deadline); err != nil {
+			kind := mdbUpdatePatchFailed
+			if mdbPatchRejected(err) {
+				kind = mdbUpdatePatchRejected
+			}
+			mdbAddUpdateError(&resp.Diagnostics, id, kind, mdbWaitError, pre.LastStatus, err)
+			return
+		}
+
+		post := r.waitForManagedDatabaseReady(ctx, id, deadline, mdbWaitOpts{PriorStatus: pre.LastStatus})
+		if post.Kind != mdbWaitReady {
+			mdbAddUpdateError(&resp.Diagnostics, id, mdbUpdatePostWait, post.Kind, post.LastStatus, post.Err)
+			return
+		}
+	}
+
+	// Always finish with a read, even with no PATCH: the framework marks
+	// unconfigured Computed attributes (status) unknown on any diff, and
+	// saving them unknown is an invalid result.
+	gone := r.readManagedDatabaseInto(ctx, &data, &planned, nil, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if gone {
+		mdbAddUpdateError(&resp.Diagnostics, id, mdbUpdatePostWait, mdbWaitGone, "", nil)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// mdbUpdatePatch builds the PATCH from what changed between state and plan.
+// trusted_sources is sent when it is configured and differs. parameters is
+// sent, as the full configured map, when it differs and isn't empty: an
+// empty map can't be sent (it is omitempty, and the API requires at least
+// one attribute), and removing keys can't unset them. send is false when
+// nothing remains to send (e.g. only timeouts changed, billing was adopted,
+// or project was rewritten between a slug and its ID).
+func mdbUpdatePatch(ctx context.Context, plan, state *ManagedDatabaseResourceModel, diags *diag.Diagnostics) (components.ManagedDatabaseUpdatePayloadAttributes, bool) {
+	var patch components.ManagedDatabaseUpdatePayloadAttributes
+	send := false
+
+	if !plan.TrustedSources.IsNull() && !plan.TrustedSources.IsUnknown() && !plan.TrustedSources.Equal(state.TrustedSources) {
+		if sources := mdbTrustedSourcesPayload(ctx, plan.TrustedSources, diags); len(sources) > 0 {
+			patch.TrustedSources = sources
+			send = true
+		}
+	}
+	if !plan.Parameters.Equal(state.Parameters) {
+		if params := mdbParametersPayload(plan.Parameters); len(params) > 0 {
+			patch.Parameters = params
+			send = true
+		}
+	}
+	return patch, send
+}
+
+// patchManagedDatabase sends a PATCH. It is idempotent, so a 429 or 5xx is
+// retried within the deadline with the poller's backoff (honouring
+// Retry-After); every call runs with SDK retries off and under the deadline.
+// A 2xx the SDK didn't expect (it accepts only 200, e.g. a 202 for a rolling
+// restart) counts as accepted.
+func (r *ManagedDatabaseResource) patchManagedDatabase(ctx context.Context, id string, attrs components.ManagedDatabaseUpdatePayloadAttributes, deadline time.Time) error {
+	payload := components.ManagedDatabaseUpdatePayload{
+		Data: &components.ManagedDatabaseUpdatePayloadData{
+			Type:       components.ManagedDatabaseUpdatePayloadTypeManagedDatabases.ToPointer(),
+			Attributes: &attrs,
+		},
+	}
+
+	for {
+		callCtx, cancel := context.WithDeadline(ctx, deadline)
+		_, err := r.client.ManagedDatabases.UpdateManagedDatabase(callCtx, id, payload, operations.WithRetries(mdbNoRetries))
+		cancel()
+		if err == nil {
+			return nil
+		}
+
+		var apiErr *components.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode >= 200 && apiErr.StatusCode < 300 {
+			return nil
+		}
+		retryable := mdbRateLimited(err) || (errors.As(err, &apiErr) && apiErr.StatusCode >= 500 && apiErr.StatusCode < 600)
+		if !retryable || ctx.Err() != nil {
+			return err
+		}
+
+		wait := mdbRetryAfter(err, mdbReadyPollInterval)
+		if !time.Now().Add(wait).Before(deadline) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(wait):
+		}
+	}
+}
+
+// mdbPatchRejected reports whether a PATCH error means the value itself was
+// rejected (400 or 422). Every other error (401, 403, 409, 423, 429, 5xx,
+// timeout) means permissions, not-ready, or a transient failure.
+func mdbPatchRejected(err error) bool {
+	var apiErr *components.APIError
+	return errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusBadRequest || apiErr.StatusCode == http.StatusUnprocessableEntity)
+}
+
+func mdbForbidden(err error) bool {
+	var apiErr *components.APIError
+	return errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden)
+}
+
+// mdbAddCreatePatchError reports a failed allowlist PATCH during Create. The
+// resource is tainted (Create returned an error), and the next step depends on
+// whether the value was rejected.
+func mdbAddCreatePatchError(id string, err error, diags *diag.Diagnostics) {
+	detail := managedDatabaseErrorDetail(err)
+	if mdbPatchRejected(err) {
+		diags.AddError(
+			"trusted_sources rejected by the API",
+			fmt.Sprintf("latitude.sh rejected the allowlist for managed database %s: %s. The database exists and is tracked in state but is tainted. "+
+				"Fix trusted_sources, then run `terraform untaint <address>` and apply. Applying without untainting destroys and recreates the database "+
+				"(or fails, if `prevent_destroy` is set), and the same value will be rejected again.", id, detail),
+		)
+		return
+	}
+	msg := fmt.Sprintf("The allowlist for managed database %s couldn't be applied: %s. %s", id, detail, mdbCreateTaintedDetail)
+	if mdbForbidden(err) {
+		msg += " Fix the token's permissions before re-applying; recreating the database won't help."
+	}
+	diags.AddError("Unable to apply trusted_sources", msg)
+}
+
+type mdbUpdateStage int
+
+const (
+	mdbUpdatePreWait mdbUpdateStage = iota
+	mdbUpdatePatchRejected
+	mdbUpdatePatchFailed
+	mdbUpdatePostWait
+)
+
+// mdbAddUpdateError reports an Update failure. Update never taints, so none
+// of these texts mention untaint.
+func mdbAddUpdateError(diags *diag.Diagnostics, id string, stage mdbUpdateStage, kind mdbWaitKind, status string, err error) {
+	summary, detail := mdbUpdateErrorText(id, stage, kind, status, err)
+	diags.AddError(summary, detail)
+}
+
+func mdbUpdateErrorText(id string, stage mdbUpdateStage, kind mdbWaitKind, status string, err error) (string, string) {
+	errDetail := ""
+	if err != nil {
+		errDetail = managedDatabaseErrorDetail(err)
+	}
+	switch stage {
+	case mdbUpdatePreWait:
+		switch kind {
+		case mdbWaitGone:
+			return fmt.Sprintf("Managed database %s is being deleted", id),
+				fmt.Sprintf("The database reports status %q, so no change was sent. Run `terraform plan` to refresh. If it's gone, the plan recreates it.", status)
+		case mdbWaitTimeout:
+			return fmt.Sprintf("Timeout waiting for managed database %s to be ready", id),
+				fmt.Sprintf("The database didn't report ready in time (last status %q), so no change was sent. Terraform still tracks it as before. Re-apply once the latitude.sh dashboard shows it ready.", status)
+		default:
+			return fmt.Sprintf("Unable to check managed database %s", id),
+				fmt.Sprintf("%s. No change was sent. Terraform still tracks the previous values. Run `terraform plan` to refresh and see the current state.", errDetail)
+		}
+	case mdbUpdatePatchRejected:
+		return fmt.Sprintf("latitude.sh rejected the change to managed database %s", id),
+			fmt.Sprintf("%s. Nothing was applied. Fix the configuration and re-apply.", errDetail)
+	case mdbUpdatePatchFailed:
+		detail := fmt.Sprintf("The change couldn't be sent: %s. Terraform still tracks the database as before; re-applying retries the update.", errDetail)
+		if mdbForbidden(err) {
+			detail += " Fix the token's permissions first."
+		}
+		return fmt.Sprintf("Unable to update managed database %s", id), detail
+	default: // mdbUpdatePostWait
+		switch kind {
+		case mdbWaitFailedStatus:
+			return fmt.Sprintf("Managed database %s failed after the change", id),
+				fmt.Sprintf("The change was sent, but the database now reports status %q. Terraform still tracks the previous values. Run `terraform plan` to see what remains to apply. "+
+					"To recreate the database, run `terraform apply -replace=<address>` (this destroys its data).", status)
+		case mdbWaitTimeout:
+			return fmt.Sprintf("Timeout waiting for managed database %s after the change", id),
+				fmt.Sprintf("The change was sent, but the database didn't report ready in time (last status %q). Terraform still tracks the previous values. Re-apply once the latitude.sh dashboard shows it ready.", status)
+		case mdbWaitGone:
+			return fmt.Sprintf("Managed database %s disappeared after the change", id),
+				"The database is being deleted or is gone. Terraform still tracks the previous values. Run `terraform plan` to refresh and see the current state."
+		default:
+			return fmt.Sprintf("Unable to check managed database %s after the change", id),
+				fmt.Sprintf("%s. Terraform still tracks the previous values. Run `terraform plan` to refresh and see the current state.", errDetail)
+		}
+	}
 }
 
 // --- validators -------------------------------------------------------------

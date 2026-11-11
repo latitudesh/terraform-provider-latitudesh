@@ -427,3 +427,48 @@ func TestManagedDatabaseRetryableDuringPoll(t *testing.T) {
 		t.Error("503 should not be rate-limited")
 	}
 }
+
+func TestMdbUpdateErrorTextNeverClaimsTaint(t *testing.T) {
+	errs := []error{nil, components.NewAPIError("x", 409, "", nil), components.NewAPIError("x", 403, "", nil), components.NewAPIError("x", 422, "", nil)}
+	stages := []mdbUpdateStage{mdbUpdatePreWait, mdbUpdatePatchRejected, mdbUpdatePatchFailed, mdbUpdatePostWait}
+	kinds := []mdbWaitKind{mdbWaitReady, mdbWaitTimeout, mdbWaitFailedStatus, mdbWaitGone, mdbWaitError}
+	for _, stage := range stages {
+		for _, kind := range kinds {
+			for _, err := range errs {
+				summary, detail := mdbUpdateErrorText("mdb_1", stage, kind, "failed", err)
+				text := strings.ToLower(summary + " " + detail)
+				for _, banned := range []string{"untaint", "is tainted", "marked tainted"} {
+					if strings.Contains(text, banned) {
+						t.Errorf("stage %v kind %v: text contains %q: %s", stage, kind, banned, text)
+					}
+				}
+			}
+		}
+	}
+	if _, detail := mdbUpdateErrorText("mdb_1", mdbUpdatePatchFailed, mdbWaitError, "", components.NewAPIError("x", 403, "", nil)); !strings.Contains(detail, "permissions") {
+		t.Errorf("403 detail %q should point at the token's permissions", detail)
+	}
+}
+
+func TestMdbCreatePatchErrorClassification(t *testing.T) {
+	cases := []struct {
+		status  int
+		summary string
+	}{
+		{400, "trusted_sources rejected by the API"},
+		{422, "trusted_sources rejected by the API"},
+		{409, "Unable to apply trusted_sources"},
+		{403, "Unable to apply trusted_sources"},
+		{503, "Unable to apply trusted_sources"},
+	}
+	for _, tc := range cases {
+		var diags diag.Diagnostics
+		mdbAddCreatePatchError("mdb_1", components.NewAPIError("x", tc.status, "", nil), &diags)
+		if got := diags.Errors()[0].Summary(); got != tc.summary {
+			t.Errorf("%d: summary %q, want %q", tc.status, got, tc.summary)
+		}
+		if tc.status == 403 && !strings.Contains(diags.Errors()[0].Detail(), "permissions") {
+			t.Errorf("403 detail should mention permissions")
+		}
+	}
+}

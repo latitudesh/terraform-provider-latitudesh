@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -10,6 +11,18 @@ import (
 )
 
 const mdbResourceName = "latitudesh_managed_database.test"
+
+const mdbAllowlist1 = `  trusted_sources = ["203.0.113.10/32"]
+  parameters = {
+    work_mem = "64MB"
+  }
+`
+
+const mdbAllowlist2 = `  trusted_sources = ["203.0.113.10/32", "198.51.100.0/24"]
+  parameters = {
+    work_mem = "128MB"
+  }
+`
 
 // mdbConfig builds a config for one managed database. providerProject, when
 // non-empty, sets the provider-level default project. body is the resource's
@@ -77,9 +90,10 @@ func TestManagedDatabase_MockLifecycle(t *testing.T) {
 			{
 				// Create. The POST carries no credentials and says
 				// "provisioning"; status and credentials must come from the
-				// final GET.
+				// final GET. trusted_sources is applied by a PATCH once the
+				// database is ready.
 				PreConfig: mock.resetLog,
-				Config:    mdbConfig("", mdbBody("proj_mock_1", "db.psql.small", "ASH", "")),
+				Config:    mdbConfig("", mdbBody("proj_mock_1", "db.psql.small", "ASH", mdbAllowlist1)),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(mdbResourceName, "id", "mdb_mock_1"),
 					resource.TestCheckResourceAttr(mdbResourceName, "status", "running"),
@@ -88,10 +102,38 @@ func TestManagedDatabase_MockLifecycle(t *testing.T) {
 					resource.TestCheckResourceAttr(mdbResourceName, "credentials.password", "mock-secret"),
 					resource.TestCheckResourceAttr(mdbResourceName, "project", "proj_mock_1"),
 					resource.TestCheckResourceAttr(mdbResourceName, "billing", "monthly"),
-					resource.TestCheckNoResourceAttr(mdbResourceName, "trusted_sources.#"),
+					resource.TestCheckResourceAttr(mdbResourceName, "trusted_sources.#", "1"),
+					resource.TestCheckTypeSetElemAttr(mdbResourceName, "trusted_sources.*", "203.0.113.10/32"),
+					resource.TestCheckResourceAttr(mdbResourceName, "parameters.work_mem", "64MB"),
 					mdbCheckLog(mock, func(methods string) error {
-						if !strings.HasPrefix(methods, "POST GET") || strings.Count(methods, "GET") < 2 {
-							return fmt.Errorf("want POST then at least two GETs, got %q", methods)
+						// POST, the readiness GETs, the PATCH, more GETs.
+						i := strings.Index(methods, "PATCH")
+						if !strings.HasPrefix(methods, "POST GET GET") || i < 0 || !strings.Contains(methods[i:], "GET") {
+							return fmt.Errorf("want POST, GETs, PATCH, GETs; got %q", methods)
+						}
+						return nil
+					}),
+				),
+			},
+			{
+				// The server adds parameter keys of its own: no diff.
+				PreConfig: func() {
+					mock.set(func(m *mdbMock) { m.extraParams = map[string]string{"shared_buffers": "128MB"} })
+				},
+				Config:   mdbConfig("", mdbBody("proj_mock_1", "db.psql.small", "ASH", mdbAllowlist1)),
+				PlanOnly: true,
+			},
+			{
+				// trusted_sources and parameters update in place.
+				PreConfig: mock.resetLog,
+				Config:    mdbConfig("", mdbBody("proj_mock_1", "db.psql.small", "ASH", mdbAllowlist2)),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(mdbResourceName, "id", "mdb_mock_1"),
+					resource.TestCheckResourceAttr(mdbResourceName, "trusted_sources.#", "2"),
+					resource.TestCheckResourceAttr(mdbResourceName, "parameters.work_mem", "128MB"),
+					mdbCheckLog(mock, func(methods string) error {
+						if strings.Contains(methods, "POST") || strings.Contains(methods, "DELETE") || strings.Count(methods, "PATCH") != 1 {
+							return fmt.Errorf("want one PATCH and no POST or DELETE, got %q", methods)
 						}
 						return nil
 					}),
@@ -105,7 +147,7 @@ func TestManagedDatabase_MockLifecycle(t *testing.T) {
 			},
 			{
 				PreConfig: mock.resetLog,
-				Config:    mdbConfig("", mdbBody("proj_mock_1", "db.psql.medium", "ASH", "")),
+				Config:    mdbConfig("", mdbBody("proj_mock_1", "db.psql.medium", "ASH", mdbAllowlist2)),
 				Check: resource.ComposeTestCheckFunc(
 					mdbCheckReplaced(mock),
 					resource.TestCheckResourceAttr(mdbResourceName, "plan", "db.psql.medium"),
@@ -113,7 +155,7 @@ func TestManagedDatabase_MockLifecycle(t *testing.T) {
 			},
 			{
 				PreConfig: mock.resetLog,
-				Config:    mdbConfig("", mdbBody("proj_mock_1", "db.psql.medium", "MIA", "")),
+				Config:    mdbConfig("", mdbBody("proj_mock_1", "db.psql.medium", "MIA", mdbAllowlist2)),
 				Check: resource.ComposeTestCheckFunc(
 					mdbCheckReplaced(mock),
 					resource.TestCheckResourceAttr(mdbResourceName, "region", "MIA"),
@@ -159,6 +201,67 @@ func TestManagedDatabase_MockProjectSlugCreate(t *testing.T) {
 						}
 						return fmt.Errorf("no POST carried project_id proj_mock_1: %+v", mock.requests())
 					},
+				),
+			},
+		},
+	})
+}
+
+// A rejected allowlist fails the create and taints the database; once the
+// value is accepted, the next apply replaces it.
+func TestManagedDatabase_MockAllowlistPatchFails(t *testing.T) {
+	mock, server := newMdbMock(t)
+	mock.patchStatus = 422
+	cfg := mdbConfig("", mdbBody("proj_mock_1", "db.psql.small", "ASH", mdbAllowlist1))
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMdbMockDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config:      cfg,
+				ExpectError: regexp.MustCompile(`trusted_sources rejected by the API`),
+			},
+			{
+				PreConfig: func() {
+					mock.set(func(m *mdbMock) { m.patchStatus = 0 })
+					mock.resetLog()
+				},
+				Config: cfg,
+				Check: resource.ComposeTestCheckFunc(
+					mdbCheckReplaced(mock),
+					resource.TestCheckResourceAttr(mdbResourceName, "id", "mdb_mock_2"),
+					resource.TestCheckResourceAttr(mdbResourceName, "trusted_sources.#", "1"),
+				),
+			},
+		},
+	})
+}
+
+// The API returns credentials only on the create response: create still
+// succeeds, a later update doesn't wait for credentials, and the
+// credentials from the create response stay in state.
+func TestManagedDatabase_MockUpdateCredentialsAbsent(t *testing.T) {
+	mock, server := newMdbMock(t)
+	mock.postCreds = true
+	mock.noShowCreds = true
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMdbMockDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: mdbConfig("", mdbBody("proj_mock_1", "db.psql.small", "ASH", mdbAllowlist1)),
+				Check:  resource.TestCheckResourceAttr(mdbResourceName, "credentials.host", "db.mock.internal"),
+			},
+			{
+				Config: mdbConfig("", mdbBody("proj_mock_1", "db.psql.small", "ASH", mdbAllowlist2)),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(mdbResourceName, "trusted_sources.#", "2"),
+					resource.TestCheckResourceAttr(mdbResourceName, "credentials.host", "db.mock.internal"),
+					resource.TestCheckResourceAttr(mdbResourceName, "credentials.password", "mock-secret"),
 				),
 			},
 		},
