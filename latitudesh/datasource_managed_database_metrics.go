@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
@@ -199,7 +200,7 @@ func (d *ManagedDatabaseMetricsDataSource) Read(ctx context.Context, req datasou
 
 	res, err := d.client.ManagedDatabases.ShowManagedDatabaseMetrics(ctx, managedDatabaseID, period, queries, operations.WithRetries(metricsRetryConfig))
 	if err != nil {
-		if managedDatabaseMetricsNotFound(err) {
+		if managedDatabaseNotFound(err) {
 			resp.Diagnostics.AddError("Not Found", fmt.Sprintf("No managed database exists with ID %q", managedDatabaseID))
 			return
 		}
@@ -225,9 +226,24 @@ func (d *ManagedDatabaseMetricsDataSource) Read(ctx context.Context, req datasou
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-// managedDatabaseMetricsNotFound reports whether err is a 404 from the metrics
-// endpoint (e.g. an unknown managed_database_id).
-func managedDatabaseMetricsNotFound(err error) bool {
+// managedDatabaseNotFoundMarkers are the values that mean "gone" on a
+// JSON:API error. JSON:API puts the HTTP status in `status` ("404"), but the
+// live API is known to render not-found in snake_case on other endpoints
+// ("not_found", with "NOT_FOUND" in `code`; see lksNotFoundMarkers), so every
+// spelling counts on either field. Compared lower-cased and trimmed.
+var managedDatabaseNotFoundMarkers = map[string]bool{
+	"404":       true,
+	"not_found": true,
+	"notfound":  true,
+}
+
+// managedDatabaseNotFound reports whether err says a managed database is gone.
+// It backs the metrics data source and every Read, Delete and poller of the
+// latitudesh_managed_database resource. Every ManagedDatabases operation in
+// the pinned SDK returns only *components.APIError on 4xx; the ErrorObject
+// branch is defensive. Only not-found counts: a 403 or 409 is a real error and
+// must never be read as "gone".
+func managedDatabaseNotFound(err error) bool {
 	var apiErr *components.APIError
 	if errors.As(err, &apiErr) {
 		return apiErr.StatusCode == http.StatusNotFound
@@ -236,7 +252,10 @@ func managedDatabaseMetricsNotFound(err error) bool {
 	var errObj *components.ErrorObject
 	if errors.As(err, &errObj) {
 		for _, e := range errObj.Errors {
-			if e.Status != nil && *e.Status == "404" {
+			if e.Status != nil && managedDatabaseNotFoundMarkers[strings.ToLower(strings.TrimSpace(*e.Status))] {
+				return true
+			}
+			if e.Code != nil && managedDatabaseNotFoundMarkers[strings.ToLower(strings.TrimSpace(*e.Code))] {
 				return true
 			}
 		}

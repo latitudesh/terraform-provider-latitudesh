@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -98,7 +99,7 @@ func TestManagedDatabaseMetricsValueEmptyNeverNull(t *testing.T) {
 	}
 }
 
-func TestManagedDatabaseMetricsNotFound(t *testing.T) {
+func TestManagedDatabaseNotFound(t *testing.T) {
 	cases := []struct {
 		name string
 		err  error
@@ -120,6 +121,31 @@ func TestManagedDatabaseMetricsNotFound(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "ErrorObject not_found status",
+			err:  &components.ErrorObject{Errors: []components.Errors{{Status: strPtr("not_found")}}},
+			want: true,
+		},
+		{
+			name: "ErrorObject NOT_FOUND code",
+			err:  &components.ErrorObject{Errors: []components.Errors{{Code: strPtr(" NOT_FOUND ")}}},
+			want: true,
+		},
+		{
+			name: "APIError 403",
+			err:  components.NewAPIError("forbidden", http.StatusForbidden, "", nil),
+			want: false,
+		},
+		{
+			name: "APIError 409",
+			err:  components.NewAPIError("conflict", http.StatusConflict, "", nil),
+			want: false,
+		},
+		{
+			name: "plain error",
+			err:  errors.New("404 not_found"),
+			want: false,
+		},
+		{
 			name: "ErrorObject 422",
 			err:  &components.ErrorObject{Errors: []components.Errors{{Status: strPtr("422")}}},
 			want: false,
@@ -128,8 +154,8 @@ func TestManagedDatabaseMetricsNotFound(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := managedDatabaseMetricsNotFound(tc.err); got != tc.want {
-				t.Errorf("managedDatabaseMetricsNotFound(%v) = %v, want %v", tc.err, got, tc.want)
+			if got := managedDatabaseNotFound(tc.err); got != tc.want {
+				t.Errorf("managedDatabaseNotFound(%v) = %v, want %v", tc.err, got, tc.want)
 			}
 		})
 	}
