@@ -410,3 +410,31 @@ func TestManagedDatabase_MockBillingAdopt(t *testing.T) {
 		},
 	})
 }
+
+// Invalid trusted_sources fail validation before any API call.
+func TestManagedDatabase_Validation(t *testing.T) {
+	mock, server := newMdbMock(t)
+	cases := []struct {
+		sources string
+		want    string
+	}{
+		{`[]`, `cannot\s+be\s+cleared`},
+		{`["203.0.113.10"]`, `Invalid\s+CIDR`},
+		{`["10.0.0.5/24"]`, `Non-canonical\s+CIDR`},
+	}
+	steps := make([]resource.TestStep, 0, len(cases))
+	for _, tc := range cases {
+		steps = append(steps, resource.TestStep{
+			Config:      mdbConfig("", mdbBody("proj_mock_1", "db.psql.small", "ASH", "  trusted_sources = "+tc.sources+"\n")),
+			ExpectError: regexp.MustCompile(tc.want),
+		})
+	}
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		Steps:                    steps,
+	})
+	if n := len(mock.requests()); n != 0 {
+		t.Errorf("validation failures sent %d API requests, want 0", n)
+	}
+}
