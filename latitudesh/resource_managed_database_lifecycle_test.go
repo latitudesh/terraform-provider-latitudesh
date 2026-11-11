@@ -317,6 +317,7 @@ type mdbSequence struct {
 	mu        sync.Mutex
 	responses []mdbResponse
 	calls     int
+	firstAt   time.Time // when the first request arrived
 }
 
 type mdbResponse struct {
@@ -332,6 +333,9 @@ func newMdbSequence(t *testing.T, responses ...mdbResponse) (*mdbSequence, *Mana
 	r := newMdbTestResource(t, func(w http.ResponseWriter, r *http.Request) {
 		seq.mu.Lock()
 		defer seq.mu.Unlock()
+		if seq.calls == 0 {
+			seq.firstAt = time.Now()
+		}
 		i := seq.calls
 		if i >= len(seq.responses) {
 			i = len(seq.responses) - 1
@@ -409,7 +413,7 @@ func TestPatchManagedDatabase(t *testing.T) {
 
 	t.Run("an unexpected 2xx is accepted", func(t *testing.T) {
 		_, r := newMdbSequence(t, mdbResponse{code: 202, body: `{}`})
-		if err := r.patchManagedDatabase(context.Background(), "mdb_1", attrs, time.Now().Add(5*time.Second)); err != nil {
+		if _, err := r.patchManagedDatabase(context.Background(), "mdb_1", attrs, time.Now().Add(5*time.Second)); err != nil {
 			t.Fatalf("err = %v", err)
 		}
 	})
@@ -420,8 +424,12 @@ func TestPatchManagedDatabase(t *testing.T) {
 			mdbResponse{code: 502, body: `{}`},
 			mdbResponse{code: 200, body: `{"data":{"id":"mdb_1","type":"managed_databases","attributes":{"status":"running"}}}`},
 		)
-		if err := r.patchManagedDatabase(context.Background(), "mdb_1", attrs, time.Now().Add(5*time.Second)); err != nil {
+		status, err := r.patchManagedDatabase(context.Background(), "mdb_1", attrs, time.Now().Add(5*time.Second))
+		if err != nil {
 			t.Fatalf("err = %v", err)
+		}
+		if status != "running" {
+			t.Errorf("status = %q, want the PATCH response's %q", status, "running")
 		}
 		if seq.count() != 3 {
 			t.Errorf("PATCH sent %d times, want 3", seq.count())
@@ -433,7 +441,7 @@ func TestPatchManagedDatabase(t *testing.T) {
 			mdbResponse{drop: true},
 			mdbResponse{code: 200, body: `{"data":{"id":"mdb_1","type":"managed_databases","attributes":{"status":"running"}}}`},
 		)
-		if err := r.patchManagedDatabase(context.Background(), "mdb_1", attrs, time.Now().Add(5*time.Second)); err != nil {
+		if _, err := r.patchManagedDatabase(context.Background(), "mdb_1", attrs, time.Now().Add(5*time.Second)); err != nil {
 			t.Fatalf("err = %v", err)
 		}
 		if seq.count() != 2 {
@@ -443,7 +451,7 @@ func TestPatchManagedDatabase(t *testing.T) {
 
 	t.Run("a 422 is not retried", func(t *testing.T) {
 		seq, r := newMdbSequence(t, mdbResponse{code: 422, body: `{"errors":[{"detail":"bad"}]}`})
-		err := r.patchManagedDatabase(context.Background(), "mdb_1", attrs, time.Now().Add(5*time.Second))
+		_, err := r.patchManagedDatabase(context.Background(), "mdb_1", attrs, time.Now().Add(5*time.Second))
 		if err == nil || !mdbPatchRejected(err) {
 			t.Fatalf("err = %v, want a rejected 422", err)
 		}
@@ -471,5 +479,40 @@ func TestWaitForManagedDatabaseReady_NotFoundAfterAStatus(t *testing.T) {
 	got := ready(r, 5*time.Second, mdbWaitOpts{NotFoundIsGone: true})
 	if got.Kind != mdbWaitGone || !got.NotFound || got.LastStatus != "updating" {
 		t.Fatalf("got %+v, want gone, NotFound, last status updating", got)
+	}
+}
+
+// After a PATCH, the first status check waits one interval, so an
+// asynchronous change has time to show as in progress.
+func TestWaitForManagedDatabaseReady_InitialDelay(t *testing.T) {
+	seq, r := newMdbScript(t, mdbScriptStep{status: "running"})
+	start := time.Now()
+	got := ready(r, 5*time.Second, mdbWaitOpts{InitialDelay: 80 * time.Millisecond})
+	if got.Kind != mdbWaitReady {
+		t.Fatalf("kind = %v, want ready", got.Kind)
+	}
+	if first := seq.firstAt.Sub(start); first < 80*time.Millisecond {
+		t.Errorf("first Show after %v, want at least the 80ms initial delay", first)
+	}
+
+	// The delay never runs past the deadline.
+	_, r = newMdbScript(t, mdbScriptStep{status: "provisioning"})
+	start = time.Now()
+	got = ready(r, 50*time.Millisecond, mdbWaitOpts{InitialDelay: 10 * time.Second})
+	if got.Kind != mdbWaitTimeout || time.Since(start) > 2*time.Second {
+		t.Errorf("kind = %v after %v, want a timeout at the deadline", got.Kind, time.Since(start))
+	}
+}
+
+func TestMdbPostPatchDelay(t *testing.T) {
+	for status, want := range map[string]time.Duration{
+		"updating":   0, // the PATCH response already shows the change in progress
+		"Restarting": 0,
+		"running":    mdbReadyPollInterval,
+		"":           mdbReadyPollInterval,
+	} {
+		if got := mdbPostPatchDelay(status); got != want {
+			t.Errorf("mdbPostPatchDelay(%q) = %v, want %v", status, got, want)
+		}
 	}
 }

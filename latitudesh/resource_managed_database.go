@@ -390,12 +390,13 @@ func (r *ManagedDatabaseResource) Create(ctx context.Context, req resource.Creat
 	// a PATCH once the database is ready.
 	if sources := mdbTrustedSourcesPayload(ctx, planned.TrustedSources, &resp.Diagnostics); len(sources) > 0 {
 		patch := components.ManagedDatabaseUpdatePayloadAttributes{TrustedSources: sources}
-		if err := r.patchManagedDatabase(ctx, id, patch, deadline); err != nil {
+		patchStatus, err := r.patchManagedDatabase(ctx, id, patch, deadline)
+		if err != nil {
 			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 			mdbAddCreatePatchError(id, err, &resp.Diagnostics)
 			return
 		}
-		if _, ok := waitReady(mdbWaitOpts{PriorStatus: lastStatus, NotFoundIsGone: true}); !ok {
+		if _, ok := waitReady(mdbWaitOpts{PriorStatus: lastStatus, NotFoundIsGone: true, InitialDelay: mdbPostPatchDelay(patchStatus)}); !ok {
 			return
 		}
 	}
@@ -743,6 +744,10 @@ type mdbWaitOpts struct {
 	// not-yet-readable 404 right after a create. Every wait except Create's
 	// first one sets it.
 	NotFoundIsGone bool
+	// InitialDelay postpones the first status check (bounded by the
+	// deadline). After a PATCH it gives an asynchronous change time to show
+	// as in progress, so the wait can't end on the status from before it.
+	InitialDelay time.Duration
 }
 
 // mdbPoll calls Show until observe returns done, the deadline passes, or an
@@ -848,6 +853,18 @@ func (r *ManagedDatabaseResource) waitForManagedDatabaseReady(ctx context.Contex
 	var onNotFound func() (mdbWaitResult, bool)
 	if opts.NotFoundIsGone {
 		onNotFound = func() (mdbWaitResult, bool) { return mdbWaitResult{Kind: mdbWaitGone, NotFound: true}, true }
+	}
+
+	if opts.InitialDelay > 0 {
+		delay := opts.InitialDelay
+		if remaining := time.Until(deadline); delay > remaining {
+			delay = remaining
+		}
+		select {
+		case <-ctx.Done():
+			return mdbWaitResult{Kind: mdbWaitError, Err: ctx.Err()}
+		case <-time.After(delay):
+		}
 	}
 
 	return r.mdbPoll(ctx, id, deadline, mdbReadyPollInterval, onNotFound, func(attrs *components.ManagedDatabaseAttributesAttributes) (mdbWaitResult, bool) {
@@ -1083,7 +1100,8 @@ func (r *ManagedDatabaseResource) Update(ctx context.Context, req resource.Updat
 			return
 		}
 
-		if err := r.patchManagedDatabase(ctx, id, patch, deadline); err != nil {
+		patchStatus, err := r.patchManagedDatabase(ctx, id, patch, deadline)
+		if err != nil {
 			kind := mdbUpdatePatchFailed
 			if mdbPatchRejected(err) {
 				kind = mdbUpdatePatchRejected
@@ -1092,7 +1110,7 @@ func (r *ManagedDatabaseResource) Update(ctx context.Context, req resource.Updat
 			return
 		}
 
-		post := r.waitForManagedDatabaseReady(ctx, id, deadline, mdbWaitOpts{PriorStatus: pre.LastStatus, NotFoundIsGone: true})
+		post := r.waitForManagedDatabaseReady(ctx, id, deadline, mdbWaitOpts{PriorStatus: pre.LastStatus, NotFoundIsGone: true, InitialDelay: mdbPostPatchDelay(patchStatus)})
 		if post.Kind != mdbWaitReady {
 			mdbAddUpdateWaitError(&resp.Diagnostics, id, mdbUpdatePostWait, post)
 			return
@@ -1164,8 +1182,9 @@ func mdbParametersChanged(state, plan types.Map) bool {
 // (honouring Retry-After); every call runs with SDK retries off and under the
 // deadline.
 // A 2xx the SDK didn't expect (it accepts only 200, e.g. a 202 for a rolling
-// restart) counts as accepted.
-func (r *ManagedDatabaseResource) patchManagedDatabase(ctx context.Context, id string, attrs components.ManagedDatabaseUpdatePayloadAttributes, deadline time.Time) error {
+// restart) counts as accepted. It returns the status the PATCH response
+// reports, or "" when it reports none.
+func (r *ManagedDatabaseResource) patchManagedDatabase(ctx context.Context, id string, attrs components.ManagedDatabaseUpdatePayloadAttributes, deadline time.Time) (string, error) {
 	payload := components.ManagedDatabaseUpdatePayload{
 		Data: &components.ManagedDatabaseUpdatePayloadData{
 			Type:       components.ManagedDatabaseUpdatePayloadTypeManagedDatabases.ToPointer(),
@@ -1175,30 +1194,46 @@ func (r *ManagedDatabaseResource) patchManagedDatabase(ctx context.Context, id s
 
 	for {
 		callCtx, cancel := context.WithDeadline(ctx, deadline)
-		_, err := r.client.ManagedDatabases.UpdateManagedDatabase(callCtx, id, payload, operations.WithRetries(mdbNoRetries))
+		result, err := r.client.ManagedDatabases.UpdateManagedDatabase(callCtx, id, payload, operations.WithRetries(mdbNoRetries))
 		cancel()
 		if err == nil {
-			return nil
+			if result != nil && result.ManagedDatabase != nil && result.ManagedDatabase.Data != nil &&
+				result.ManagedDatabase.Data.Attributes != nil && result.ManagedDatabase.Data.Attributes.Status != nil {
+				return *result.ManagedDatabase.Data.Attributes.Status, nil
+			}
+			return "", nil
 		}
 
 		if mdbUnexpectedSuccess(err) {
-			return nil
+			return "", nil
 		}
 		retryable := mdbRateLimited(err) || mdbServerError(err) || mdbTransportError(err)
 		if !retryable || ctx.Err() != nil {
-			return err
+			return "", err
 		}
 
 		wait := mdbRetryAfter(err, mdbReadyPollInterval)
 		if !time.Now().Add(wait).Before(deadline) {
-			return err
+			return "", err
 		}
 		select {
 		case <-ctx.Done():
-			return err
+			return "", err
 		case <-time.After(wait):
 		}
 	}
+}
+
+// mdbPostPatchDelay is how long to wait before the first status check after
+// a PATCH. Whether the API applies a change synchronously is undocumented: if
+// the PATCH response already reports an in-progress status, polling can start
+// at once; otherwise one poll interval passes first, so the wait can't end on
+// the settled status from before the change.
+func mdbPostPatchDelay(patchStatus string) time.Duration {
+	if mdbStatusIn(patchStatus, mdbInProgressStates) {
+		return 0
+	}
+	return mdbReadyPollInterval
 }
 
 // mdbPatchRejected reports whether a PATCH error means the value itself was
