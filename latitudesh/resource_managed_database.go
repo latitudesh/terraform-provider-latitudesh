@@ -317,7 +317,7 @@ func (r *ManagedDatabaseResource) Create(ctx context.Context, req resource.Creat
 	data.Project = types.StringValue(effectiveProject)
 	planned.Project = data.Project
 
-	projectID, err := r.resolveProjectID(ctx, effectiveProject)
+	projectID, err := resolveProjectID(ctx, r.client, effectiveProject)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to resolve project "+effectiveProject+", got error: "+managedDatabaseErrorDetail(err))
 		return
@@ -561,7 +561,7 @@ func (r *ManagedDatabaseResource) Delete(ctx context.Context, req resource.Delet
 	_, err := r.client.ManagedDatabases.DestroyManagedDatabase(callCtx, id)
 	cancel()
 	if err != nil {
-		if managedDatabaseNotFound(err) {
+		if apiNotFound(err) {
 			return
 		}
 		// The SDK accepts only 204; any other success means the delete was
@@ -608,15 +608,7 @@ func (r *ManagedDatabaseResource) ImportState(ctx context.Context, req resource.
 		Parameters:     types.MapNull(types.StringType),
 		Status:         types.StringNull(),
 		Credentials:    types.ObjectNull(mdbCredentialsAttrTypes),
-		// No timeouts block is set on import, so give the field an explicitly
-		// typed null; the zero value fails state conversion.
-		Timeouts: timeouts.Value{
-			Object: types.ObjectNull(map[string]attr.Type{
-				"create": types.StringType,
-				"update": types.StringType,
-				"delete": types.StringType,
-			}),
-		},
+		Timeouts:       nullCRUDTimeouts(),
 	}
 
 	gone := r.readManagedDatabaseInto(ctx, &data, nil, nil, &resp.Diagnostics)
@@ -674,7 +666,7 @@ func (r *ManagedDatabaseResource) readManagedDatabaseInto(ctx context.Context, d
 
 	result, err := r.client.ManagedDatabases.ShowManagedDatabase(ctx, id)
 	if err != nil {
-		if managedDatabaseNotFound(err) {
+		if apiNotFound(err) {
 			return true
 		}
 		diags.AddError("Unable to read managed database", managedDatabaseErrorDetail(err))
@@ -696,26 +688,6 @@ func (r *ManagedDatabaseResource) readManagedDatabaseInto(ctx context.Context, d
 	}
 	mdbApplyAttributes(ctx, data, planned, obj.Attributes, postResp, diags)
 	return false
-}
-
-// resolveProjectID turns the `project` selector into the ID the create
-// payload's project_id takes. The SDK's doc comment calls it a "Project slug"
-// while its example uses an ID, so this resolves conservatively, as
-// resource_lks_cluster.go does. The configured selector is never rewritten in
-// state.
-func (r *ManagedDatabaseResource) resolveProjectID(ctx context.Context, selector string) (string, error) {
-	if strings.HasPrefix(selector, "proj_") {
-		return selector, nil
-	}
-
-	res, err := r.client.Projects.GetProject(ctx, selector)
-	if err != nil {
-		return "", err
-	}
-	if res == nil || res.Object == nil || res.Object.Data == nil || res.Object.Data.ID == nil || *res.Object.Data.ID == "" {
-		return "", fmt.Errorf("project %q not found", selector)
-	}
-	return *res.Object.Data.ID, nil
 }
 
 // --- pollers ----------------------------------------------------------------
@@ -797,7 +769,7 @@ func (r *ManagedDatabaseResource) mdbPoll(ctx context.Context, id string, deadli
 		case err != nil && !time.Now().Before(deadline):
 			last.Kind = mdbWaitTimeout
 			return last
-		case err != nil && onNotFound != nil && managedDatabaseNotFound(err):
+		case err != nil && onNotFound != nil && apiNotFound(err):
 			if res, done := onNotFound(); done {
 				res.LastStatus = last.LastStatus
 				return res
@@ -1680,7 +1652,7 @@ func managedDatabaseErrorDetail(err error) string {
 // while polling Show: not-found right after create (not yet readable), a 429,
 // or a 5xx. Anything else (403, 409, 422, ...) won't resolve by waiting.
 func managedDatabaseRetryableDuringPoll(err error) bool {
-	return managedDatabaseNotFound(err) || mdbRateLimited(err) || mdbServerError(err)
+	return apiNotFound(err) || mdbRateLimited(err) || mdbServerError(err)
 }
 
 // mdbUnexpectedSuccess reports a 2xx the SDK rejected because it expected a

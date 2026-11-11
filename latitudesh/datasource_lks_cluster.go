@@ -167,7 +167,7 @@ func (d *LksClusterDataSource) Read(ctx context.Context, req datasource.ReadRequ
 
 	result, err := d.client.Lks.GetLksCluster(ctx, id)
 	if err != nil {
-		if lksClusterNotFound(err) {
+		if apiNotFound(err) {
 			resp.Diagnostics.AddError("LKS cluster not found", "No LKS cluster exists with ID \""+id+"\"")
 			return
 		}

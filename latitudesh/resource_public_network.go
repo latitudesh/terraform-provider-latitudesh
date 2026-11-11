@@ -3,9 +3,7 @@ package latitudesh
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
@@ -300,7 +298,7 @@ func (r *PublicNetworkResource) Create(ctx context.Context, req resource.CreateR
 	}
 	data.Project = types.StringValue(effectiveProject)
 
-	projectID, err := r.resolveProjectID(ctx, effectiveProject)
+	projectID, err := resolveProjectID(ctx, r.client, effectiveProject)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to resolve project "+effectiveProject+", got error: "+err.Error())
 		return
@@ -503,28 +501,6 @@ func (r *PublicNetworkResource) readPublicNetworkInto(ctx context.Context, data 
 	if data.Size.IsNull() || data.Size.IsUnknown() {
 		data.Size = computed.Size
 	}
-}
-
-// resolveProjectID turns the `project` selector into the ID the create
-// endpoint requires. Unlike the server endpoints, `project_id` on
-// POST /public_networks does not resolve slugs — a slug yields
-// 404 "Specified Record Not Found" (verified live 2026-09-11) — so slugs are
-// looked up via GET /projects/{id_or_slug}. The configured selector itself is
-// never rewritten in state. The list filter used by the data source does
-// accept slugs, so no resolution is needed there.
-func (r *PublicNetworkResource) resolveProjectID(ctx context.Context, selector string) (string, error) {
-	if strings.HasPrefix(selector, "proj_") {
-		return selector, nil
-	}
-
-	res, err := r.client.Projects.GetProject(ctx, selector)
-	if err != nil {
-		return "", err
-	}
-	if res == nil || res.Object == nil || res.Object.Data == nil || res.Object.Data.ID == nil || *res.Object.Data.ID == "" {
-		return "", fmt.Errorf("project %q not found", selector)
-	}
-	return *res.Object.Data.ID, nil
 }
 
 // publicNetworkNotFound reports whether err is a 404 from the public network

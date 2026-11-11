@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
-	"strings"
 	"time"
 
 	goversion "github.com/hashicorp/go-version"
@@ -503,7 +501,7 @@ func (r *LksClusterResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 	data.Project = types.StringValue(effectiveProject)
 
-	projectID, err := r.resolveProjectID(ctx, effectiveProject)
+	projectID, err := resolveProjectID(ctx, r.client, effectiveProject)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Unable to resolve project "+effectiveProject+", got error: "+err.Error())
 		return
@@ -708,7 +706,7 @@ func (r *LksClusterResource) Delete(ctx context.Context, req resource.DeleteRequ
 
 	_, err := r.client.Lks.DeleteLksCluster(ctx, id)
 	if err != nil {
-		if lksClusterNotFound(err) {
+		if apiNotFound(err) {
 			return
 		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete LKS cluster, got error: "+err.Error())
@@ -728,17 +726,7 @@ func (r *LksClusterResource) ImportState(ctx context.Context, req resource.Impor
 	var data LksClusterResourceModel
 	data.ID = types.StringValue(req.ID)
 
-	// No timeouts block is set on import, so give the field an explicitly
-	// typed null. The zero value of timeouts.Value is a null object with no
-	// attribute types, which fails state conversion ("Object[]" vs
-	// "Object[create:String, update:String, delete:String]").
-	data.Timeouts = timeouts.Value{
-		Object: types.ObjectNull(map[string]attr.Type{
-			"create": types.StringType,
-			"update": types.StringType,
-			"delete": types.StringType,
-		}),
-	}
+	data.Timeouts = nullCRUDTimeouts()
 
 	r.readLksInto(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -949,7 +937,7 @@ func (r *LksClusterResource) waitForClusterDeleted(ctx context.Context, id strin
 	for time.Now().Before(deadline) {
 		result, err := r.client.Lks.GetLksCluster(ctx, id)
 		if err != nil {
-			if lksClusterNotFound(err) {
+			if apiNotFound(err) {
 				return
 			}
 			if !lksRetryableDuringPoll(err) {
@@ -1029,7 +1017,7 @@ func (r *LksClusterResource) readLksInto(ctx context.Context, data *LksClusterRe
 
 	result, err := r.client.Lks.GetLksCluster(ctx, id)
 	if err != nil {
-		if lksClusterNotFound(err) {
+		if apiNotFound(err) {
 			data.ID = types.StringNull()
 			return
 		}
@@ -1083,77 +1071,13 @@ func (r *LksClusterResource) readLksInto(ctx context.Context, data *LksClusterRe
 	data.UpdatedAt = fields.UpdatedAt
 }
 
-// resolveProjectID turns the `project` selector into the ID
-// CreateLksClusterAttributes.ProjectID requires. Its doc comment ("The
-// project ID") does not confirm slug acceptance the way the list request's
-// does ("Project id_hash or slug"), so this resolves conservatively before
-// every create, the same way resource_public_network.go does for its own
-// create endpoint. The configured selector itself is never rewritten in
-// state. The list filter used by the plural data source does document slug
-// support, so no resolution is needed there.
-func (r *LksClusterResource) resolveProjectID(ctx context.Context, selector string) (string, error) {
-	if strings.HasPrefix(selector, "proj_") {
-		return selector, nil
-	}
-
-	res, err := r.client.Projects.GetProject(ctx, selector)
-	if err != nil {
-		return "", err
-	}
-	if res == nil || res.Object == nil || res.Object.Data == nil || res.Object.Data.ID == nil || *res.Object.Data.ID == "" {
-		return "", fmt.Errorf("project %q not found", selector)
-	}
-	return *res.Object.Data.ID, nil
-}
-
-// lksNotFoundMarkers are the values the LKS endpoints use to say "gone".
-//
-// JSON:API specifies `status` as the HTTP status code as a string, and the
-// SDK's own examples use "404" — but the live API renders it in snake_case
-// ("not_found"), with the code alongside it ("NOT_FOUND"). Matching only "404"
-// meant a destroy polled a cluster that was already deleted, got the
-// not-found it was waiting for, and reported it as an unexpected client error
-// (observed live 2026-09-18). Both spellings count, on either field.
-var lksNotFoundMarkers = map[string]bool{
-	"404":       true,
-	"not_found": true,
-	"notfound":  true,
-}
-
-// lksClusterNotFound reports whether err says the object is gone. It backs
-// every LKS Read, Delete and poller, for clusters and node pools alike, so a
-// spelling it fails to recognize turns "already deleted" into a failed apply.
-//
-// Only not-found counts: a 403 or a 409 is a real error and must not be
-// swallowed as "gone".
-func lksClusterNotFound(err error) bool {
-	var apiErr *components.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.StatusCode == http.StatusNotFound
-	}
-
-	var errObj *components.ErrorObject
-	if errors.As(err, &errObj) {
-		for _, e := range errObj.Errors {
-			if e.Status != nil && lksNotFoundMarkers[strings.ToLower(strings.TrimSpace(*e.Status))] {
-				return true
-			}
-			if e.Code != nil && lksNotFoundMarkers[strings.ToLower(strings.TrimSpace(*e.Code))] {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
 // lksRetryableDuringPoll reports whether err is worth retrying while polling
 // GetLksCluster: a 404 right after create/delete (not yet queryable, or
 // already gone) or a 5xx (transient). Any other status (403, 409, 422, ...)
 // will not resolve by waiting, so the caller fails immediately instead of
 // burning the full timeout budget.
 func lksRetryableDuringPoll(err error) bool {
-	if lksClusterNotFound(err) {
+	if apiNotFound(err) {
 		return true
 	}
 
@@ -1163,7 +1087,7 @@ func lksRetryableDuringPoll(err error) bool {
 	}
 
 	// Only the numeric spelling is handled here. The live API is known to use
-	// snake_case for not-found (see lksNotFoundMarkers); whether it does the
+	// snake_case for not-found (see apiNotFoundMarkers); whether it does the
 	// same for 5xx has not been observed, and inventing a list of names for a
 	// shape nobody has seen is how the wrong thing gets shipped confidently.
 	// The cost of missing one is a poll that fails fast instead of retrying,

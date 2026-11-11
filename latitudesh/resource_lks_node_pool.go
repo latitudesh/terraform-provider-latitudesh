@@ -912,7 +912,7 @@ func (r *LksNodePoolResource) Delete(ctx context.Context, req resource.DeleteReq
 
 	_, err := r.client.Lks.DeleteLksNodePool(ctx, clusterID, id)
 	if err != nil {
-		if lksClusterNotFound(err) {
+		if apiNotFound(err) {
 			return
 		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete LKS node pool, got error: "+err.Error())
@@ -945,15 +945,7 @@ func (r *LksNodePoolResource) ImportState(ctx context.Context, req resource.Impo
 	data.ID = types.StringValue(id)
 	data.ClusterID = types.StringValue(clusterID)
 
-	// No timeouts block is set on import, so give the field an explicitly typed
-	// null (see latitudesh_lks_cluster's ImportState for why the zero value fails).
-	data.Timeouts = timeouts.Value{
-		Object: types.ObjectNull(map[string]attr.Type{
-			"create": types.StringType,
-			"update": types.StringType,
-			"delete": types.StringType,
-		}),
-	}
+	data.Timeouts = nullCRUDTimeouts()
 
 	r.readNodePoolInto(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -981,7 +973,7 @@ func (r *LksNodePoolResource) readNodePoolInto(ctx context.Context, data *LksNod
 
 	result, err := r.client.Lks.GetLksNodePool(ctx, clusterID, id)
 	if err != nil {
-		if lksClusterNotFound(err) {
+		if apiNotFound(err) {
 			data.ID = types.StringNull()
 			return
 		}
@@ -1204,7 +1196,7 @@ func lksWaitForNodePoolDeleted(ctx context.Context, client *latitudeshgosdk.Lati
 	for time.Now().Before(deadline) {
 		_, err := client.Lks.GetLksNodePool(ctx, clusterID, id)
 		if err != nil {
-			if lksClusterNotFound(err) {
+			if apiNotFound(err) {
 				return
 			}
 			if !lksRetryableDuringPoll(err) {

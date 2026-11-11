@@ -288,7 +288,7 @@ func testAccCheckLksDestroy(s *terraform.State) error {
 		if err == nil {
 			return fmt.Errorf("LKS cluster still exists: %s", id)
 		}
-		if !lksClusterNotFound(err) {
+		if !apiNotFound(err) {
 			return fmt.Errorf("unexpected error checking LKS cluster %s destroyed: %w", id, err)
 		}
 	}

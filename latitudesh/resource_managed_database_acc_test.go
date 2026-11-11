@@ -75,7 +75,7 @@ func testAccCheckManagedDatabaseDestroy(s *terraform.State) error {
 		}
 		res, err := client.ManagedDatabases.ShowManagedDatabase(context.Background(), rs.Primary.ID)
 		if err != nil {
-			if managedDatabaseNotFound(err) {
+			if apiNotFound(err) {
 				continue
 			}
 			return fmt.Errorf("checking managed database %s: %s", rs.Primary.ID, managedDatabaseErrorDetail(err))

@@ -2,12 +2,9 @@ package latitudesh
 
 import (
 	"context"
-	"errors"
-	"net/http"
 	"testing"
 	"time"
 
-	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 )
 
@@ -96,67 +93,5 @@ func TestManagedDatabaseMetricsValueEmptyNeverNull(t *testing.T) {
 	}
 	if n := len(got.Elements()); n != 0 {
 		t.Fatalf("managedDatabaseMetricsValue(nil) length = %d, want 0", n)
-	}
-}
-
-func TestManagedDatabaseNotFound(t *testing.T) {
-	cases := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{
-			name: "APIError 404",
-			err:  components.NewAPIError("not found", http.StatusNotFound, "", nil),
-			want: true,
-		},
-		{
-			name: "APIError 500",
-			err:  components.NewAPIError("boom", http.StatusInternalServerError, "", nil),
-			want: false,
-		},
-		{
-			name: "ErrorObject 404",
-			err:  &components.ErrorObject{Errors: []components.Errors{{Status: strPtr("404")}}},
-			want: true,
-		},
-		{
-			name: "ErrorObject not_found status",
-			err:  &components.ErrorObject{Errors: []components.Errors{{Status: strPtr("not_found")}}},
-			want: true,
-		},
-		{
-			name: "ErrorObject NOT_FOUND code",
-			err:  &components.ErrorObject{Errors: []components.Errors{{Code: strPtr(" NOT_FOUND ")}}},
-			want: true,
-		},
-		{
-			name: "APIError 403",
-			err:  components.NewAPIError("forbidden", http.StatusForbidden, "", nil),
-			want: false,
-		},
-		{
-			name: "APIError 409",
-			err:  components.NewAPIError("conflict", http.StatusConflict, "", nil),
-			want: false,
-		},
-		{
-			name: "plain error",
-			err:  errors.New("404 not_found"),
-			want: false,
-		},
-		{
-			name: "ErrorObject 422",
-			err:  &components.ErrorObject{Errors: []components.Errors{{Status: strPtr("422")}}},
-			want: false,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := managedDatabaseNotFound(tc.err); got != tc.want {
-				t.Errorf("managedDatabaseNotFound(%v) = %v, want %v", tc.err, got, tc.want)
-			}
-		})
 	}
 }
