@@ -301,10 +301,8 @@ func (r *ManagedDatabaseResource) Create(ctx context.Context, req resource.Creat
 	}
 	planned := data
 
-	effectiveProject := ""
-	if !data.Project.IsNull() && !data.Project.IsUnknown() && data.Project.ValueString() != "" {
-		effectiveProject = data.Project.ValueString()
-	} else if r.defaultProject != "" {
+	effectiveProject := data.Project.ValueString() // "" when null or unknown
+	if effectiveProject == "" {
 		effectiveProject = r.defaultProject
 	}
 	if effectiveProject == "" {
@@ -367,14 +365,24 @@ func (r *ManagedDatabaseResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	credentialsSeen := postAttrs != nil && mdbCredentialsHost(postAttrs.Credentials) != ""
-	result := r.waitForManagedDatabaseReady(ctx, id, deadline, mdbWaitOpts{RequireCredentials: true, CredentialsSeen: credentialsSeen})
-	if result.LastStatus != "" {
-		data.Status = types.StringValue(result.LastStatus)
+	// waitReady records the last polled status and, if the wait fails, saves
+	// state and reports the error.
+	waitReady := func(opts mdbWaitOpts) (lastStatus string, ok bool) {
+		result := r.waitForManagedDatabaseReady(ctx, id, deadline, opts)
+		if result.LastStatus != "" {
+			data.Status = types.StringValue(result.LastStatus)
+		}
+		if result.Kind != mdbWaitReady {
+			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+			mdbAddCreateWaitError(id, result, &resp.Diagnostics)
+			return result.LastStatus, false
+		}
+		return result.LastStatus, true
 	}
-	if result.Kind != mdbWaitReady {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-		mdbAddCreateWaitError(id, result, &resp.Diagnostics)
+
+	credentialsSeen := postAttrs != nil && mdbCredentialsHost(postAttrs.Credentials) != ""
+	lastStatus, ok := waitReady(mdbWaitOpts{RequireCredentials: true, CredentialsSeen: credentialsSeen})
+	if !ok {
 		return
 	}
 
@@ -388,27 +396,20 @@ func (r *ManagedDatabaseResource) Create(ctx context.Context, req resource.Creat
 			mdbAddCreatePatchError(id, err, &resp.Diagnostics)
 			return
 		}
-		result = r.waitForManagedDatabaseReady(ctx, id, deadline, mdbWaitOpts{PriorStatus: result.LastStatus})
-		if result.LastStatus != "" {
-			data.Status = types.StringValue(result.LastStatus)
-		}
-		if result.Kind != mdbWaitReady {
-			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-			mdbAddCreateWaitError(id, result, &resp.Diagnostics)
+		if _, ok := waitReady(mdbWaitOpts{PriorStatus: lastStatus, NotFoundIsGone: true}); !ok {
 			return
 		}
 	}
 
+	// readManagedDatabaseInto leaves data untouched when it fails, so state
+	// is saved on every path: on failure it still holds the last polled
+	// status.
 	gone := r.readManagedDatabaseInto(ctx, &data, &planned, postAttrs, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	if gone {
-		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Managed database %q disappeared right after it became ready.", id))
-		return
-	}
-
+	readFailed := resp.Diagnostics.HasError()
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	if gone && !readFailed {
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Managed database %q disappeared right after it became ready.", id))
+	}
 }
 
 // createManagedDatabase sends the POST with SDK retries off and returns the
@@ -549,27 +550,31 @@ func (r *ManagedDatabaseResource) Delete(ctx context.Context, req resource.Delet
 	}
 	priorStatus := data.Status.ValueString()
 
-	_, err := r.client.ManagedDatabases.DestroyManagedDatabase(ctx, id)
-	if err != nil {
-		if managedDatabaseNotFound(err) {
-			return
-		}
-		var apiErr *components.APIError
-		// The SDK accepts only 204; any other success means the delete was
-		// accepted (e.g. an async 202).
-		if !errors.As(err, &apiErr) || apiErr.StatusCode < 200 || apiErr.StatusCode >= 300 {
-			resp.Diagnostics.AddError("Unable to delete managed database", managedDatabaseErrorDetail(err))
-			return
-		}
-	}
-
 	deleteTimeout, diags := data.Timeouts.Delete(ctx, 30*time.Minute)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	deadline := time.Now().Add(deleteTimeout)
 
-	result := r.waitForManagedDatabaseDeleted(ctx, id, time.Now().Add(deleteTimeout), priorStatus)
+	// The SDK's own retries stay on for the DELETE (a 5xx shouldn't fail a
+	// destroy outright), but bounded by the delete deadline.
+	callCtx, cancel := context.WithDeadline(ctx, deadline)
+	_, err := r.client.ManagedDatabases.DestroyManagedDatabase(callCtx, id)
+	cancel()
+	if err != nil {
+		if managedDatabaseNotFound(err) {
+			return
+		}
+		// The SDK accepts only 204; any other success means the delete was
+		// accepted (e.g. an async 202).
+		if !mdbUnexpectedSuccess(err) {
+			resp.Diagnostics.AddError("Unable to delete managed database", managedDatabaseErrorDetail(err))
+			return
+		}
+	}
+
+	result := r.waitForManagedDatabaseDeleted(ctx, id, deadline, priorStatus)
 	const stateRm = "Confirm in the latitude.sh dashboard that the database is gone, then run `terraform state rm <address>`."
 	switch result.Kind {
 	case mdbWaitReady:
@@ -660,8 +665,8 @@ func mdbImportWarning(data *ManagedDatabaseResourceModel) string {
 }
 
 // readManagedDatabaseInto calls Show and maps the result onto data with
-// mdbApplyAttributes. gone is true when the database no longer exists (a 404,
-// or status "deleted"); the caller decides what that means.
+// mdbApplyAttributes. gone is true only when the database no longer exists (a
+// 404, or status "deleted"); the caller decides what that means.
 func (r *ManagedDatabaseResource) readManagedDatabaseInto(ctx context.Context, data, planned *ManagedDatabaseResourceModel, postResp *components.ManagedDatabaseAttributesAttributes, diags *diag.Diagnostics) (gone bool) {
 	id := data.ID.ValueString()
 	if id == "" {
@@ -678,7 +683,11 @@ func (r *ManagedDatabaseResource) readManagedDatabaseInto(ctx context.Context, d
 		return false
 	}
 	if result == nil || result.ManagedDatabase == nil || result.ManagedDatabase.Data == nil {
-		return true
+		// Only a 404 or status "deleted" means gone: treating an empty
+		// response as gone would drop the database from state and let the
+		// next apply create a second one.
+		diags.AddError("Unable to read managed database", fmt.Sprintf("latitude.sh returned no data for managed database %q.", id))
+		return false
 	}
 
 	obj := result.ManagedDatabase.Data
@@ -749,13 +758,18 @@ type mdbWaitOpts struct {
 	// PriorStatus is the status before the operation. A failed status that was
 	// already there keeps the wait polling instead of failing fast.
 	PriorStatus string
+	// NotFoundIsGone treats a 404 as "gone" rather than as the transient
+	// not-yet-readable 404 right after a create. Every wait except Create's
+	// sets it.
+	NotFoundIsGone bool
 }
 
 // mdbPoll calls Show until observe returns done, the deadline passes, or an
 // error ends the wait. Each call runs with SDK retries off and under the
-// deadline, so the SDK's own retry can't push a wait past it. Not-found and
-// 5xx are retried within mdbErrorBudget of consecutive errors; a 429 is
-// retried without counting against it, honouring Retry-After.
+// deadline, so the SDK's own retry can't push a wait past it. Not-found, 5xx
+// and transport errors (a dropped connection) are retried within
+// mdbErrorBudget of consecutive errors; a 429 is retried without counting
+// against it, honouring Retry-After.
 func (r *ManagedDatabaseResource) mdbPoll(ctx context.Context, id string, deadline time.Time, interval time.Duration, onNotFound func() (mdbWaitResult, bool), observe func(*components.ManagedDatabaseAttributesAttributes) (mdbWaitResult, bool)) mdbWaitResult {
 	var last mdbWaitResult
 	var errorsSince time.Time
@@ -780,8 +794,10 @@ func (r *ManagedDatabaseResource) mdbPoll(ctx context.Context, id string, deadli
 				return res
 			}
 		case err != nil && mdbRateLimited(err):
+			// A 429 isn't an error toward the budget: it restarts it.
+			errorsSince = time.Time{}
 			wait = mdbRetryAfter(err, interval)
-		case err != nil && managedDatabaseRetryableDuringPoll(err):
+		case err != nil && (managedDatabaseRetryableDuringPoll(err) || mdbTransportError(err)):
 			if errorsSince.IsZero() {
 				errorsSince = time.Now()
 			} else if time.Since(errorsSince) > mdbErrorBudget {
@@ -848,8 +864,12 @@ func mdbRetryAfter(err error, fallback time.Duration) time.Duration {
 func (r *ManagedDatabaseResource) waitForManagedDatabaseReady(ctx context.Context, id string, deadline time.Time, opts mdbWaitOpts) mdbWaitResult {
 	credentialsSeen := opts.CredentialsSeen
 	priorFailed := mdbStatusIn(opts.PriorStatus, mdbFailedStates)
+	var onNotFound func() (mdbWaitResult, bool)
+	if opts.NotFoundIsGone {
+		onNotFound = func() (mdbWaitResult, bool) { return mdbWaitResult{Kind: mdbWaitGone}, true }
+	}
 
-	return r.mdbPoll(ctx, id, deadline, mdbReadyPollInterval, nil, func(attrs *components.ManagedDatabaseAttributesAttributes) (mdbWaitResult, bool) {
+	return r.mdbPoll(ctx, id, deadline, mdbReadyPollInterval, onNotFound, func(attrs *components.ManagedDatabaseAttributesAttributes) (mdbWaitResult, bool) {
 		if attrs == nil || attrs.Status == nil || strings.TrimSpace(*attrs.Status) == "" {
 			return mdbWaitResult{}, false
 		}
@@ -1076,7 +1096,7 @@ func (r *ManagedDatabaseResource) Update(ctx context.Context, req resource.Updat
 		// that isn't ready (e.g. after an untaint, or mid-restart). A failed
 		// status counts as settled here: a corrective PATCH must still be
 		// able to reach a database a bad parameter broke.
-		pre := r.waitForManagedDatabaseReady(ctx, id, deadline, mdbWaitOpts{FailedIsSettled: true})
+		pre := r.waitForManagedDatabaseReady(ctx, id, deadline, mdbWaitOpts{FailedIsSettled: true, NotFoundIsGone: true})
 		if pre.Kind != mdbWaitReady {
 			mdbAddUpdateError(&resp.Diagnostics, id, mdbUpdatePreWait, pre.Kind, pre.LastStatus, pre.Err)
 			return
@@ -1091,7 +1111,7 @@ func (r *ManagedDatabaseResource) Update(ctx context.Context, req resource.Updat
 			return
 		}
 
-		post := r.waitForManagedDatabaseReady(ctx, id, deadline, mdbWaitOpts{PriorStatus: pre.LastStatus})
+		post := r.waitForManagedDatabaseReady(ctx, id, deadline, mdbWaitOpts{PriorStatus: pre.LastStatus, NotFoundIsGone: true})
 		if post.Kind != mdbWaitReady {
 			mdbAddUpdateError(&resp.Diagnostics, id, mdbUpdatePostWait, post.Kind, post.LastStatus, post.Err)
 			return
@@ -1117,9 +1137,10 @@ func (r *ManagedDatabaseResource) Update(ctx context.Context, req resource.Updat
 // trusted_sources is sent when it is configured and differs. parameters is
 // sent, as the full configured map, when it differs and isn't empty: an
 // empty map can't be sent (it is omitempty, and the API requires at least
-// one attribute), and removing keys can't unset them. send is false when
-// nothing remains to send (e.g. only timeouts changed, billing was adopted,
-// or project was rewritten between a slug and its ID).
+// one attribute), and removing keys can't unset them, so a plan that only
+// removes keys sends nothing (a PATCH would restart the database for no
+// change). send is false when nothing remains to send (e.g. only timeouts
+// changed, or billing was adopted).
 func mdbUpdatePatch(ctx context.Context, plan, state *ManagedDatabaseResourceModel, diags *diag.Diagnostics) (components.ManagedDatabaseUpdatePayloadAttributes, bool) {
 	var patch components.ManagedDatabaseUpdatePayloadAttributes
 	send := false
@@ -1130,13 +1151,32 @@ func mdbUpdatePatch(ctx context.Context, plan, state *ManagedDatabaseResourceMod
 			send = true
 		}
 	}
-	if !plan.Parameters.Equal(state.Parameters) {
+	if mdbParametersChanged(state.Parameters, plan.Parameters) {
 		if params := mdbParametersPayload(plan.Parameters); len(params) > 0 {
 			patch.Parameters = params
 			send = true
 		}
 	}
 	return patch, send
+}
+
+// mdbParametersChanged reports whether the plan sets a key that state doesn't
+// have, or sets a different value. Removed keys don't count: they can't be
+// unset.
+func mdbParametersChanged(state, plan types.Map) bool {
+	if plan.IsNull() || plan.IsUnknown() {
+		return false
+	}
+	prior := map[string]attr.Value{}
+	if !state.IsNull() && !state.IsUnknown() {
+		prior = state.Elements()
+	}
+	for k, v := range plan.Elements() {
+		if old, ok := prior[k]; !ok || !old.Equal(v) {
+			return true
+		}
+	}
+	return false
 }
 
 // patchManagedDatabase sends a PATCH. It is idempotent, so a 429 or 5xx is
@@ -1160,11 +1200,10 @@ func (r *ManagedDatabaseResource) patchManagedDatabase(ctx context.Context, id s
 			return nil
 		}
 
-		var apiErr *components.APIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode >= 200 && apiErr.StatusCode < 300 {
+		if mdbUnexpectedSuccess(err) {
 			return nil
 		}
-		retryable := mdbRateLimited(err) || (errors.As(err, &apiErr) && apiErr.StatusCode >= 500 && apiErr.StatusCode < 600)
+		retryable := mdbRateLimited(err) || mdbServerError(err)
 		if !retryable || ctx.Err() != nil {
 			return err
 		}
@@ -1397,12 +1436,16 @@ func mdbApplyAttributes(ctx context.Context, data, planned *ManagedDatabaseResou
 	if attrs.Project != nil {
 		projectID = attrs.Project.ID
 	}
-	data.Name = mdbSelector(data.Name, plannedString(planned, func(m *ManagedDatabaseResourceModel) types.String { return m.Name }), attrs.Name, afterApply)
-	data.Engine = mdbSelector(data.Engine, plannedString(planned, func(m *ManagedDatabaseResourceModel) types.String { return m.Engine }), attrs.Engine, afterApply)
-	data.Plan = mdbSelector(data.Plan, plannedString(planned, func(m *ManagedDatabaseResourceModel) types.String { return m.Plan }), planSlug, afterApply)
-	data.Region = mdbSelector(data.Region, plannedString(planned, func(m *ManagedDatabaseResourceModel) types.String { return m.Region }), regionSlug, afterApply)
-	data.Project = mdbSelector(data.Project, plannedString(planned, func(m *ManagedDatabaseResourceModel) types.String { return m.Project }), projectID, afterApply)
-	data.Billing = mdbSelector(data.Billing, plannedString(planned, func(m *ManagedDatabaseResourceModel) types.String { return m.Billing }), billing, afterApply)
+	var p ManagedDatabaseResourceModel // zero in refresh mode, where mdbSelector ignores it
+	if afterApply {
+		p = *planned
+	}
+	data.Name = mdbSelector(data.Name, p.Name, attrs.Name, afterApply)
+	data.Engine = mdbSelector(data.Engine, p.Engine, attrs.Engine, afterApply)
+	data.Plan = mdbSelector(data.Plan, p.Plan, planSlug, afterApply)
+	data.Region = mdbSelector(data.Region, p.Region, regionSlug, afterApply)
+	data.Project = mdbSelector(data.Project, p.Project, projectID, afterApply)
+	data.Billing = mdbSelector(data.Billing, p.Billing, billing, afterApply)
 
 	// trusted_sources.
 	if afterApply && !planned.TrustedSources.IsUnknown() {
@@ -1433,13 +1476,6 @@ func mdbApplyAttributes(ctx context.Context, data, planned *ManagedDatabaseResou
 		plannedCreds = &planned.Credentials
 	}
 	data.Credentials = mdbCredentials(data.Credentials, plannedCreds, attrs.Credentials, postResp, diags)
-}
-
-func plannedString(planned *ManagedDatabaseResourceModel, get func(*ManagedDatabaseResourceModel) types.String) types.String {
-	if planned == nil {
-		return types.StringUnknown()
-	}
-	return get(planned)
 }
 
 // mdbSelector applies the selector rule. After an apply, a value known in the
@@ -1596,8 +1632,7 @@ func mdbParametersPayload(params types.Map) map[string]any {
 	return out
 }
 
-// mdbTrustedSourcesPayload returns the configured CIDRs, sorted by the set's
-// own ordering, or nil when unset.
+// mdbTrustedSourcesPayload returns the configured CIDRs, or nil when unset.
 func mdbTrustedSourcesPayload(ctx context.Context, set types.Set, diags *diag.Diagnostics) []string {
 	if set.IsNull() || set.IsUnknown() {
 		return nil
@@ -1630,14 +1665,27 @@ func managedDatabaseErrorDetail(err error) string {
 // while polling Show: not-found right after create (not yet readable), a 429,
 // or a 5xx. Anything else (403, 409, 422, ...) won't resolve by waiting.
 func managedDatabaseRetryableDuringPoll(err error) bool {
-	if managedDatabaseNotFound(err) || mdbRateLimited(err) {
-		return true
-	}
+	return managedDatabaseNotFound(err) || mdbRateLimited(err) || mdbServerError(err)
+}
+
+// mdbUnexpectedSuccess reports a 2xx the SDK rejected because it expected a
+// different success code.
+func mdbUnexpectedSuccess(err error) bool {
 	var apiErr *components.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.StatusCode >= 500 && apiErr.StatusCode < 600
-	}
-	return false
+	return errors.As(err, &apiErr) && apiErr.StatusCode >= 200 && apiErr.StatusCode < 300
+}
+
+func mdbServerError(err error) bool {
+	var apiErr *components.APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode >= 500 && apiErr.StatusCode < 600
+}
+
+// mdbTransportError reports whether err is a failure to reach the API at all
+// (a dropped connection, a DNS error), as opposed to an API answer.
+func mdbTransportError(err error) bool {
+	var apiErr *components.APIError
+	var errObj *components.ErrorObject
+	return err != nil && !errors.As(err, &apiErr) && !errors.As(err, &errObj) && !errors.Is(err, context.Canceled)
 }
 
 // mdbRateLimited reports whether err is a 429. Pollers retry it without

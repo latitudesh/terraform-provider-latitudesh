@@ -580,3 +580,45 @@ func TestMdbModifyPlan(t *testing.T) {
 		t.Errorf("removed = %v, want nil", got)
 	}
 }
+
+func TestMdbUpdatePatch(t *testing.T) {
+	ctx := context.Background()
+	params := func(kv ...string) types.Map {
+		m := map[string]attr.Value{}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i]] = types.StringValue(kv[i+1])
+		}
+		return types.MapValueMust(types.StringType, m)
+	}
+	cases := []struct {
+		name       string
+		state      types.Map
+		plan       types.Map
+		wantSend   bool
+		wantParams map[string]any
+	}{
+		{"removing a key sends nothing", params("a", "1", "b", "2"), params("a", "1"), false, nil},
+		{"changing a value sends the full map", params("a", "1", "b", "2"), params("a", "1", "b", "3"), true, map[string]any{"a": "1", "b": "3"}},
+		{"adding a key sends the full map", params("a", "1"), params("a", "1", "c", "4"), true, map[string]any{"a": "1", "c": "4"}},
+		{"unchanged sends nothing", params("a", "1"), params("a", "1"), false, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var diags diag.Diagnostics
+			state, plan := mdbTestModel(), mdbTestModel()
+			state.Parameters, plan.Parameters = tc.state, tc.plan
+			patch, send := mdbUpdatePatch(ctx, &plan, &state, &diags)
+			if send != tc.wantSend {
+				t.Fatalf("send = %v, want %v", send, tc.wantSend)
+			}
+			if tc.wantParams != nil && len(patch.Parameters) != len(tc.wantParams) {
+				t.Errorf("parameters = %v, want %v", patch.Parameters, tc.wantParams)
+			}
+			for k, v := range tc.wantParams {
+				if patch.Parameters[k] != v {
+					t.Errorf("parameters[%s] = %v, want %v", k, patch.Parameters[k], v)
+				}
+			}
+		})
+	}
+}

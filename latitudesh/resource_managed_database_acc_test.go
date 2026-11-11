@@ -78,7 +78,7 @@ func testAccCheckManagedDatabaseDestroy(s *terraform.State) error {
 			if managedDatabaseNotFound(err) {
 				continue
 			}
-			return fmt.Errorf("checking managed database %s: %w", rs.Primary.ID, err)
+			return fmt.Errorf("checking managed database %s: %s", rs.Primary.ID, managedDatabaseErrorDetail(err))
 		}
 		if res != nil && res.ManagedDatabase != nil && res.ManagedDatabase.Data != nil && res.ManagedDatabase.Data.Attributes != nil {
 			if st := res.ManagedDatabase.Data.Attributes.Status; st != nil && mdbStatusIn(*st, mdbDeleteTerminalStates) {
