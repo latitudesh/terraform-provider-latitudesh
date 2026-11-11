@@ -355,11 +355,9 @@ func (r *ManagedDatabaseResource) Create(ctx context.Context, req resource.Creat
 	}
 
 	// Persist what the POST told us before the long wait, so the database is
-	// tracked even if the wait fails. Every value still unknown is set from
-	// the response or to a typed null: an apply that fails afterwards would
-	// otherwise save unknowns. trusted_sources takes the response's value,
-	// never the planned set, so state can't claim an allowlist that was never
-	// applied.
+	// tracked even if the wait fails, and a failed apply never saves unknowns.
+	// trusted_sources takes the response's value, never the planned set, so
+	// state can't claim an allowlist that was never applied.
 	data.ID = types.StringValue(id)
 	mdbApplyCreateResponse(ctx, &data, postAttrs, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -389,8 +387,7 @@ func (r *ManagedDatabaseResource) Create(ctx context.Context, req resource.Creat
 	}
 
 	// trusted_sources exists only on the update endpoint, so it is applied with
-	// a PATCH once the database is ready. State keeps the API's value until the
-	// PATCH succeeds, so a failure can never read as an applied allowlist.
+	// a PATCH once the database is ready.
 	if sources := mdbTrustedSourcesPayload(ctx, planned.TrustedSources, &resp.Diagnostics); len(sources) > 0 {
 		patch := components.ManagedDatabaseUpdatePayloadAttributes{TrustedSources: sources}
 		if err := r.patchManagedDatabase(ctx, id, patch, deadline); err != nil {
@@ -684,8 +681,7 @@ func (r *ManagedDatabaseResource) readManagedDatabaseInto(ctx context.Context, d
 		return false
 	}
 	if result == nil || result.ManagedDatabase == nil || result.ManagedDatabase.Data == nil {
-		// Only a 404 or status "deleted" means gone: treating an empty
-		// response as gone would drop the database from state and let the
+		// Not "gone": that would drop the database from state and let the
 		// next apply create a second one.
 		diags.AddError("Unable to read managed database", fmt.Sprintf("latitude.sh returned no data for managed database %q.", id))
 		return false
@@ -1148,12 +1144,11 @@ func (r *ManagedDatabaseResource) Update(ctx context.Context, req resource.Updat
 
 // mdbUpdatePatch builds the PATCH from what changed between state and plan.
 // trusted_sources is sent when it is configured and differs. parameters is
-// sent, as the full configured map, when it differs and isn't empty: an
-// empty map can't be sent (it is omitempty, and the API requires at least
-// one attribute), and removing keys can't unset them, so a plan that only
-// removes keys sends nothing (a PATCH would restart the database for no
-// change). send is false when nothing remains to send (e.g. only timeouts
-// changed, or billing was adopted).
+// sent, as the full configured map, when mdbParametersChanged and the map
+// isn't empty (it is omitempty, and the API requires at least one
+// attribute). A plan that only removes keys sends nothing, since that PATCH
+// would restart the database for no change. send is false when nothing
+// remains to send (e.g. only timeouts changed, or billing was adopted).
 func mdbUpdatePatch(ctx context.Context, plan, state *ManagedDatabaseResourceModel, diags *diag.Diagnostics) (components.ManagedDatabaseUpdatePayloadAttributes, bool) {
 	var patch components.ManagedDatabaseUpdatePayloadAttributes
 	send := false

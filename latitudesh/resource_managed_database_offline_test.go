@@ -372,8 +372,8 @@ func TestTrustedSourcesValidators(t *testing.T) {
 		})
 	}
 
-	// ISC-14: the "cannot be cleared" phrase is in the summary, so ExpectError
-	// isn't broken by Terraform wrapping the detail.
+	// The "cannot be cleared" phrase is in the summary, so ExpectError isn't
+	// broken by Terraform wrapping the detail.
 	resp := &validator.SetResponse{}
 	trustedSourcesNotEmpty{}.ValidateSet(ctx, validator.SetRequest{Path: path.Root("trusted_sources"), ConfigValue: set()}, resp)
 	if !strings.Contains(resp.Diagnostics.Errors()[0].Summary(), "cannot be cleared") {

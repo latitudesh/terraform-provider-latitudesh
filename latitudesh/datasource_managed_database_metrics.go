@@ -238,11 +238,10 @@ var managedDatabaseNotFoundMarkers = map[string]bool{
 }
 
 // managedDatabaseNotFound reports whether err says a managed database is gone.
-// It backs the metrics data source and every Read, Delete and poller of the
-// latitudesh_managed_database resource. Every ManagedDatabases operation in
-// the pinned SDK returns only *components.APIError on 4xx; the ErrorObject
-// branch is defensive. Only not-found counts: a 403 or 409 is a real error and
-// must never be read as "gone".
+// Every ManagedDatabases operation in the pinned SDK returns only
+// *components.APIError on 4xx; the ErrorObject branch is defensive. Only
+// not-found counts: a 403 or 409 is a real error and must never be read as
+// "gone".
 func managedDatabaseNotFound(err error) bool {
 	var apiErr *components.APIError
 	if errors.As(err, &apiErr) {
