@@ -352,7 +352,9 @@ func (r *ManagedDatabaseResource) Create(ctx context.Context, req resource.Creat
 	}
 	deadline := time.Now().Add(createTimeout)
 
-	id, postAttrs, ok := r.createManagedDatabase(ctx, payload, data.Name.ValueString(), effectiveProject, &resp.Diagnostics)
+	postCtx, cancelPost := context.WithDeadline(ctx, deadline)
+	id, postAttrs, ok := r.createManagedDatabase(postCtx, payload, data.Name.ValueString(), effectiveProject, &resp.Diagnostics)
+	cancelPost()
 	if !ok {
 		return
 	}
@@ -368,12 +370,17 @@ func (r *ManagedDatabaseResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	// waitReady records the last polled status and, if the wait fails, saves
-	// state and reports the error.
+	// waitReady records the last polled status and any credentials a poll
+	// returned (so they survive a later failure, and back up a final read
+	// that omits them) and, if the wait fails, saves state and reports the
+	// error.
 	waitReady := func(opts mdbWaitOpts) (lastStatus string, ok bool) {
 		result := r.waitForManagedDatabaseReady(ctx, id, deadline, opts)
 		if result.LastStatus != "" {
 			data.Status = types.StringValue(result.LastStatus)
+		}
+		if result.Credentials != nil {
+			data.Credentials = mdbCredentials(data.Credentials, nil, result.Credentials, nil, &resp.Diagnostics)
 		}
 		if result.Kind != mdbWaitReady {
 			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -406,7 +413,9 @@ func (r *ManagedDatabaseResource) Create(ctx context.Context, req resource.Creat
 
 	// State is saved on every path, so a failed read still keeps the last
 	// polled status.
-	gone := r.readManagedDatabaseInto(ctx, &data, &planned, postAttrs, &resp.Diagnostics)
+	readCtx, cancelRead := mdbFinalReadContext(ctx, deadline)
+	gone := r.readManagedDatabaseInto(readCtx, &data, &planned, postAttrs, &resp.Diagnostics)
+	cancelRead()
 	readFailed := resp.Diagnostics.HasError()
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 	if gone && !readFailed {
@@ -722,6 +731,9 @@ type mdbWaitResult struct {
 	// seen before the 404.
 	NotFound bool
 	Err      error
+	// Credentials are the last non-empty credentials a poll returned, so
+	// Create can keep them even if a later step fails.
+	Credentials *components.ManagedDatabaseAttributesCredentials
 }
 
 // reportedStatus is the status to report: empty after a 404.
@@ -872,12 +884,14 @@ func (r *ManagedDatabaseResource) waitForManagedDatabaseReady(ctx context.Contex
 		}
 	}
 
-	return r.mdbPoll(ctx, id, deadline, mdbReadyPollInterval, onNotFound, func(attrs *components.ManagedDatabaseAttributesAttributes) (mdbWaitResult, bool) {
+	var polledCredentials *components.ManagedDatabaseAttributesCredentials
+	result := r.mdbPoll(ctx, id, deadline, mdbReadyPollInterval, onNotFound, func(attrs *components.ManagedDatabaseAttributesAttributes) (mdbWaitResult, bool) {
+		if attrs != nil && mdbCredentialsHost(attrs.Credentials) != "" {
+			credentialsSeen = true
+			polledCredentials = attrs.Credentials
+		}
 		if attrs == nil || attrs.Status == nil || strings.TrimSpace(*attrs.Status) == "" {
 			return mdbWaitResult{}, false
-		}
-		if mdbCredentialsHost(attrs.Credentials) != "" {
-			credentialsSeen = true
 		}
 		status := *attrs.Status
 		switch {
@@ -898,6 +912,8 @@ func (r *ManagedDatabaseResource) waitForManagedDatabaseReady(ctx context.Contex
 		}
 		return mdbWaitResult{Kind: mdbWaitReady}, true
 	})
+	result.Credentials = polledCredentials
+	return result
 }
 
 // waitForManagedDatabaseDeleted polls until Show returns not-found or status
@@ -1094,6 +1110,22 @@ func (r *ManagedDatabaseResource) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
+	// applied lists the attributes already PATCHed. If a later PATCH fails,
+	// they are saved to state and named in the error: the framework keeps
+	// the prior state on error, which would otherwise hide a change that
+	// did go through.
+	var applied []string
+	recordApplied := func() {
+		for _, name := range applied {
+			switch name {
+			case "trusted_sources":
+				resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("trusted_sources"), data.TrustedSources)...)
+			case "parameters":
+				resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("parameters"), data.Parameters)...)
+			}
+		}
+	}
+
 	for _, patch := range patches {
 		// Wait for a settled status first, so a PATCH never hits a database
 		// that isn't ready (e.g. after an untaint, mid-restart, or right
@@ -1102,7 +1134,8 @@ func (r *ManagedDatabaseResource) Update(ctx context.Context, req resource.Updat
 		// parameter broke.
 		pre := r.waitForManagedDatabaseReady(ctx, id, deadline, mdbWaitOpts{FailedIsSettled: true, NotFoundIsGone: true})
 		if pre.Kind != mdbWaitReady {
-			mdbAddUpdateWaitError(&resp.Diagnostics, id, mdbUpdatePreWait, pre)
+			recordApplied()
+			mdbAddUpdateWaitError(&resp.Diagnostics, id, mdbUpdatePreWait, pre, applied)
 			return
 		}
 
@@ -1112,13 +1145,20 @@ func (r *ManagedDatabaseResource) Update(ctx context.Context, req resource.Updat
 			if mdbPatchRejected(err) {
 				kind = mdbUpdatePatchRejected
 			}
-			mdbAddUpdateError(&resp.Diagnostics, id, kind, mdbWaitError, pre.LastStatus, err)
+			recordApplied()
+			mdbAddUpdateError(&resp.Diagnostics, id, kind, mdbWaitError, pre.LastStatus, err, applied)
 			return
 		}
 
 		post := r.waitForManagedDatabaseReady(ctx, id, deadline, mdbWaitOpts{PriorStatus: pre.LastStatus, NotFoundIsGone: true, InitialDelay: mdbPostPatchDelay(patchStatus)})
+		if patch.TrustedSources != nil {
+			applied = append(applied, "trusted_sources")
+		} else {
+			applied = append(applied, "parameters")
+		}
 		if post.Kind != mdbWaitReady {
-			mdbAddUpdateWaitError(&resp.Diagnostics, id, mdbUpdatePostWait, post)
+			recordApplied()
+			mdbAddUpdateWaitError(&resp.Diagnostics, id, mdbUpdatePostWait, post, applied)
 			return
 		}
 	}
@@ -1126,12 +1166,15 @@ func (r *ManagedDatabaseResource) Update(ctx context.Context, req resource.Updat
 	// Always finish with a read, even with no PATCH: the framework marks
 	// unconfigured Computed attributes (status) unknown on any diff, and
 	// saving them unknown is an invalid result.
-	gone := r.readManagedDatabaseInto(ctx, &data, &planned, nil, &resp.Diagnostics)
+	readCtx, cancelRead := mdbFinalReadContext(ctx, deadline)
+	gone := r.readManagedDatabaseInto(readCtx, &data, &planned, nil, &resp.Diagnostics)
+	cancelRead()
 	if resp.Diagnostics.HasError() {
+		recordApplied()
 		return
 	}
 	if gone {
-		mdbAddUpdateError(&resp.Diagnostics, id, mdbUpdatePostWait, mdbWaitGone, "", nil)
+		mdbAddUpdateError(&resp.Diagnostics, id, mdbUpdatePostWait, mdbWaitGone, "", nil, nil)
 		return
 	}
 
@@ -1231,6 +1274,21 @@ func (r *ManagedDatabaseResource) patchManagedDatabase(ctx context.Context, id s
 	}
 }
 
+// mdbFinalReadMinimum is the least time the final read after a create or
+// update gets, even when the operation's deadline is (nearly) spent: the
+// change already succeeded, and running out of budget for the bookkeeping
+// read shouldn't fail the apply. It bounds the read's SDK retries.
+var mdbFinalReadMinimum = 30 * time.Second
+
+// mdbFinalReadContext bounds the final read by the operation deadline, but
+// never to less than mdbFinalReadMinimum.
+func mdbFinalReadContext(ctx context.Context, deadline time.Time) (context.Context, context.CancelFunc) {
+	if floor := time.Now().Add(mdbFinalReadMinimum); deadline.Before(floor) {
+		deadline = floor
+	}
+	return context.WithDeadline(ctx, deadline)
+}
+
 // mdbPostPatchDelay is how long to wait before the first status check after
 // a PATCH. Whether the API applies a change synchronously is undocumented: if
 // the PATCH response already reports an in-progress status, polling can start
@@ -1291,15 +1349,21 @@ const (
 
 // mdbAddUpdateError reports an Update failure. Update never taints, so none
 // of these texts mention untaint.
-func mdbAddUpdateError(diags *diag.Diagnostics, id string, stage mdbUpdateStage, kind mdbWaitKind, status string, err error) {
+func mdbAddUpdateError(diags *diag.Diagnostics, id string, stage mdbUpdateStage, kind mdbWaitKind, status string, err error, applied []string) {
 	summary, detail := mdbUpdateErrorText(id, stage, kind, status, err)
+	if len(applied) > 0 {
+		// Update sends one PATCH per attribute, so an earlier one may have
+		// gone through: say so, instead of claiming nothing changed.
+		detail = strings.Replace(detail, " Nothing was applied.", "", 1)
+		detail += fmt.Sprintf(" Already applied: %s; Terraform has recorded it. The rest was not applied.", strings.Join(applied, ", "))
+	}
 	diags.AddError(summary, detail)
 }
 
 // mdbAddUpdateWaitError reports a failed Update wait. A 404 is reported as
 // "no longer found", whatever status the wait saw before it.
-func mdbAddUpdateWaitError(diags *diag.Diagnostics, id string, stage mdbUpdateStage, result mdbWaitResult) {
-	mdbAddUpdateError(diags, id, stage, result.Kind, result.reportedStatus(), result.Err)
+func mdbAddUpdateWaitError(diags *diag.Diagnostics, id string, stage mdbUpdateStage, result mdbWaitResult, applied []string) {
+	mdbAddUpdateError(diags, id, stage, result.Kind, result.reportedStatus(), result.Err, applied)
 }
 
 func mdbUpdateErrorText(id string, stage mdbUpdateStage, kind mdbWaitKind, status string, err error) (string, string) {

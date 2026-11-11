@@ -533,3 +533,16 @@ func TestMdbPostPatchDelay(t *testing.T) {
 		}
 	}
 }
+
+// The wait hands back the credentials a poll returned, so Create can keep
+// them even if a later step fails.
+func TestWaitForManagedDatabaseReady_ReturnsPolledCredentials(t *testing.T) {
+	_, r := newMdbScript(t, mdbScriptStep{status: "provisioning", creds: true}, mdbScriptStep{status: "running"})
+	got := ready(r, 5*time.Second, mdbWaitOpts{RequireCredentials: true})
+	if got.Kind != mdbWaitReady {
+		t.Fatalf("kind = %v, want ready", got.Kind)
+	}
+	if got.Credentials == nil || got.Credentials.Host == nil || *got.Credentials.Host != "db.mock.internal" {
+		t.Errorf("credentials = %+v, want the polled host", got.Credentials)
+	}
+}

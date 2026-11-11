@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -675,8 +676,31 @@ func TestMdbGoneTextsAfterAStatus(t *testing.T) {
 		t.Errorf("create text blames the earlier status: %q", d)
 	}
 	var upd diag.Diagnostics
-	mdbAddUpdateWaitError(&upd, "mdb_1", mdbUpdatePreWait, mdbWaitResult{Kind: mdbWaitGone, LastStatus: "updating", NotFound: true})
+	mdbAddUpdateWaitError(&upd, "mdb_1", mdbUpdatePreWait, mdbWaitResult{Kind: mdbWaitGone, LastStatus: "updating", NotFound: true}, nil)
 	if d := upd.Errors()[0].Detail(); strings.Contains(d, "updating") || !strings.Contains(d, "no longer finds") {
 		t.Errorf("update text blames the earlier status: %q", d)
+	}
+}
+
+func TestMdbAddUpdateErrorNamesAppliedChanges(t *testing.T) {
+	var diags diag.Diagnostics
+	mdbAddUpdateError(&diags, "mdb_1", mdbUpdatePatchRejected, mdbWaitError, "", components.NewAPIError("x", 422, "", nil), []string{"trusted_sources"})
+	d := diags.Errors()[0].Detail()
+	if strings.Contains(d, "Nothing was applied") || !strings.Contains(d, "Already applied: trusted_sources") {
+		t.Errorf("detail = %q, want it to name the applied change and not claim nothing changed", d)
+	}
+}
+
+func TestMdbFinalReadContext(t *testing.T) {
+	ctx, cancel := mdbFinalReadContext(context.Background(), time.Now().Add(-time.Minute))
+	defer cancel()
+	if dl, _ := ctx.Deadline(); time.Until(dl) < mdbFinalReadMinimum-time.Second {
+		t.Errorf("deadline in %v, want at least the %v floor", time.Until(dl), mdbFinalReadMinimum)
+	}
+	far := time.Now().Add(time.Hour)
+	ctx2, cancel2 := mdbFinalReadContext(context.Background(), far)
+	defer cancel2()
+	if dl, _ := ctx2.Deadline(); !dl.Equal(far) {
+		t.Errorf("deadline = %v, want the operation deadline %v", dl, far)
 	}
 }

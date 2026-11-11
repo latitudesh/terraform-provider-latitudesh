@@ -52,6 +52,8 @@ type mdbMock struct {
 
 	// Switches.
 	patchStatus    int               // non-zero: PATCH answers this status with an error body
+	rejectParams   int               // non-zero: a PATCH carrying parameters answers this status
+	postDelay      time.Duration     // how long the POST takes to answer
 	postCreds      bool              // the POST response carries credentials
 	noShowCreds    bool              // Show never returns credentials
 	omitBilling    bool              // Show omits plan.billing
@@ -263,6 +265,11 @@ func (m *mdbMock) handler(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case r.Method == http.MethodPost && r.URL.Path == "/managed_databases":
+		if m.postDelay > 0 {
+			m.mu.Unlock()
+			time.Sleep(m.postDelay)
+			m.mu.Lock()
+		}
 		var payload struct {
 			Data struct {
 				Attributes struct {
@@ -327,6 +334,11 @@ func (m *mdbMock) handler(w http.ResponseWriter, r *http.Request) {
 			}
 			if err := json.Unmarshal(body, &payload); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if m.rejectParams != 0 && len(payload.Data.Attributes.Parameters) > 0 {
+				w.WriteHeader(m.rejectParams)
+				_, _ = w.Write([]byte(`{"errors":[{"status":"` + fmt.Sprint(m.rejectParams) + `","detail":"parameter out of range"}]}`))
 				return
 			}
 			// Like the live API (observed 2026-11-11): a PATCH that also

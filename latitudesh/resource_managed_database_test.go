@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
@@ -457,4 +458,69 @@ func TestManagedDatabase_Validation(t *testing.T) {
 	if n := len(mock.requests()); n != 0 {
 		t.Errorf("validation failures sent %d API requests, want 0", n)
 	}
+}
+
+// The POST runs under the create timeout: a slow POST fails with the
+// "may have been created" guidance instead of outlasting the timeout.
+func TestManagedDatabase_MockCreateTimeoutBoundsPost(t *testing.T) {
+	mock, server := newMdbMock(t)
+	mock.postDelay = 3 * time.Second
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		Steps: []resource.TestStep{
+			{
+				Config: mdbConfig("", mdbBody("proj_mock_1", "db.psql.small", "ASH", `  timeouts = {
+    create = "1s"
+  }
+`)),
+				ExpectError: regexp.MustCompile(`may\s+have\s+been\s+created`),
+			},
+		},
+	})
+}
+
+// The allowlist PATCH succeeds and the parameters PATCH is rejected: the
+// error says what was applied, and state records the new allowlist, so the
+// next apply sends only the parameters.
+func TestManagedDatabase_MockPartialUpdate(t *testing.T) {
+	mock, server := newMdbMock(t)
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMdbMockDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: mdbConfig("", mdbBody("proj_mock_1", "db.psql.small", "ASH", mdbAllowlist1)),
+			},
+			{
+				PreConfig:   func() { mock.set(func(m *mdbMock) { m.rejectParams = 422 }) },
+				Config:      mdbConfig("", mdbBody("proj_mock_1", "db.psql.small", "ASH", mdbAllowlist2)),
+				ExpectError: regexp.MustCompile(`Already\s+applied:\s+trusted_sources`),
+			},
+			{
+				PreConfig: func() {
+					mock.set(func(m *mdbMock) { m.rejectParams = 0 })
+					mock.resetLog()
+				},
+				Config: mdbConfig("", mdbBody("proj_mock_1", "db.psql.small", "ASH", mdbAllowlist2)),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(mdbResourceName, "parameters.work_mem", "128MB"),
+					mdbCheckLog(mock, func(methods string) error {
+						if strings.Count(methods, "PATCH") != 1 {
+							return fmt.Errorf("want only the parameters PATCH, got %q", methods)
+						}
+						for _, r := range mock.requests() {
+							if r.Method == "PATCH" && strings.Contains(r.Body, "trusted_sources") {
+								return fmt.Errorf("re-sent the allowlist: %s", r.Body)
+							}
+						}
+						return nil
+					}),
+				),
+			},
+		},
+	})
 }
