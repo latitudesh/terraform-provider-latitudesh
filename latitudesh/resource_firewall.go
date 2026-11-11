@@ -413,7 +413,7 @@ func (r *FirewallResource) Delete(ctx context.Context, req resource.DeleteReques
 
 	_, err := r.client.Firewalls.Delete(ctx, firewallID)
 	if err != nil {
-		if strings.Contains(err.Error(), "404") {
+		if apiNotFound(err) {
 			resp.Diagnostics.AddWarning("Firewall Already Deleted", "Firewall appears to have been deleted outside of Terraform")
 			return
 		}

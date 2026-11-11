@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -219,7 +218,7 @@ func (r *SSHKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 	_, err := r.client.SSHKeys.Delete(ctx, keyID)
 	if err != nil {
-		if strings.Contains(err.Error(), "404") {
+		if apiNotFound(err) {
 			return
 		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete SSH key, got error: "+err.Error())

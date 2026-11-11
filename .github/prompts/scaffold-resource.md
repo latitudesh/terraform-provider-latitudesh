@@ -143,11 +143,8 @@ exemplar predates it) and `datasourcevalidator` from
 `terraform-plugin-framework-validators` (the data-source twin of
 `resourcevalidator.ExactlyOneOf`, used in `resource_firewall_assignment.go`).
 
-Two legacy patterns in these files are bugs, not conventions: (a) matching
-`err.Error()` against `"404"`/`"not_found"` in the `Delete` of most older
-resources (`resource_virtual_machine.go`, `resource_server.go`,
-`resource_user_data.go`, …) — use `apiNotFound` instead;
-(b) `ImportStateVerifyIgnore: … "project"` / `"plan"` in
+One legacy pattern in these files is a bug, not a convention:
+`ImportStateVerifyIgnore: … "project"` / `"plan"` in
 `resource_virtual_machine_site_test.go` — it papers over the slug/ID selector
 mismatch; keep the configured selector instead.
 

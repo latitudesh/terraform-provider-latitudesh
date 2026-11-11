@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"strings"
 	"sync"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -233,7 +232,7 @@ func (r *UserDataResource) Delete(ctx context.Context, req resource.DeleteReques
 
 	_, err := r.client.UserData.Delete(ctx, userDataID)
 	if err != nil {
-		if strings.Contains(err.Error(), "404") {
+		if apiNotFound(err) {
 			return
 		}
 		resp.Diagnostics.AddError("Client Error", "Unable to delete user data, got error: "+err.Error())
