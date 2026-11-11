@@ -472,3 +472,111 @@ func TestMdbCreatePatchErrorClassification(t *testing.T) {
 		}
 	}
 }
+
+func TestMdbModifyPlan(t *testing.T) {
+	base := func() ManagedDatabaseResourceModel {
+		m := mdbTestModel()
+		m.Project = types.StringValue("proj_1")
+		return m
+	}
+	unset := func(m ManagedDatabaseResourceModel) ManagedDatabaseResourceModel {
+		m.Project = types.StringNull()
+		m.Billing = types.StringNull()
+		return m
+	}
+	summaries := func(d diag.Diagnostics) (errs, warns []string) {
+		for _, e := range d.Errors() {
+			errs = append(errs, e.Summary())
+		}
+		for _, w := range d.Warnings() {
+			warns = append(warns, w.Summary())
+		}
+		return
+	}
+
+	t.Run("create fills project from the provider default", func(t *testing.T) {
+		var d diag.Diagnostics
+		cfg, plan := unset(base()), base()
+		plan.Project = types.StringUnknown()
+		mdbModifyPlan(&cfg, &plan, nil, "proj_default", &d)
+		if d.HasError() || plan.Project.ValueString() != "proj_default" {
+			t.Fatalf("project = %v, diags %v", plan.Project, d)
+		}
+	})
+	t.Run("missing project", func(t *testing.T) {
+		var d diag.Diagnostics
+		cfg, plan := unset(base()), base()
+		mdbModifyPlan(&cfg, &plan, nil, "", &d)
+		if errs, _ := summaries(d); len(errs) != 1 || errs[0] != "Missing project" {
+			t.Fatalf("errors = %v", errs)
+		}
+	})
+	t.Run("imported with no project anywhere keeps state", func(t *testing.T) {
+		var d diag.Diagnostics
+		cfg, plan, state := unset(base()), base(), base()
+		mdbModifyPlan(&cfg, &plan, &state, "", &d)
+		if d.HasError() || plan.Project.ValueString() != "proj_1" {
+			t.Fatalf("project = %v, diags %v", plan.Project, d)
+		}
+	})
+	t.Run("default project changed is an error naming the state value", func(t *testing.T) {
+		var d diag.Diagnostics
+		cfg, plan, state := unset(base()), base(), base()
+		mdbModifyPlan(&cfg, &plan, &state, "proj_2", &d)
+		if errs, _ := summaries(d); len(errs) != 1 || errs[0] != "Default project changed" {
+			t.Fatalf("errors = %v", errs)
+		}
+		if !strings.Contains(d.Errors()[0].Detail(), `"proj_1"`) {
+			t.Errorf("detail %q should quote the state value", d.Errors()[0].Detail())
+		}
+	})
+	t.Run("billing change is an error", func(t *testing.T) {
+		var d diag.Diagnostics
+		cfg, plan, state := base(), base(), base()
+		plan.Billing = types.StringValue("yearly")
+		mdbModifyPlan(&cfg, &plan, &state, "", &d)
+		if errs, _ := summaries(d); len(errs) != 1 || errs[0] != "Billing can't be changed" {
+			t.Fatalf("errors = %v", errs)
+		}
+	})
+	t.Run("billing change with a replacement is allowed", func(t *testing.T) {
+		var d diag.Diagnostics
+		cfg, plan, state := base(), base(), base()
+		plan.Billing = types.StringValue("yearly")
+		plan.Plan = types.StringValue("db.psql.medium")
+		mdbModifyPlan(&cfg, &plan, &state, "", &d)
+		if d.HasError() || d.WarningsCount() != 0 {
+			t.Fatalf("diags = %v", d)
+		}
+	})
+	t.Run("billing adoption warns", func(t *testing.T) {
+		var d diag.Diagnostics
+		cfg, plan, state := base(), base(), base()
+		state.Billing = types.StringNull()
+		mdbModifyPlan(&cfg, &plan, &state, "", &d)
+		if _, warns := summaries(d); d.HasError() || len(warns) != 1 || warns[0] != "billing only recorded in state" {
+			t.Fatalf("diags = %v", d)
+		}
+	})
+	t.Run("removed parameter keys warn", func(t *testing.T) {
+		var d diag.Diagnostics
+		cfg, plan, state := base(), base(), base()
+		state.Parameters = types.MapValueMust(types.StringType, map[string]attr.Value{"work_mem": types.StringValue("64MB"), "max_connections": types.StringValue("100")})
+		mdbModifyPlan(&cfg, &plan, &state, "", &d)
+		if _, warns := summaries(d); len(warns) != 1 || !strings.Contains(d.Warnings()[0].Detail(), "max_connections") {
+			t.Fatalf("diags = %v", d)
+		}
+	})
+	t.Run("no checks on create", func(t *testing.T) {
+		var d diag.Diagnostics
+		cfg, plan := base(), base()
+		plan.Billing = types.StringValue("yearly")
+		mdbModifyPlan(&cfg, &plan, nil, "", &d)
+		if d.HasError() || d.WarningsCount() != 0 {
+			t.Fatalf("diags = %v", d)
+		}
+	})
+	if got := mdbRemovedParameterKeys(types.MapNull(types.StringType), types.MapNull(types.StringType)); got != nil {
+		t.Errorf("removed = %v, want nil", got)
+	}
+}

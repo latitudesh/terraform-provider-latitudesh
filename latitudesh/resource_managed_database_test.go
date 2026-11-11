@@ -267,3 +267,146 @@ func TestManagedDatabase_MockUpdateCredentialsAbsent(t *testing.T) {
 		},
 	})
 }
+
+// mdbAssertNoReplace runs in the next step's PreConfig: Check doesn't run on
+// an ExpectError step, and the post-test destroy adds its own DELETE.
+func mdbAssertNoReplace(t *testing.T, m *mdbMock) func() {
+	return func() {
+		if methods := m.methods(); strings.Contains(methods, "DELETE") || strings.Contains(methods, "POST") {
+			t.Errorf("the failed step sent %q; want no DELETE or POST", methods)
+		}
+		m.resetLog()
+	}
+}
+
+func TestManagedDatabase_MockDefaults(t *testing.T) {
+	mock, server := newMdbMock(t)
+	body := func(extra string) string { return mdbBody("", "db.psql.small", "ASH", extra) }
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMdbMockDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: mdbConfig("proj_mock_1", body(mdbAllowlist1)),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(mdbResourceName, "project", "proj_mock_1"),
+					resource.TestCheckResourceAttr(mdbResourceName, "billing", "monthly"),
+				),
+			},
+			{
+				// project and billing are unset: an in-place update must not
+				// plan a replacement.
+				PreConfig: mock.resetLog,
+				Config:    mdbConfig("proj_mock_1", body(mdbAllowlist2)),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(mdbResourceName, "id", "mdb_mock_1"),
+					mdbCheckLog(mock, func(methods string) error {
+						if strings.Contains(methods, "POST") || strings.Contains(methods, "DELETE") || !strings.Contains(methods, "PATCH") {
+							return fmt.Errorf("want a PATCH and no POST or DELETE, got %q", methods)
+						}
+						return nil
+					}),
+				),
+			},
+			{
+				// The provider default moves: a plan-time error, not a
+				// replacement of every database that inherits it.
+				PreConfig:   mock.resetLog,
+				Config:      mdbConfig("proj_mock_2", body(mdbAllowlist2)),
+				ExpectError: regexp.MustCompile(`Default project changed`),
+			},
+			{
+				PreConfig: mdbAssertNoReplace(t, mock),
+				Config:    mdbConfig("proj_mock_1", body(mdbAllowlist2)),
+				PlanOnly:  true,
+			},
+		},
+	})
+}
+
+func TestManagedDatabase_MockBilling(t *testing.T) {
+	mock, server := newMdbMock(t)
+	cfg := func(plan, billing string) string {
+		return mdbConfig("", mdbBody("proj_mock_1", plan, "ASH", fmt.Sprintf("  billing = %q\n", billing)))
+	}
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMdbMockDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config: cfg("db.psql.small", "monthly"),
+				Check:  resource.TestCheckResourceAttr(mdbResourceName, "billing", "monthly"),
+			},
+			{
+				PreConfig:   mock.resetLog,
+				Config:      cfg("db.psql.small", "yearly"),
+				ExpectError: regexp.MustCompile(`Billing can't be changed`),
+			},
+			{
+				PreConfig: mdbAssertNoReplace(t, mock),
+				Config:    cfg("db.psql.small", "monthly"),
+				PlanOnly:  true,
+			},
+			{
+				// A replacement is a new database, so billing may change with it.
+				PreConfig: mock.resetLog,
+				Config:    cfg("db.psql.medium", "yearly"),
+				Check: resource.ComposeTestCheckFunc(
+					mdbCheckReplaced(mock),
+					resource.TestCheckResourceAttr(mdbResourceName, "billing", "yearly"),
+				),
+			},
+			{
+				// The documented way to change billing: taint, then apply.
+				PreConfig: mock.resetLog,
+				Taint:     []string{mdbResourceName},
+				Config:    cfg("db.psql.medium", "monthly"),
+				Check: resource.ComposeTestCheckFunc(
+					mdbCheckReplaced(mock),
+					resource.TestCheckResourceAttr(mdbResourceName, "billing", "monthly"),
+				),
+			},
+		},
+	})
+}
+
+func TestManagedDatabase_MockBillingAdopt(t *testing.T) {
+	mock, server := newMdbMock(t)
+	mock.omitBilling = true
+	mock.seed(mdbRecord{ID: "mdb_seed_1", Name: "api", ProjectID: "proj_mock_1", Region: "ASH", Plan: "db.psql.small", Engine: "postgres", Billing: "monthly"})
+	without := mdbConfig("", mdbBody("proj_mock_1", "db.psql.small", "ASH", ""))
+	with := mdbConfig("", mdbBody("proj_mock_1", "db.psql.small", "ASH", "  billing = \"monthly\"\n"))
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactoriesWithMock(server),
+		CheckDestroy:             testAccCheckMdbMockDestroyed(mock),
+		Steps: []resource.TestStep{
+			{
+				Config:             without,
+				ResourceName:       mdbResourceName,
+				ImportState:        true,
+				ImportStateId:      "mdb_seed_1",
+				ImportStatePersist: true,
+			},
+			{
+				PreConfig: mock.resetLog,
+				Config:    with,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(mdbResourceName, "id", "mdb_seed_1"),
+					resource.TestCheckResourceAttr(mdbResourceName, "billing", "monthly"),
+					mdbCheckLog(mock, func(methods string) error {
+						if strings.Contains(methods, "POST") || strings.Contains(methods, "DELETE") || strings.Contains(methods, "PATCH") {
+							return fmt.Errorf("adoption sent %q; want reads only", methods)
+						}
+						return nil
+					}),
+				),
+			},
+		},
+	})
+}

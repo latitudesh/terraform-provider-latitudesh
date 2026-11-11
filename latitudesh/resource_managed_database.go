@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
@@ -37,6 +38,7 @@ import (
 var _ resource.Resource = &ManagedDatabaseResource{}
 var _ resource.ResourceWithConfigure = &ManagedDatabaseResource{}
 var _ resource.ResourceWithImportState = &ManagedDatabaseResource{}
+var _ resource.ResourceWithModifyPlan = &ManagedDatabaseResource{}
 
 // Poll intervals and the polling error budget. Declared as vars so tests can
 // shorten them; production keeps the defaults.
@@ -896,6 +898,149 @@ func (r *ManagedDatabaseResource) waitForManagedDatabaseDeleted(ctx context.Cont
 		}
 		return mdbWaitResult{}, false
 	})
+}
+
+func (r *ManagedDatabaseResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() {
+		return // destroy
+	}
+
+	var cfg, plan ManagedDatabaseResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	var state *ManagedDatabaseResourceModel
+	if !req.State.Raw.IsNull() {
+		state = &ManagedDatabaseResourceModel{}
+		resp.Diagnostics.Append(req.State.Get(ctx, state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
+	mdbModifyPlan(&cfg, &plan, state, r.defaultProject, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+}
+
+// mdbModifyPlan holds ModifyPlan's rules, pure so they are unit tested.
+// state is nil on create.
+//
+//   - project is filled from the configuration, or else the provider default,
+//     as resource_lks_cluster.go does. On update, if the resource doesn't set
+//     project and the provider default now differs from state, the plan fails
+//     instead of replacing the database: one provider edit must never replace
+//     every database that inherits the default.
+//   - billing can't change on an existing database, so a change between two
+//     known values is a plan-time error, unless the database is being replaced
+//     anyway. Going from null (the API never reported it) to a value only
+//     records it, with a warning.
+//   - Removing parameters keys warns that the server keeps their values.
+func mdbModifyPlan(cfg, plan, state *ManagedDatabaseResourceModel, defaultProject string, diags *diag.Diagnostics) {
+	switch {
+	case cfg.Project.IsUnknown():
+		// Comes from a resource not created yet; leave it unknown.
+	case !cfg.Project.IsNull() && cfg.Project.ValueString() != "":
+		plan.Project = cfg.Project
+	case defaultProject != "":
+		plan.Project = types.StringValue(defaultProject)
+	case state != nil && !state.Project.IsNull() && !state.Project.IsUnknown():
+		// Imported, with no project anywhere in the configuration: keep the
+		// imported value rather than fail every plan.
+		plan.Project = state.Project
+	default:
+		diags.AddError(
+			"Missing project",
+			"Set `project` on this resource or define a default in the provider block (provider \"latitudesh\" { project = \"...\" }).",
+		)
+		return
+	}
+
+	if state == nil {
+		return // create: nothing to compare against
+	}
+
+	if cfg.Project.IsNull() && !plan.Project.IsUnknown() && !state.Project.IsNull() && !state.Project.IsUnknown() && plan.Project.ValueString() != state.Project.ValueString() {
+		diags.AddAttributeError(
+			path.Root("project"),
+			"Default project changed",
+			fmt.Sprintf("The provider's default project changed. To keep this database where it is, set project = %q on this resource. Setting a different project replaces the database.", state.Project.ValueString()),
+		)
+		return
+	}
+
+	if mdbReplaced(plan, state) {
+		return // a new database: billing and parameters start fresh
+	}
+
+	if !plan.Billing.IsUnknown() && !plan.Billing.IsNull() {
+		switch {
+		case state.Billing.IsNull():
+			diags.AddAttributeWarning(
+				path.Root("billing"),
+				"billing only recorded in state",
+				fmt.Sprintf("billing isn't reported by the API, so this only records %q in state; it doesn't change the database's billing cycle.", plan.Billing.ValueString()),
+			)
+		case !state.Billing.IsUnknown() && plan.Billing.ValueString() != state.Billing.ValueString():
+			diags.AddAttributeError(
+				path.Root("billing"),
+				"Billing can't be changed",
+				"billing can't be changed through the API; it is set at create time. To stop managing it, remove `billing` from the configuration. "+
+					"To change billing, recreate the database: run `terraform taint <address>`, then apply (this destroys its data).",
+			)
+			return
+		}
+	}
+
+	if removed := mdbRemovedParameterKeys(state.Parameters, plan.Parameters); len(removed) > 0 {
+		diags.AddAttributeWarning(
+			path.Root("parameters"),
+			"Removed parameters keep their values",
+			fmt.Sprintf("Removing %s from parameters doesn't reset them: the API has no way to unset a parameter, so the database keeps its current values.", strings.Join(removed, ", ")),
+		)
+	}
+}
+
+// mdbReplaced reports whether the plan replaces the database: one of the
+// replace-forcing attributes differs from state, or project is unknown.
+func mdbReplaced(plan, state *ManagedDatabaseResourceModel) bool {
+	if plan.Project.IsUnknown() {
+		return true
+	}
+	for _, pair := range [][2]types.String{
+		{plan.Name, state.Name},
+		{plan.Region, state.Region},
+		{plan.Plan, state.Plan},
+		{plan.Engine, state.Engine},
+		{plan.Project, state.Project},
+	} {
+		if !pair[0].Equal(pair[1]) {
+			return true
+		}
+	}
+	return false
+}
+
+// mdbRemovedParameterKeys returns the keys in state that the plan drops,
+// sorted. It returns nil when the plan's parameters are unknown.
+func mdbRemovedParameterKeys(state, plan types.Map) []string {
+	if plan.IsUnknown() || state.IsNull() || state.IsUnknown() {
+		return nil
+	}
+	planned := plan.Elements()
+	var removed []string
+	for k := range state.Elements() {
+		if _, ok := planned[k]; !ok {
+			removed = append(removed, k)
+		}
+	}
+	sort.Strings(removed)
+	return removed
 }
 
 // Update sends trusted_sources and parameters, the only attributes the API can
