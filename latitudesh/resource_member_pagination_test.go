@@ -29,12 +29,17 @@ const (
 
 // teamMembersMock serves a team of size members. When targetIndex >= 0, the
 // targetIndex-th member is the target. When decoyEmailIndex >= 0, that member
-// shares the target's email but has its own ID.
+// shares the target's email but has its own ID. When maxPageSize > 0 the
+// server caps page[size] at that value, like an API with a lower ceiling than
+// the provider requests. When ignorePageNumber is set every request returns
+// page 1, like an endpoint that does not paginate.
 type teamMembersMock struct {
-	size            int
-	targetIndex     int
-	decoyEmailIndex int
-	requests        int
+	size             int
+	targetIndex      int
+	decoyEmailIndex  int
+	maxPageSize      int
+	ignorePageNumber bool
+	requests         int
 }
 
 func (m *teamMembersMock) server(t *testing.T) *httptest.Server {
@@ -52,6 +57,12 @@ func (m *teamMembersMock) server(t *testing.T) *httptest.Server {
 		}
 		if s, err := strconv.Atoi(r.URL.Query().Get("page[size]")); err == nil && s > 0 {
 			size = s
+		}
+		if m.maxPageSize > 0 && size > m.maxPageSize {
+			size = m.maxPageSize
+		}
+		if m.ignorePageNumber {
+			number = 1
 		}
 
 		entries := []string{}
@@ -176,6 +187,43 @@ func TestMemberRead_IDOnLaterPageBeatsEmailOnFirstPage(t *testing.T) {
 	}
 	if m.requests != 2 {
 		t.Fatalf("expected the walk to reach page 2, got %d request(s)", m.requests)
+	}
+}
+
+// A server that caps page[size] below what the provider asks for must still be
+// walked to the end: a short page is not the last page.
+func TestMemberRead_ServerCapsPageSize(t *testing.T) {
+	m := &teamMembersMock{size: 130, targetIndex: 120, maxPageSize: 50}
+	resp := runMemberRead(t, newTestMemberResource(m.server(t).URL), memberTargetID, memberTargetEmail)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("Read returned diagnostics: %v", resp.Diagnostics.Errors())
+	}
+	if resp.State.Raw.IsNull() {
+		t.Fatal("member exists on page 3 of a 50-item server cap but Read removed it from state")
+	}
+	if got := stateString(t, resp.State, "id"); got.ValueString() != memberTargetID {
+		t.Fatalf("id = %s, want %s", got, memberTargetID)
+	}
+	if m.requests != 3 {
+		t.Fatalf("expected 3 page requests at a 50-item cap, got %d", m.requests)
+	}
+}
+
+// An endpoint that ignores page[number] must not keep the provider looping:
+// the walk is bounded and reports an error instead of removing the member.
+func TestMemberRead_ServerIgnoresPageNumber(t *testing.T) {
+	m := &teamMembersMock{size: 130, targetIndex: -1, ignorePageNumber: true}
+	resp := runMemberRead(t, newTestMemberResource(m.server(t).URL), memberTargetID, memberTargetEmail)
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected an error from a bounded walk, got none")
+	}
+	if resp.State.Raw.IsNull() {
+		t.Fatal("an unreadable listing must keep the member in state, not remove it")
+	}
+	if m.requests != int(memberListMaxPages) {
+		t.Fatalf("expected the walk to stop after %d requests, got %d", memberListMaxPages, m.requests)
 	}
 }
 

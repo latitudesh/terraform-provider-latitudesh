@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -448,15 +449,23 @@ func (r *MemberResource) UpgradeState(ctx context.Context) map[int64]resource.St
 	}
 }
 
-// memberListPageSize is the page size used to walk GET /team/members. The API
-// serves 20 members per page by default and returns no pagination metadata, so
-// the walk stops on the first short page.
-const memberListPageSize = int64(100)
+const (
+	// memberListPageSize is the page size requested when walking
+	// GET /team/members. The API serves 20 members per page by default and
+	// returns no pagination metadata.
+	memberListPageSize = int64(100)
+	// memberListMaxPages bounds the walk so an endpoint that ignores
+	// page[number] cannot keep the provider looping on the same page.
+	memberListMaxPages = int64(100)
+)
 
 // eachTeamMember calls fn for every member of the team, across all pages of
-// GET /team/members, until fn returns false.
+// GET /team/members, until fn returns false. The walk only stops on an empty
+// page: a page shorter than requested is not treated as the last one, so a
+// server that caps page[size] below memberListPageSize still gets walked in
+// full.
 func (r *MemberResource) eachTeamMember(ctx context.Context, fn func(*components.TeamMembersData) bool) error {
-	for pageNumber := int64(1); ; pageNumber++ {
+	for pageNumber := int64(1); pageNumber <= memberListMaxPages; pageNumber++ {
 		page, size := pageNumber, memberListPageSize
 		response, err := r.client.Teams.Members.GetTeamMembers(ctx, &size, &page, nil)
 		if err != nil {
@@ -470,8 +479,6 @@ func (r *MemberResource) eachTeamMember(ctx context.Context, fn func(*components
 				return nil
 			}
 		}
-		if int64(len(response.TeamMembers.Data)) < size {
-			return nil
-		}
 	}
+	return fmt.Errorf("the team has more members than %d pages of %d, so the listing could not be read in full", memberListMaxPages, memberListPageSize)
 }
