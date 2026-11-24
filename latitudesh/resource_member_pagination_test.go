@@ -28,11 +28,13 @@ const (
 )
 
 // teamMembersMock serves a team of size members. When targetIndex >= 0, the
-// targetIndex-th member is the target.
+// targetIndex-th member is the target. When decoyEmailIndex >= 0, that member
+// shares the target's email but has its own ID.
 type teamMembersMock struct {
-	size        int
-	targetIndex int
-	requests    int
+	size            int
+	targetIndex     int
+	decoyEmailIndex int
+	requests        int
 }
 
 func (m *teamMembersMock) server(t *testing.T) *httptest.Server {
@@ -57,6 +59,8 @@ func (m *teamMembersMock) server(t *testing.T) *httptest.Server {
 			id, email, first := fmt.Sprintf("user_%d", i), fmt.Sprintf("member%d@example.com", i), fmt.Sprintf("Member%d", i)
 			if i == m.targetIndex {
 				id, email, first = memberTargetID, memberTargetEmail, "Target"
+			} else if m.decoyEmailIndex > 0 && i == m.decoyEmailIndex {
+				email, first = memberTargetEmail, "Decoy"
 			}
 			entries = append(entries, fmt.Sprintf(`{"id":%q,"type":"memberships","attributes":{`+
 				`"first_name":%q,"last_name":"User","email":%q,"mfa_enabled":false,"role":{"id":"role_1","name":"collaborator"}}}`,
@@ -149,6 +153,29 @@ func TestMemberRead_EmailFallbackBeyondFirstPage(t *testing.T) {
 	}
 	if got := stateString(t, resp.State, "id"); got.ValueString() != memberTargetID {
 		t.Fatalf("id = %s, want %s (matched by email)", got, memberTargetID)
+	}
+}
+
+// An email match on an earlier page must not stop the walk: a member with the
+// requested ID on a later page still wins.
+func TestMemberRead_IDOnLaterPageBeatsEmailOnFirstPage(t *testing.T) {
+	m := &teamMembersMock{size: 130, targetIndex: 120, decoyEmailIndex: 5}
+	resp := runMemberRead(t, newTestMemberResource(m.server(t).URL), memberTargetID, memberTargetEmail)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("Read returned diagnostics: %v", resp.Diagnostics.Errors())
+	}
+	if resp.State.Raw.IsNull() {
+		t.Fatal("member exists past the first page but Read removed it from state")
+	}
+	if got := stateString(t, resp.State, "id"); got.ValueString() != memberTargetID {
+		t.Fatalf("id = %s, want %s (ID match on page 2 must beat email match on page 1)", got, memberTargetID)
+	}
+	if got := stateString(t, resp.State, "first_name"); got.ValueString() != "Target" {
+		t.Fatalf("first_name = %s, want Target (got the email decoy instead)", got)
+	}
+	if m.requests != 2 {
+		t.Fatalf("expected the walk to reach page 2, got %d request(s)", m.requests)
 	}
 }
 
