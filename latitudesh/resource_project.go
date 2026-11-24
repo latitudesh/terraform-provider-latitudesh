@@ -3,6 +3,7 @@ package latitudesh
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -212,8 +213,13 @@ func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	r.readProject(ctx, &data, &resp.Diagnostics)
+	found := r.readProjectInto(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !found {
+		resp.State.RemoveResource(ctx)
 		return
 	}
 
@@ -366,37 +372,46 @@ func (r *ProjectResource) ImportState(ctx context.Context, req resource.ImportSt
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
+// readProject refreshes data from the API and reports a missing project as an
+// error, which is what Create, Update and ImportState need. Read uses
+// readProjectInto so it can drop the resource from state instead.
 func (r *ProjectResource) readProject(ctx context.Context, data *ProjectResourceModel, diags *diag.Diagnostics) {
 	projectID := data.ID.ValueString()
+	if !r.readProjectInto(ctx, data, diags) && !diags.HasError() {
+		diags.AddError("Client Error", fmt.Sprintf("Unable to read project, got error: project %q not found", projectID))
+	}
+}
 
-	// Use List with filter to find the project since there's no Get method
-	response, err := r.client.Projects.List(ctx, operations.GetProjectsRequest{})
-	if err != nil {
-		diags.AddError("Client Error", "Unable to read projects, got error: "+err.Error())
-		return
+func projectNotFound(err error) bool {
+	var apiErr *components.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode == http.StatusNotFound
+	}
+	return false
+}
+
+// readProjectInto maps a fresh read of the project into data, reporting whether
+// it was found. A 404 or an empty body nulls the id and returns false without
+// adding a diagnostic.
+func (r *ProjectResource) readProjectInto(ctx context.Context, data *ProjectResourceModel, diags *diag.Diagnostics) bool {
+	projectID := data.ID.ValueString()
+
+	response, err := r.client.Projects.GetProject(ctx, projectID)
+	if err != nil && !projectNotFound(err) {
+		diags.AddError("Client Error", "Unable to read project, got error: "+err.Error())
+		return false
 	}
 
-	if response.Projects == nil || response.Projects.Data == nil {
-		data.ID = types.StringNull()
-		return
-	}
-
-	var project *components.Project
-	for _, p := range response.Projects.Data {
-		if p.ID != nil && *p.ID == projectID {
-			project = &p
-			break
-		}
-	}
-
-	if project == nil {
+	if err != nil || response.Object == nil || response.Object.Data == nil {
 		data.ID = types.StringNull()
 		// Computed attributes must carry a known value even on this path, so state is
 		// never set with them left unresolved.
 		data.CreatedAt = types.StringNull()
 		data.UpdatedAt = types.StringNull()
-		return
+		return false
 	}
+
+	project := response.Object.Data
 
 	if project.Attributes != nil {
 		if project.Attributes.Name != nil {
@@ -435,4 +450,6 @@ func (r *ProjectResource) readProject(ctx context.Context, data *ProjectResource
 
 		data.Tags = types.ListNull(types.StringType)
 	}
+
+	return true
 }
