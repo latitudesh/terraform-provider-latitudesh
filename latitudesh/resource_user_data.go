@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 
@@ -14,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	latitudeshgosdk "github.com/latitudesh/latitudesh-go-sdk"
+	"github.com/latitudesh/latitudesh-go-sdk/models/components"
 	"github.com/latitudesh/latitudesh-go-sdk/models/operations"
 	iprovider "github.com/latitudesh/terraform-provider-latitudesh/v2/internal/provider"
 )
@@ -147,8 +151,13 @@ func (r *UserDataResource) Read(ctx context.Context, req resource.ReadRequest, r
 		return
 	}
 
-	r.readUserData(ctx, &data, &resp.Diagnostics)
+	found := r.readUserDataInto(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !found {
+		resp.State.RemoveResource(ctx)
 		return
 	}
 
@@ -253,20 +262,45 @@ func (r *UserDataResource) ImportState(ctx context.Context, req resource.ImportS
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
+func userDataNotFound(err error) bool {
+	var apiErr *components.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode == http.StatusNotFound
+	}
+	return false
+}
+
+// readUserData refreshes data from the API and reports missing user data as an
+// error, which is what Create, Update and ImportState need. Read uses
+// readUserDataInto so it can drop the resource from state instead.
 func (r *UserDataResource) readUserData(ctx context.Context, data *UserDataResourceModel, diags *diag.Diagnostics) {
+	userDataID := data.ID.ValueString()
+	if !r.readUserDataInto(ctx, data, diags) && !diags.HasError() {
+		diags.AddError("Client Error", fmt.Sprintf("Unable to read user data, got error: user data %q not found", userDataID))
+	}
+}
+
+// readUserDataInto maps a fresh read of the user data into data, reporting
+// whether it was found. A 404 or an empty body nulls the id and returns false
+// without adding a diagnostic.
+func (r *UserDataResource) readUserDataInto(ctx context.Context, data *UserDataResourceModel, diags *diag.Diagnostics) bool {
 	userDataID := data.ID.ValueString()
 
 	// Get decoded content for display
 	decodedContent := "decoded_content"
 	response, err := r.client.UserData.Retrieve(ctx, userDataID, &decodedContent)
 	if err != nil {
+		if userDataNotFound(err) {
+			data.ID = types.StringNull()
+			return false
+		}
 		diags.AddError("Client Error", "Unable to read user data, got error: "+err.Error())
-		return
+		return false
 	}
 
 	if response.UserDataObject == nil || response.UserDataObject.Data == nil {
 		data.ID = types.StringNull()
-		return
+		return false
 	}
 
 	userData := response.UserDataObject.Data
@@ -287,4 +321,6 @@ func (r *UserDataResource) readUserData(ctx context.Context, data *UserDataResou
 			data.UpdatedAt = types.StringValue(*userData.Attributes.UpdatedAt)
 		}
 	}
+
+	return true
 }

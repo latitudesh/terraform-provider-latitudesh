@@ -2,6 +2,7 @@ package latitudesh
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -171,8 +172,13 @@ func (r *SSHKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
-	r.readSSHKey(ctx, &data, &resp.Diagnostics)
+	found := r.readSSHKeyInto(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !found {
+		resp.State.RemoveResource(ctx)
 		return
 	}
 
@@ -228,29 +234,61 @@ func (r *SSHKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 }
 
 func (r *SSHKeyResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	// Read drops a missing key from state, which Terraform reports as a generic
+	// "non-existent remote object" on import. Check up front so an unknown ID
+	// still gets a clear error.
+	if _, err := r.client.SSHKeys.Retrieve(ctx, req.ID); sshKeyNotFound(err) {
+		addSSHKeyNotFoundError(&resp.Diagnostics, req.ID)
+		return
+	}
+
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
+func sshKeyNotFound(err error) bool {
+	var apiErr *components.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode == http.StatusNotFound
+	}
+	return false
+}
+
+func addSSHKeyNotFoundError(diags *diag.Diagnostics, keyID string) {
+	diags.AddError(
+		"SSH key not found",
+		fmt.Sprintf("No SSH key exists with ID %q", keyID),
+	)
+}
+
+// readSSHKey refreshes data from the API and reports a missing key as an
+// error, which is what Create and Update need. Read uses readSSHKeyInto so it
+// can drop the resource from state instead.
 func (r *SSHKeyResource) readSSHKey(ctx context.Context, data *SSHKeyResourceModel, diags *diag.Diagnostics) {
+	keyID := data.ID.ValueString()
+	if !r.readSSHKeyInto(ctx, data, diags) && !diags.HasError() {
+		addSSHKeyNotFoundError(diags, keyID)
+	}
+}
+
+// readSSHKeyInto maps a fresh read of the key into data, reporting whether the
+// key was found. A 404 or an empty body nulls the id and returns false without
+// adding a diagnostic.
+func (r *SSHKeyResource) readSSHKeyInto(ctx context.Context, data *SSHKeyResourceModel, diags *diag.Diagnostics) bool {
 	keyID := data.ID.ValueString()
 
 	result, err := r.client.SSHKeys.Retrieve(ctx, keyID)
 	if err != nil {
-		if apiErr, ok := err.(*components.APIError); ok && apiErr.StatusCode == http.StatusNotFound {
+		if sshKeyNotFound(err) {
 			data.ID = types.StringNull()
-			diags.AddError(
-				"SSH key not found",
-				fmt.Sprintf("No SSH key exists with ID %q", keyID),
-			)
-			return
+			return false
 		}
 		diags.AddError("Client Error", "Unable to read SSH key, got error: "+err.Error())
-		return
+		return false
 	}
 
 	if result.Object == nil || result.Object.Data == nil {
 		data.ID = types.StringNull()
-		return
+		return false
 	}
 
 	sshKey := result.Object.Data
@@ -280,6 +318,8 @@ func (r *SSHKeyResource) readSSHKey(ctx context.Context, data *SSHKeyResourceMod
 			data.Tags = types.ListNull(types.StringType)
 		}
 	}
+
+	return true
 }
 
 func (r *SSHKeyResource) updateSSHKey(ctx context.Context, data *SSHKeyResourceModel, diags *diag.Diagnostics) {

@@ -326,6 +326,12 @@ func (r *FirewallResource) Read(ctx context.Context, req resource.ReadRequest, r
 		return
 	}
 
+	// readFirewall nulls the ID when the firewall no longer exists.
+	if data.ID.IsNull() {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

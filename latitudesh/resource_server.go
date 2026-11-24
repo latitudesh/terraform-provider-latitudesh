@@ -2,7 +2,9 @@ package latitudesh
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 	"sync"
@@ -844,8 +846,13 @@ func (r *ServerResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
-	r.readServer(ctx, &data, &resp.Diagnostics)
+	found := r.readServerInto(ctx, &data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !found {
+		resp.State.RemoveResource(ctx)
 		return
 	}
 
@@ -1497,18 +1504,45 @@ func (r *ServerResource) ImportState(ctx context.Context, req resource.ImportSta
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
+// readServer refreshes data from the API. A server that no longer exists is
+// reported as an error, which is what Create and Update need; Read uses
+// readServerInto instead so it can drop the resource from state.
 func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) {
+	serverID := data.ID.ValueString()
+	if !r.readServerInto(ctx, data, diags) && !diags.HasError() {
+		diags.AddError("Client Error", fmt.Sprintf("Unable to read server, got error: server %q not found", serverID))
+	}
+}
+
+// serverNotFound reports whether err is a 404 from Servers.Get, which only
+// returns the generic *components.APIError for 4xx responses.
+func serverNotFound(err error) bool {
+	var apiErr *components.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode == http.StatusNotFound
+	}
+	return false
+}
+
+// readServerInto maps a fresh read of the server into data, reporting whether
+// the server was found. A 404 or an empty body nulls the id and returns false
+// without adding a diagnostic.
+func (r *ServerResource) readServerInto(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) bool {
 	serverID := data.ID.ValueString()
 
 	response, err := r.client.Servers.Get(ctx, serverID, nil)
 	if err != nil {
+		if serverNotFound(err) {
+			data.ID = types.StringNull()
+			return false
+		}
 		diags.AddError("Client Error", "Unable to read server, got error: "+err.Error())
-		return
+		return false
 	}
 
 	if response.Server == nil || response.Server.Data == nil {
 		data.ID = types.StringNull()
-		return
+		return false
 	}
 
 	server := response.Server.Data
@@ -1653,6 +1687,8 @@ func (r *ServerResource) readServer(ctx context.Context, data *ServerResourceMod
 	if data.UserDataContentHash.IsUnknown() {
 		data.UserDataContentHash = types.StringNull()
 	}
+
+	return true
 }
 
 func (r *ServerResource) readDeployConfig(ctx context.Context, data *ServerResourceModel, diags *diag.Diagnostics) {
